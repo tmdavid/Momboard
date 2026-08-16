@@ -22,7 +22,7 @@ router = APIRouter()
 # --- Tags ---
 
 
-@router.get("/tags")
+@router.get("/tags", response_model=list[TagResponse])
 async def list_tags(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -76,7 +76,7 @@ async def update_tag(
 # --- Companies ---
 
 
-@router.get("/companies")
+@router.get("/companies", response_model=list[CompanyResponse])
 async def list_companies(
     request: Request,
     db: AsyncSession = Depends(get_db),

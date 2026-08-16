@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api, ConversationListItem } from '../api';
-import { NewConversationModal } from '../components/NewConversationModal';
+import { NewConversationModal, NewConversationFormData } from '../components/NewConversationModal';
+import { useConversationEvents } from '../hooks/useConversationEvents';
 import { TAG_META } from '../constants';
 
 export function LibraryPage() {
@@ -13,19 +14,26 @@ export function LibraryPage() {
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
+  // Track conversation IDs that need SSE monitoring (lifted from modal)
+  const [trackingIds, setTrackingIds] = useState<number[]>([]);
+
   const activeTags = searchParams.getAll('tag');
   const companyId = searchParams.get('company_id') || undefined;
   const q = searchParams.get('q') || undefined;
+  const dateFrom = searchParams.get('date_from') || undefined;
+  const dateTo = searchParams.get('date_to') || undefined;
   const offset = parseInt(searchParams.get('offset') || '0', 10);
   const limit = 50;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['conversations', { tag: activeTags[0], company_id: companyId, q, offset }],
+    queryKey: ['conversations', { tag: activeTags, company_id: companyId, q, date_from: dateFrom, date_to: dateTo, offset }],
     queryFn: () =>
       api.listConversations({
-        tag: activeTags[0],
+        tag: activeTags,
         company_id: companyId ? Number(companyId) : undefined,
         q,
+        date_from: dateFrom,
+        date_to: dateTo,
         offset,
         limit,
       }),
@@ -60,19 +68,114 @@ export function LibraryPage() {
 
   const toggleTag = (key: string) => {
     setSearchParams((prev) => {
-      const current = prev.get('tag');
-      if (current === key) prev.delete('tag');
-      else prev.set('tag', key);
+      const current = prev.getAll('tag');
+      if (current.includes(key)) {
+        // Remove this tag
+        prev.delete('tag');
+        current.filter((t) => t !== key).forEach((t) => prev.append('tag', t));
+      } else {
+        // Add this tag
+        prev.append('tag', key);
+      }
       prev.delete('offset');
       return prev;
     });
   };
 
-  const filterTags = Object.entries(TAG_META).slice(0, 6);
+  const handleDateFrom = useCallback(
+    (value: string) => {
+      setSearchParams((prev) => {
+        if (value) prev.set('date_from', value);
+        else prev.delete('date_from');
+        prev.delete('offset');
+        return prev;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const handleDateTo = useCallback(
+    (value: string) => {
+      setSearchParams((prev) => {
+        if (value) prev.set('date_to', value);
+        else prev.delete('date_to');
+        prev.delete('offset');
+        return prev;
+      });
+    },
+    [setSearchParams],
+  );
+
+  const filterTags = Object.entries(TAG_META).slice(0, 8);
 
   const conversations = data?.items ?? [];
   const total = data?.total ?? 0;
   const isEmpty = !isLoading && conversations.length === 0;
+
+  // Callback for SSE completion — invalidate conversations list
+  const handleSseDone = useCallback(
+    (id: number) => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      setTrackingIds((prev) => prev.filter((tid) => tid !== id));
+    },
+    [queryClient],
+  );
+
+  // Optimistic insert mutation — lives in the parent so it survives modal close
+  const optimisticInsertMutation = useMutation({
+    mutationFn: (variables: NewConversationFormData) =>
+      api.createConversation(variables),
+    onMutate: async (variables) => {
+      await queryClient.cancelQueries({ queryKey: ['conversations'] });
+      const queryKey = ['conversations', { tag: activeTags, company_id: companyId, q, date_from: dateFrom, date_to: dateTo, offset }];
+      const previous = queryClient.getQueryData(queryKey);
+      const tempId = -(Date.now());
+      const optimisticItem: ConversationListItem = {
+        id: tempId,
+        title: variables.title,
+        happened_at: variables.happened_at || new Date().toISOString(),
+        status: 'processing',
+        interviewer: variables.interviewer || null,
+        company: variables.company ? { id: 0, name: variables.company.name, domain: null, notes: null, created_at: new Date().toISOString() } : null,
+        contacts: (variables.contacts || []).map((c, i) => ({ id: -(i + 1), name: c.name, role: c.role || null, email: null, company_id: null, created_at: new Date().toISOString() })),
+        meta: variables.meta || null,
+        created_at: new Date().toISOString(),
+        tag_counts: {},
+        critique_score: null,
+      };
+      queryClient.setQueryData(queryKey, (old: typeof data) => {
+        if (!old) return { items: [optimisticItem], total: 1, limit: 50, offset: 0 };
+        return { ...old, items: [optimisticItem, ...old.items], total: old.total + 1 };
+      });
+      // Close modal immediately on submit (optimistic)
+      setModalOpen(false);
+      return { previous, queryKey, tempId };
+    },
+    onSuccess: (result, _variables, context) => {
+      // Replace temp ID with real ID in cache
+      if (context) {
+        queryClient.setQueryData(context.queryKey, (old: typeof data) => {
+          if (!old) return old;
+          return {
+            ...old,
+            items: old.items.map((item) =>
+              item.id === context.tempId ? { ...item, id: result.id } : item,
+            ),
+          };
+        });
+      }
+      // Start SSE tracking with the real ID
+      setTrackingIds((prev) => [...prev, result.id]);
+    },
+    onError: (_err, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(context.queryKey, context.previous);
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
 
   return (
     <main className="flex-1 overflow-auto">
@@ -126,14 +229,33 @@ export function LibraryPage() {
                 return prev;
               });
             }}
+            aria-hidden={modalOpen ? 'true' : undefined}
           >
             <option value="">All companies</option>
-            {companies?.map((c) => (
+            {!modalOpen && companies?.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
             ))}
           </select>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="filter-date-from" className="text-xs text-muted">From</label>
+            <input
+              id="filter-date-from"
+              type="date"
+              className="px-1.5 py-1 border border-hairline rounded-lg bg-page text-ink-2 text-xs"
+              value={dateFrom || ''}
+              onChange={(e) => handleDateFrom(e.target.value)}
+            />
+            <label htmlFor="filter-date-to" className="text-xs text-muted">To</label>
+            <input
+              id="filter-date-to"
+              type="date"
+              className="px-1.5 py-1 border border-hairline rounded-lg bg-page text-ink-2 text-xs"
+              value={dateTo || ''}
+              onChange={(e) => handleDateTo(e.target.value)}
+            />
+          </div>
         </div>
 
         {/* Loading */}
@@ -163,7 +285,7 @@ export function LibraryPage() {
         )}
 
         {/* Table */}
-        {!isLoading && conversations.length > 0 && (
+        {!isLoading && !modalOpen && conversations.length > 0 && (
           <>
             <table className="w-full border-collapse bg-surface border border-hairline rounded-xl overflow-hidden">
               <thead>
@@ -236,14 +358,24 @@ export function LibraryPage() {
       {modalOpen && (
         <NewConversationModal
           onClose={() => setModalOpen(false)}
-          onCreated={() => {
-            setModalOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['conversations'] });
-          }}
+          onCreated={() => {}}
+          onSubmit={(formData) => optimisticInsertMutation.mutate(formData)}
+          isSubmitting={optimisticInsertMutation.isPending}
         />
       )}
+
+      {/* SSE trackers — lives in the parent so it survives modal close */}
+      {trackingIds.map((id) => (
+        <SseTracker key={id} conversationId={id} onDone={() => handleSseDone(id)} />
+      ))}
     </main>
   );
+}
+
+/** Invisible SSE tracker component */
+function SseTracker({ conversationId, onDone }: { conversationId: number; onDone: () => void }) {
+  useConversationEvents(conversationId, onDone);
+  return null;
 }
 
 function ConversationRow({ conversation: c, onClick }: { conversation: ConversationListItem; onClick: () => void }) {
@@ -257,7 +389,7 @@ function ConversationRow({ conversation: c, onClick }: { conversation: Conversat
       <td className="px-3.5 py-3">
         <div className="font-semibold">{c.company?.name || '—'}</div>
         <div className="text-muted text-xs">
-          {c.contacts.map((ct) => `${ct.name}${ct.role ? ` · ${ct.role}` : ''}`).join(', ') || '—'}
+          {c.contacts.map((ct) => `${ct.name}${ct.role ? `: ${ct.role}` : ''}`).join(', ') || '—'}
         </div>
       </td>
       <td className="px-3.5 py-3 max-w-[290px] overflow-hidden text-ellipsis whitespace-nowrap text-ink-2">

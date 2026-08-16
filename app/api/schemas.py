@@ -1,7 +1,7 @@
 """Pydantic schemas for API request/response models."""
 
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -186,6 +186,18 @@ class ConversationListResponse(BaseModel):
     offset: int
 
 
+class ConversationCreateResponse(BaseModel):
+    id: int
+    title: str
+    status: str
+    created_at: str | None = None
+
+
+class ConversationStatusResponse(BaseModel):
+    id: int
+    status: str
+
+
 # --- Highlights ---
 
 
@@ -207,6 +219,7 @@ class HighlightUpdate(BaseModel):
 class HighlightWithContext(BaseModel):
     id: int
     conversation_id: int
+    utterance_id: int | None = None
     tag_key: str
     quote: str
     confidence: float | None = None
@@ -218,6 +231,13 @@ class HighlightWithContext(BaseModel):
     contact_names: list[str] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
+
+
+class HighlightsListResponse(BaseModel):
+    items: list[HighlightWithContext]
+    total: int
+    limit: int
+    offset: int
 
 
 # --- Notes ---
@@ -278,5 +298,99 @@ class JobResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+# --- Hypotheses ---
+
+VALID_STANCES = ("supports", "contradicts")
+
+
+class HypothesisCreate(BaseModel):
+    statement: str = Field(min_length=15)
+    segment: str | None = None
+
+
+class HypothesisUpdate(BaseModel):
+    statement: str | None = Field(default=None, min_length=15)
+    status: str | None = None
+    segment: str | None = None
+
+
+class HypothesisRollup(BaseModel):
+    supports: dict[str, int] = Field(default_factory=lambda: {"confirmed": 0, "suggested": 0})
+    contradicts: dict[str, int] = Field(default_factory=lambda: {"confirmed": 0, "suggested": 0})
+    companies_supporting: int = 0
+    companies_contradicting: int = 0
+    last_evidence_at: datetime | None = None
+
+
+class HypothesisListItemResponse(BaseModel):
+    """List-level hypothesis response with rollup for the board."""
+
+    id: int
+    statement: str
+    segment: str | None = None
+    status: str
+    created_by: int | None = None
+    decided_at: datetime | None = None
+    created_at: datetime
+    rollup: HypothesisRollup = Field(default_factory=HypothesisRollup)
+    verdict_hint: str | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class HypothesisResponse(BaseModel):
+    id: int
+    statement: str
+    segment: str | None = None
+    status: str
+    created_by: int | None = None
+    decided_at: datetime | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class HypothesisLinkCreate(BaseModel):
+    highlight_id: int
+    stance: Literal["supports", "contradicts"]
+
+
+class HypothesisLinkResponse(BaseModel):
+    id: int
+    hypothesis_id: int
+    highlight_id: int
+    stance: str
+    confidence: float | None = None
+    rationale: str | None = None
+    origin: str
+    status: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class HypothesisLinkUpdate(BaseModel):
+    status: str  # confirmed|rejected
+
+
+class HypothesisDetailResponse(BaseModel):
+    id: int
+    statement: str
+    segment: str | None = None
+    status: str
+    created_by: int | None = None
+    decided_at: datetime | None = None
+    created_at: datetime
+    supports: dict[str, int] = Field(default_factory=dict)
+    contradicts: dict[str, int] = Field(default_factory=dict)
+    companies_supporting: int = 0
+    companies_contradicting: int = 0
+    last_evidence_at: datetime | None = None
+    verdict_hint: str | None = None
+    links: list[HypothesisLinkResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

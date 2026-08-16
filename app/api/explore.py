@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.api.schemas import HighlightWithContext, StatsResponse
+from app.api.schemas import HighlightsListResponse, HighlightWithContext, StatsResponse
 from app.auth import get_current_user
 from app.models import (
     Analysis,
@@ -23,12 +23,12 @@ from app.models import (
 router = APIRouter()
 
 
-@router.get("/highlights")
+@router.get("/highlights", response_model=HighlightsListResponse)
 async def list_highlights(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
-    tag: str | None = None,
+    tag: list[str] = Query(default=[]),
     company_id: int | None = None,
     status: str | None = None,
     date_from: datetime | None = None,
@@ -36,7 +36,11 @@ async def list_highlights(
     limit: int = Query(default=100, le=500),
     offset: int = Query(default=0, ge=0),
 ):
-    """List highlights across all conversations with context."""
+    """List highlights across all conversations with context.
+
+    The `tag` parameter supports repeated query params:
+    ?tag=pain&tag=workaround returns highlights matching ANY of the given tags (OR).
+    """
     query = (
         select(Highlight, Conversation, Company)
         .join(Conversation, Highlight.conversation_id == Conversation.id)
@@ -50,7 +54,12 @@ async def list_highlights(
         query = query.where(Highlight.status.in_(["suggested", "accepted"]))
 
     if tag:
-        query = query.where(Highlight.tag_key == tag)
+        # Flatten any comma-separated values
+        tag_keys: list[str] = []
+        for t in tag:
+            tag_keys.extend(part.strip() for part in t.split(",") if part.strip())
+        # OR logic: highlight must belong to one of the requested tags
+        query = query.where(Highlight.tag_key.in_(tag_keys))
     if company_id:
         query = query.where(Conversation.company_id == company_id)
     if date_from:
@@ -80,6 +89,7 @@ async def list_highlights(
             HighlightWithContext(
                 id=highlight.id,
                 conversation_id=highlight.conversation_id,
+                utterance_id=highlight.utterance_id,
                 tag_key=highlight.tag_key,
                 quote=highlight.quote,
                 confidence=highlight.confidence,
@@ -95,7 +105,7 @@ async def list_highlights(
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
-@router.get("/stats")
+@router.get("/stats", response_model=StatsResponse)
 async def get_stats(
     request: Request,
     db: AsyncSession = Depends(get_db),

@@ -21,6 +21,31 @@ class LLMSchemaError(Exception):
     pass
 
 
+def _make_schema_strict(schema: dict) -> None:
+    """Recursively add additionalProperties: false and require all properties in a JSON schema.
+
+    Required for OpenAI strict structured outputs.
+    """
+    if schema.get("type") == "object" or "properties" in schema:
+        schema["additionalProperties"] = False
+        # Strict mode requires all properties to be in 'required'
+        if "properties" in schema:
+            schema["required"] = list(schema["properties"].keys())
+    for key in ("properties", "$defs"):
+        if key in schema:
+            for prop in schema[key].values():
+                if isinstance(prop, dict):
+                    _make_schema_strict(prop)
+    if "items" in schema and isinstance(schema["items"], dict):
+        _make_schema_strict(schema["items"])
+    if "$ref" not in schema:
+        for key in ("allOf", "anyOf", "oneOf"):
+            if key in schema:
+                for item in schema[key]:
+                    if isinstance(item, dict):
+                        _make_schema_strict(item)
+
+
 class LLMEnvelope(BaseModel):
     """Metadata envelope returned with every LLM call."""
 
@@ -69,7 +94,8 @@ class OpenAIResponsesClient:
         rendered = prompt.render(input_data)
 
         json_schema = schema.model_json_schema()
-        # Ensure all properties have defaults for strict mode
+        # Ensure strict mode compatibility: add additionalProperties: false to all objects
+        _make_schema_strict(json_schema)
         payload = {
             "model": model,
             "input": rendered,
@@ -93,7 +119,8 @@ class OpenAIResponsesClient:
                 if response.status_code == 429 or response.status_code >= 500:
                     if attempt < retries - 1:
                         import asyncio
-                        await asyncio.sleep(2 ** attempt)
+
+                        await asyncio.sleep(2**attempt)
                         continue
                 response.raise_for_status()
                 break
@@ -101,7 +128,8 @@ class OpenAIResponsesClient:
                 if attempt == retries - 1:
                     raise
                 import asyncio
-                await asyncio.sleep(2 ** attempt)
+
+                await asyncio.sleep(2**attempt)
 
         resp_data = response.json()
         response_id = resp_data.get("id", "")

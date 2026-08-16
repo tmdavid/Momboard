@@ -17,6 +17,26 @@ logger = logging.getLogger(__name__)
 CHUNK_SIZE = 80
 CHUNK_OVERLAP = 10
 
+# Default context budget for chunk size calculation
+_DEFAULT_MAX_CONTEXT = 32768
+
+
+def calculate_chunk_size(max_context: int = _DEFAULT_MAX_CONTEXT) -> int:
+    """Calculate optimal chunk size based on context budget.
+
+    Args:
+        max_context: Maximum context window in tokens.
+
+    Returns:
+        Number of utterances per chunk. Scales linearly with context budget.
+        Minimum 20, maximum 120.
+    """
+    # Heuristic: ~400 tokens per utterance (speaker + text), reserve 30% for prompt/schema
+    available_tokens = int(max_context * 0.7)
+    tokens_per_utterance = 400
+    raw_size = available_tokens // tokens_per_utterance
+    return max(20, min(120, raw_size))
+
 
 def chunk_utterances(
     utterances: list[dict[str, Any]], chunk_size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP
@@ -92,10 +112,22 @@ async def run_tag(
     db: AsyncSession,
     conversation_id: int,
     llm: LLMClient,
+    *,
+    max_context: int | None = None,
 ) -> list[Highlight]:
     """Run the tagger agent on a conversation's utterances.
 
-    Returns list of created Highlight rows.
+    Args:
+        db: Async database session.
+        conversation_id: ID of the conversation to tag.
+        llm: LLM client instance.
+        max_context: Optional context window budget (tokens). When provided,
+            chunk size is calculated dynamically via calculate_chunk_size().
+            When None, the default CHUNK_SIZE (80) is used for backward
+            compatibility.
+
+    Returns:
+        List of created Highlight rows.
     """
     # Load utterances
     result = await db.execute(
@@ -139,8 +171,11 @@ async def run_tag(
         company = await db.get(Company, convo.company_id)
         company_name = company.name if company else ""
 
+    # Determine chunk size: use max_context when provided, else default
+    chunk_size = calculate_chunk_size(max_context) if max_context is not None else CHUNK_SIZE
+
     # Chunk and call
-    chunks = chunk_utterances(utt_dicts)
+    chunks = chunk_utterances(utt_dicts, chunk_size=chunk_size)
     all_highlights: list[TaggerHighlight] = []
     envelope: LLMEnvelope | None = None
 
@@ -178,7 +213,9 @@ async def run_tag(
         # Check utterance exists
         utt = utt_by_idx.get(h.utterance_idx)
         if utt is None:
-            logger.warning(f"Tagger referenced non-existent utterance_idx {h.utterance_idx} — skipping")
+            logger.warning(
+                f"Tagger referenced non-existent utterance_idx {h.utterance_idx} — skipping"
+            )
             continue
 
         # Validate quote

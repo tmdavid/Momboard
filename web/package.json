@@ -10,7 +10,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint src --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "openapi:export": "python ../scripts/export_openapi.py",
+    "openapi:generate": "npx openapi-typescript src/generated/openapi-schema.json -o src/generated/openapi.ts",
+    "openapi": "npm run openapi:export && npm run openapi:generate",
+    "openapi:check": "npm run openapi && git diff --exit-code src/generated/openapi.ts"
   },
   "dependencies": {
     "@tanstack/react-query": "5.51.23",
@@ -29,6 +33,7 @@
     "autoprefixer": "10.4.20",
     "jsdom": "24.1.1",
     "msw": "2.3.5",
+    "openapi-typescript": "7.4.4",
     "postcss": "8.4.41",
     "tailwindcss": "3.4.9",
     "typescript": "5.5.4",

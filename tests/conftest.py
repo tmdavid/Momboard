@@ -63,7 +63,9 @@ async def session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessio
 
 
 @pytest_asyncio.fixture
-async def db_session(session_factory: async_sessionmaker[AsyncSession]) -> AsyncGenerator[AsyncSession, None]:
+async def db_session(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> AsyncGenerator[AsyncSession, None]:
     """Provide a transactional test session."""
     async with session_factory() as session:
         yield session
@@ -115,9 +117,7 @@ async def app(engine: AsyncEngine, session_factory: async_sessionmaker[AsyncSess
 @pytest_asyncio.fixture
 async def client(app) -> AsyncGenerator[AsyncClient, None]:
     """Unauthenticated HTTP client."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as c:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c:
         yield c
 
 
@@ -209,16 +209,31 @@ async def sample_conversation(
         session.add(ConversationContact(conversation_id=convo.id, contact_id=contact.id))
 
         # Add some utterances
-        for i, (speaker, side, text) in enumerate([
-            ("David", "us", "Hey Maria, thanks for taking the time today."),
-            ("Maria", "them", "Sure! So right now we have this spreadsheet where the team logs every infringement they find manually."),
-            ("David", "us", "And when you find an infringement, what happens next?"),
-            ("Maria", "them", "Every Monday I export it to Excel and clean it by hand, takes about 2 hours."),
-        ]):
-            session.add(Utterance(
-                conversation_id=convo.id, idx=i,
-                speaker_label=speaker, speaker_side=side, text=text,
-            ))
+        for i, (speaker, side, text) in enumerate(
+            [
+                ("David", "us", "Hey Maria, thanks for taking the time today."),
+                (
+                    "Maria",
+                    "them",
+                    "Sure! So right now we have this spreadsheet where the team logs every infringement they find manually.",
+                ),
+                ("David", "us", "And when you find an infringement, what happens next?"),
+                (
+                    "Maria",
+                    "them",
+                    "Every Monday I export it to Excel and clean it by hand, takes about 2 hours.",
+                ),
+            ]
+        ):
+            session.add(
+                Utterance(
+                    conversation_id=convo.id,
+                    idx=i,
+                    speaker_label=speaker,
+                    speaker_side=side,
+                    text=text,
+                )
+            )
 
         await session.commit()
         await session.refresh(convo)
@@ -229,3 +244,16 @@ def read_fixture(name: str) -> str:
     """Read a text fixture file."""
     path = FIXTURES_DIR / "transcripts" / name
     return path.read_text()
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def _reset_sse_state():
+    """Reset sse-starlette AppStatus between tests to avoid event loop binding issues."""
+    yield
+    try:
+        from sse_starlette.sse import AppStatus
+
+        AppStatus.should_exit_event = None
+        AppStatus.should_exit = False
+    except ImportError:
+        pass

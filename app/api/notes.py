@@ -14,7 +14,7 @@ from app.models import Conversation, Note, User, utcnow
 router = APIRouter()
 
 
-@router.get("/conversations/{conversation_id}/note")
+@router.get("/conversations/{conversation_id}/note", response_model=NoteResponse)
 async def get_note(
     conversation_id: int,
     request: Request,
@@ -39,7 +39,7 @@ async def get_note(
     return NoteResponse.model_validate(note)
 
 
-@router.put("/conversations/{conversation_id}/note")
+@router.put("/conversations/{conversation_id}/note", response_model=NoteResponse)
 async def put_note(
     conversation_id: int,
     body: NoteUpdate,

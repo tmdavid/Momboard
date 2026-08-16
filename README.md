@@ -26,7 +26,11 @@ These items are tracked in `tasks/M6-M9-explore-deploy-future.md`.
 
 - Python 3.11
 - Node.js 20+ and npm
-- SQLite for local use; PostgreSQL is optional
+- SQLite for local/single-node use; PostgreSQL is optional with the `postgres` dependency extra
+
+## Coding-agent deployment
+
+If you are a coding agent crawling this repository, start with [`docs/agent-deployment.md`](docs/agent-deployment.md) and treat it as the deployment contract: preserve existing `.env` and data, choose exactly one runtime mode, install from the project pins and npm lockfile, run Alembic then the idempotent taxonomy seed, build and verify the generated OpenAPI types and SPA, create an admin only from credentials supplied out of band, keep SQLite to one application process, and do not declare success until the health, OpenAPI, SPA, authentication, test, migration, and backup gates in that runbook pass. Production mutations and destructive recovery actions require explicit approval; report sanitized results and remaining warnings rather than guessing past a failure.
 
 ## Local setup
 
@@ -80,10 +84,10 @@ MomBoard uses the OpenAI **Responses API** with strict structured JSON outputs. 
 3. Optionally change the models:
 
    ```dotenv
-   LLM_MODEL_NORMALIZER=gpt-4o-mini
-   LLM_MODEL_TAGGER=gpt-4o
-   LLM_MODEL_ANALYST=gpt-4o
-   LLM_MODEL_SYNTHESIZER=gpt-4o
+   LLM_MODEL_NORMALIZER=gpt-5-mini
+   LLM_MODEL_TAGGER=gpt-5-mini
+   LLM_MODEL_ANALYST=gpt-5-mini
+   LLM_MODEL_SYNTHESIZER=gpt-5-mini
    ```
 
 The selected models must support the Responses API and structured outputs. Restart the application after changing `.env`.
@@ -99,6 +103,20 @@ Leaving `OPENAI_API_KEY` empty is supported for development:
 - Synthesis returns an empty structured report.
 
 After configuring a real key, re-run an existing conversation with `POST /api/conversations/{id}/reprocess` (available through `/docs`). Accepted and rejected highlights are preserved; only AI suggestions are replaced.
+
+### Local model hosting with Ollama
+
+MomBoard optionally supports a local LLM backend via [Ollama](https://ollama.com) with a pinned `qwen3:8b` model — no OpenAI API key required.
+
+Start the Ollama sidecar alongside MomBoard:
+
+```bash
+docker compose --profile local-llm up -d
+```
+
+The profile starts Ollama's native API and pulls `qwen3:8b` on first use. Configure `LLM_BACKEND=local` and `LLM_BASE_URL=http://ollama:11434` in `.env` as described in the guide. If your Docker CLI reports `unknown flag: --profile`, use `docker-compose --profile local-llm up -d` instead.
+
+See [`docs/local-llm.md`](docs/local-llm.md) for configuration, model overrides, resource requirements, and backend switching.
 
 ### Security and customer data
 
@@ -120,9 +138,14 @@ Copy `.env.example` to `.env`. Important variables:
 |---|---|
 | `DATABASE_URL` | Async SQLAlchemy URL; defaults to local SQLite under `data/` |
 | `SESSION_SECRET` | Signs login sessions; must be random in production |
-| `OPENAI_API_KEY` | Enables real tagging, analysis, and synthesis |
-| `OPENAI_BASE_URL` | Optional OpenAI-compatible API endpoint |
-| `LLM_MODEL_*` | Model selection for each pipeline stage |
+| `LLM_BACKEND` | Selects `openai` or `local` |
+| `OPENAI_API_KEY` | Enables real OpenAI tagging, analysis, and synthesis |
+| `OPENAI_BASE_URL` | Optional OpenAI Responses API endpoint |
+| `LLM_BASE_URL` | Ollama URL when `LLM_BACKEND=local`; host and Compose values differ |
+| `LLM_LOCAL_MODEL` | Local model tag; defaults to `qwen3:8b` |
+| `LLM_LOCAL_TIMEOUT` | Per-request timeout for slower local inference; defaults to 300 seconds |
+| `LLM_MAX_CONTEXT` | Context budget used to size transcript chunks |
+| `LLM_MODEL_*` | OpenAI model selection for each pipeline stage |
 | `WORKER_POLL_INTERVAL` | Database queue polling interval |
 | `WORKER_MAX_RETRIES` | Attempts before a job becomes terminally failed |
 
@@ -133,14 +156,15 @@ See `.env.example` for the complete list and `DEPLOY.md` for production setup, b
 ```bash
 # Backend
 .venv/bin/python -m pytest -q
-.venv/bin/ruff check app tests alembic
+.venv/bin/ruff check app tests alembic scripts
 .venv/bin/mypy app
 
 # Database migration consistency
 DATABASE_URL=sqlite+aiosqlite:///data/validation.db .venv/bin/alembic upgrade head
 DATABASE_URL=sqlite+aiosqlite:///data/validation.db .venv/bin/alembic check
 
-# Frontend
+# Generated API contract + frontend
+npm run openapi:check --prefix web
 npm test --prefix web -- --run
 npm run typecheck --prefix web
 npm run build --prefix web
@@ -150,7 +174,7 @@ Docker smoke tests automatically skip when a Docker daemon is unavailable.
 
 ## Production
 
-Use `DEPLOY.md` for the full Fly.io runbook. The production image:
+Follow [`docs/agent-deployment.md`](docs/agent-deployment.md) for the deployment gates and `DEPLOY.md` for Fly.io-specific creation, backup, restore, and rollback operations. The production image:
 
 - Builds the React SPA in a Node stage
 - Runs FastAPI on Python 3.11 as a non-root user

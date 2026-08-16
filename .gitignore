@@ -45,6 +45,7 @@ htmlcov/
 web/node_modules/
 web/dist/
 web/.vite/
+web/src/generated/openapi-schema.json
 
 # Docker
 docker-compose.override.yml
@@ -55,3 +56,10 @@ Thumbs.db
 
 # Backups
 backups/
+
+# Test media files
+transcript.mp4
+*.mp4
+*.mp3
+*.wav
+*.m4a

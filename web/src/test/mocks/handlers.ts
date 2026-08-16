@@ -244,8 +244,17 @@ export const handlers = [
   }),
 
   // Explore
-  http.get('/api/highlights', () => {
-    return HttpResponse.json(mockHighlightsExplore);
+  http.get('/api/highlights', ({ request }) => {
+    const url = new URL(request.url);
+    const tags = url.searchParams.getAll('tag');
+    let items = [...mockHighlightsExplore.items];
+
+    if (tags.length > 0) {
+      // OR filter: show highlights matching any of the given tags
+      items = items.filter(item => tags.includes(item.tag_key));
+    }
+
+    return HttpResponse.json({ items, total: items.length, limit: 100, offset: 0 });
   }),
 
   http.get('/api/stats', () => {

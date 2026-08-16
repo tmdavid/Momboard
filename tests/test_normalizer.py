@@ -31,12 +31,52 @@ def test_vtt_speakers_extracted():
     assert "Maria" in speakers
 
 
+def test_vtt_colon_speakers_switch_between_cues():
+    raw = """WEBVTT
+
+00:00:01.000 --> 00:00:02.000
+David: First question.
+
+00:00:02.000 --> 00:00:03.000
+Marta: First answer.
+
+00:00:03.000 --> 00:00:04.000
+David: Follow-up question.
+"""
+
+    utts = normalize(raw, fmt="vtt", interviewer="David")
+
+    assert [(u.speaker_label, u.speaker_side, u.text) for u in utts] == [
+        ("David", "us", "First question."),
+        ("Marta", "them", "First answer."),
+        ("David", "us", "Follow-up question."),
+    ]
+
+
 def test_name_colon_format_parsed_and_speakers_extracted():
     utts = normalize(read_fixture("compliment_disaster.txt"), fmt="name_colon", interviewer="David")
     speakers = {u.speaker_label for u in utts}
     assert "David" in speakers
     assert "Customer" in speakers
     assert len(utts) == 14  # 14 lines of dialogue
+
+
+def test_labeled_format_skips_metadata_preamble():
+    raw = """Call: Demo interview
+Date: 2026-08-16
+Interviewer: David
+
+David: First question.
+
+Priya: First answer.
+"""
+
+    utts = normalize(raw, fmt="labeled", interviewer="David")
+
+    assert [(u.speaker_label, u.speaker_side, u.text) for u in utts] == [
+        ("David", "us", "First question."),
+        ("Priya", "them", "First answer."),
+    ]
 
 
 def test_speaker_side_assignment_from_interviewer_name():

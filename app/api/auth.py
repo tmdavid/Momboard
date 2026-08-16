@@ -10,7 +10,7 @@ from app.models import User
 auth_router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@auth_router.post("/login")
+@auth_router.post("/login", response_model=UserResponse)
 async def login(body: LoginRequest, request: Request, response: Response):
     """Authenticate and set session cookie."""
     session_factory = request.app.state.session_factory

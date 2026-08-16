@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MomBoard — Explore</title>
+<style>
+  :root{
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --hairline:#e1e0d9; --accent:#2a78d6; --accent-soft:#e8f1fc;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--page);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  a{color:inherit;text-decoration:none}
+  nav{display:flex;align-items:center;gap:28px;padding:0 28px;height:52px;background:var(--surface);border-bottom:1px solid var(--hairline)}
+  .logo{font-weight:700}.logo span{color:var(--accent)}
+  .nav-links{display:flex;gap:4px}
+  .nav-links a{padding:6px 12px;border-radius:8px;color:var(--ink-2)}
+  .nav-links a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  main{max-width:1100px;margin:0 auto;padding:28px}
+  h1{font-size:20px;letter-spacing:-.02em;margin-bottom:16px}
+  /* filters */
+  .filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:12px;background:var(--surface);border:1px solid var(--hairline);border-radius:12px;margin-bottom:8px}
+  .tag-toggle{padding:5px 10px;border-radius:99px;border:1px solid var(--hairline);background:var(--surface);cursor:pointer;font:inherit;font-size:13px;color:var(--ink-2)}
+  .tag-toggle.on{background:var(--accent-soft);border-color:var(--accent);color:var(--accent);font-weight:600}
+  select{font:inherit;padding:7px 8px;border:1px solid var(--hairline);border-radius:8px;background:var(--page);color:var(--ink-2)}
+  .active-bar{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);margin:8px 2px 16px}
+  .btn{border:none;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:#fff}
+  .btn:disabled{background:var(--hairline);color:var(--muted);cursor:not-allowed}
+  /* quote wall */
+  .wall{columns:3 300px;column-gap:14px}
+  .qcard{break-inside:avoid;background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:14px;margin-bottom:14px;cursor:pointer;transition:border-color .15s}
+  .qcard:hover{border-color:var(--accent)}
+  .qtag{font-size:12px;font-weight:600;color:var(--ink-2);display:flex;align-items:center;gap:5px;margin-bottom:8px}
+  .qtag .conf{color:var(--muted);font-weight:400;margin-left:auto}
+  blockquote{font-size:14.5px;color:var(--ink);margin-bottom:10px}
+  blockquote::before{content:"“"}blockquote::after{content:"”"}
+  .qmeta{font-size:12px;color:var(--muted)} .qmeta b{color:var(--ink-2)}
+  /* synthesis panel */
+  .synth{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;padding:20px;margin-bottom:20px;display:none}
+  .synth.open{display:block}
+  .synth h2{font-size:15px;margin-bottom:4px}
+  .synth .sub{font-size:12.5px;color:var(--muted);margin-bottom:14px}
+  .theme{border-left:3px solid var(--accent);padding:10px 14px;background:var(--page);border-radius:0 10px 10px 0;margin-bottom:10px}
+  .theme b{display:block;margin-bottom:3px}
+  .theme p{font-size:13px;color:var(--ink-2)}
+  .theme .evd{font-size:12px;color:var(--accent);cursor:pointer;margin-top:5px;display:inline-block}
+  .contradiction{border-left-color:#fab219}
+  .nextbox{background:#e6f4e6;border-radius:10px;padding:10px 14px;font-size:13px}
+  .nextbox b{color:#006300}
+  .loading{display:inline-flex;gap:8px;align-items:center;color:var(--muted);font-size:13px}
+  .spin{width:12px;height:12px;border:2px solid var(--hairline);border-top-color:var(--accent);border-radius:50%;animation:r 1s linear infinite}
+  @keyframes r{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">Mom<span>Board</span></div>
+  <div class="nav-links">
+    <a href="library.html">Library</a>
+    <a class="active" href="#">Explore</a>
+    <a href="insights.html">Insights</a>
+  </div>
+</nav>
+
+<main>
+  <h1>Explore highlights</h1>
+
+  <div class="filters">
+    <span style="font-size:12px;color:var(--muted);font-weight:600">TAGS</span>
+    <button class="tag-toggle on" data-t="pain">⚡ pain</button>
+    <button class="tag-toggle on" data-t="workaround">➡️ workaround</button>
+    <button class="tag-toggle" data-t="money">💰 money</button>
+    <button class="tag-toggle" data-t="commitment">🤝 commitment</button>
+    <button class="tag-toggle" data-t="compliment">🎈 compliment</button>
+    <select id="coSel"><option value="">All companies</option></select>
+    <select><option>Last 90 days</option><option>This quarter</option><option>All time</option></select>
+    <select><option>Accepted + suggested</option><option>Accepted only</option></select>
+  </div>
+
+  <div class="active-bar">
+    <span id="summary"></span>
+    <span style="flex:1"></span>
+    <button class="btn" id="synthBtn" onclick="synthesize()">✨ Synthesize this view</button>
+  </div>
+
+  <div class="synth" id="synth">
+    <h2>Synthesis — ⚡ pain + ➡️ workaround, all companies, last 90 days</h2>
+    <div class="sub">12 highlights across 6 conversations · generated Aug 15, 2026 · model gpt-5 · prompt synthesizer-v3</div>
+    <div class="theme"><b>1. Manual marketplace triage is the dominant recurring pain (5 of 6 companies)</b>
+      <p>Weekly, person-hours-scale manual exports and spreadsheet cleanup before any takedown action. Owned by brand/ecommerce roles, not legal.</p>
+      <span class="evd">▸ 6 supporting quotes</span></div>
+    <div class="theme"><b>2. Detection lag is the emotional trigger; volume is not</b>
+      <p>The stories with strong emotion are all "we found it too late" incidents, not "too many listings". Speed-to-detection may matter more than coverage.</p>
+      <span class="evd">▸ 4 supporting quotes</span></div>
+    <div class="theme contradiction"><b>⚠ Contradiction</b>
+      <p>3 companies say legal must approve every takedown; 2 describe brand teams filing directly. Segment differences? Worth splitting enterprise vs mid-market.</p>
+      <span class="evd">▸ 5 quotes</span></div>
+    <div class="nextbox"><b>Validate next:</b> Do teams that file directly see faster takedowns? Ask the next 3 interviewees to walk through their last takedown end-to-end with timestamps.</div>
+  </div>
+
+  <div class="wall" id="wall"></div>
+</main>
+
+<script>
+const E={pain:"⚡",workaround:"➡️",money:"💰",commitment:"🤝",compliment:"🎈",obstacle:"🧱"};
+const QUOTES=[
+ {t:"workaround",q:"Every Monday I export all flagged listings to Excel and clean them up by hand",co:"Acme Watches",who:"Jane Doe",d:"Aug 12",conf:.95},
+ {t:"pain",q:"A counterfeit outsold our official store for a full week before we caught it",co:"Acme Watches",who:"Jane Doe",d:"Aug 12",conf:.91},
+ {t:"pain",q:"We only find gray-market sellers when a distributor complains — usually weeks late",co:"Bergmann Audio",who:"F. Keller",d:"Aug 11",conf:.88},
+ {t:"workaround",q:"My intern screenshots suspicious listings into a shared drive folder every Friday",co:"Northwind Apparel",who:"S. Öztürk",d:"Aug 5",conf:.93},
+ {t:"pain",q:"Legal takes two weeks to approve a takedown, the listing is gone or sold out by then",co:"Northwind Apparel",who:"S. Öztürk",d:"Aug 5",conf:.9},
+ {t:"money",q:"We set aside a brand-protection line item this year — around €40k",co:"Acme Watches",who:"Jane Doe",d:"Aug 12",conf:.96},
+ {t:"workaround",q:"We bought the counterfeits ourselves to document them for the marketplace reports",co:"Lumina Cosmetics",who:"A. Rossi",d:"Aug 8",conf:.87},
+ {t:"commitment",q:"I'll set up a session with Tomas from legal next week and share our takedown log",co:"Acme Watches",who:"Jane Doe",d:"Aug 12",conf:.94},
+ {t:"pain",q:"Fake discount codes on Instagram are hurting our margin more than the fake products",co:"Solace Outdoor",who:"K. Lindqvist",d:"Aug 1",conf:.85},
+ {t:"compliment",q:"This all sounds great — I'd totally use something like what you're describing",co:"PixelForge Games",who:"M. Chen",d:"Aug 7",conf:.97},
+ {t:"money",q:"If it saves Maria's Mondays it pays for itself, but procurement needs an ROI sheet",co:"Northwind Apparel",who:"S. Öztürk",d:"Aug 5",conf:.89},
+ {t:"pain",q:"Every marketplace has a different takedown form; we maintain nine templates",co:"Lumina Cosmetics",who:"A. Rossi",d:"Aug 8",conf:.92},
+];
+const wall=document.getElementById('wall');
+const active=new Set(["pain","workaround"]); let co="";
+[...new Set(QUOTES.map(q=>q.co))].forEach(c=>coSel.insertAdjacentHTML('beforeend',`<option>${c}</option>`));
+coSel.onchange=e=>{co=e.target.value;render()};
+document.querySelectorAll('.tag-toggle').forEach(b=>b.onclick=()=>{
+  b.classList.toggle('on'); b.classList.contains('on')?active.add(b.dataset.t):active.delete(b.dataset.t); render();
+});
+function render(){
+  const f=QUOTES.filter(q=>active.has(q.t)&&(!co||q.co===co));
+  document.getElementById('summary').textContent=`${f.length} highlights · ${new Set(f.map(q=>q.co)).size} companies · last 90 days`;
+  document.getElementById('synthBtn').disabled=f.length<5;
+  wall.innerHTML=f.map(q=>`<div class="qcard" onclick="location='conversation.html'" title="Open in conversation">
+    <div class="qtag">${E[q.t]} ${q.t}<span class="conf">${q.conf}</span></div>
+    <blockquote>${q.q}</blockquote>
+    <div class="qmeta"><b>${q.co}</b> · ${q.who} · ${q.d} → open ↗</div>
+  </div>`).join('');
+}
+function synthesize(){
+  const s=document.getElementById('synth'); s.classList.add('open');
+  s.scrollIntoView({behavior:'smooth'});
+  const btn=document.getElementById('synthBtn');
+  btn.disabled=true; btn.innerHTML='<span class="loading"><span class="spin"></span> Synthesizing…</span>';
+  setTimeout(()=>{btn.disabled=false;btn.textContent='✨ Synthesize this view'},1800);
+}
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MomBoard — Acme Watches discovery call</title>
+<style>
+  :root{
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --hairline:#e1e0d9; --accent:#2a78d6; --accent-soft:#e8f1fc; --good:#006300;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--page);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  a{color:inherit;text-decoration:none}
+  nav{display:flex;align-items:center;gap:14px;padding:0 20px;height:52px;background:var(--surface);border-bottom:1px solid var(--hairline);flex:none}
+  .logo{font-weight:700}.logo span{color:var(--accent)}
+  .crumb{color:var(--muted)} .crumb b{color:var(--ink);font-weight:600}
+  .meta-chips{display:flex;gap:6px;margin-left:auto;align-items:center}
+  .mchip{font-size:12px;padding:3px 9px;border-radius:99px;background:var(--page);border:1px solid var(--hairline);color:var(--ink-2)}
+  .btn{border:1px solid var(--hairline);background:var(--surface);border-radius:8px;padding:6px 12px;font:inherit;font-weight:600;cursor:pointer;color:var(--ink-2)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  /* layout */
+  .cols{flex:1;display:flex;min-height:0}
+  .transcript{flex:1;overflow-y:auto;padding:24px 32px 120px}
+  aside{width:360px;flex:none;border-left:1px solid var(--hairline);background:var(--surface);overflow-y:auto;padding:18px}
+  /* review banner */
+  .review{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;background:var(--accent-soft);border:1px solid #bcd7f5;border-radius:10px;padding:8px 14px;margin-bottom:18px;font-size:13px}
+  .kbd{background:var(--surface);border:1px solid var(--hairline);border-bottom-width:2px;border-radius:5px;padding:0 6px;font:12px ui-monospace,monospace}
+  /* utterances */
+  .utt{display:flex;gap:12px;padding:7px 10px;border-radius:10px;max-width:760px}
+  .utt .who{width:64px;flex:none;font-size:12px;font-weight:700;padding-top:2px}
+  .us .who{color:var(--accent)} .them .who{color:var(--ink-2)}
+  .utt p{color:var(--ink)} .us p{color:var(--ink-2)}
+  .utt.hl{background:#fdf9ee}
+  .utt.focus{outline:2px solid var(--accent);outline-offset:-2px}
+  .hl-chips{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+  .hchip{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 9px;border-radius:99px;cursor:pointer;border:1px solid var(--hairline);background:var(--surface);color:var(--ink-2)}
+  .hchip.suggested{border-style:dashed;border-color:#c9a227;background:#fdf6e0}
+  .hchip.accepted{border-color:#9ec5f4;background:var(--accent-soft);color:#1c5cab;font-weight:600}
+  .hchip .conf{color:var(--muted);font-weight:400}
+  mark{background:#fbe9b8;border-radius:3px;padding:0 1px}
+  /* popover */
+  .pop{position:absolute;z-index:20;background:var(--surface);border:1px solid var(--hairline);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.14);padding:12px;width:250px;display:none}
+  .pop.open{display:block}
+  .pop .q{font-size:12.5px;color:var(--ink-2);font-style:italic;margin:6px 0 10px}
+  .pop .row{display:flex;gap:6px}
+  .pop select{width:100%;font:inherit;padding:6px;border:1px solid var(--hairline);border-radius:8px;margin-bottom:8px}
+  .ok{background:#e6f4e6;color:#006300;border:none;border-radius:8px;flex:1;padding:7px;font-weight:700;cursor:pointer}
+  .no{background:#fbe7e7;color:#a32222;border:none;border-radius:8px;flex:1;padding:7px;font-weight:700;cursor:pointer}
+  /* sidebar cards */
+  .card{border:1px solid var(--hairline);border-radius:12px;padding:14px;margin-bottom:14px;background:var(--page)}
+  .card h3{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:9px}
+  .pain{display:flex;gap:8px;margin-bottom:8px;font-size:13px}
+  .sev{flex:none;width:8px;height:8px;border-radius:50%;margin-top:5px}
+  .sev.h{background:#d03b3b}.sev.m{background:#fab219}
+  .ev{color:var(--accent);cursor:pointer;font-size:12px;white-space:nowrap}
+  .commit{font-size:13px;padding:8px 10px;border-radius:8px;background:#e6f4e6;margin-bottom:6px}
+  .commit b{color:var(--good)}
+  .scorebox{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .big{font-size:34px;font-weight:700;letter-spacing:-.02em}
+  .big small{font-size:14px;color:var(--muted);font-weight:400}
+  .viol{font-size:12.5px;color:var(--ink-2);padding:7px 9px;border-left:3px solid #fab219;background:#fdf6e0;border-radius:0 8px 8px 0;margin-bottom:6px}
+  .viol .better{color:var(--good);display:block;margin-top:3px}
+  ul.plain{list-style:none} ul.plain li{font-size:13px;margin-bottom:6px;color:var(--ink-2)}
+  /* notes drawer */
+  .drawer{flex:none;border-top:1px solid var(--hairline);background:var(--surface);transition:height .2s;height:42px;display:flex;flex-direction:column;overflow:hidden}
+  .drawer.open{height:280px}
+  .drawer-bar{display:flex;align-items:center;gap:10px;padding:0 20px;height:42px;cursor:pointer;flex:none}
+  .drawer-bar b{font-size:13px}
+  .save-state{font-size:12px;color:var(--muted);margin-left:auto}
+  .tabs{display:flex;gap:2px;margin-left:16px}
+  .tab{font-size:12px;padding:3px 10px;border-radius:6px;cursor:pointer;color:var(--muted)}
+  .tab.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  .drawer textarea{flex:1;border:none;outline:none;resize:none;padding:14px 20px;font:13px/1.6 ui-monospace,monospace;background:var(--surface);color:var(--ink);border-top:1px solid var(--hairline)}
+  .preview{flex:1;overflow:auto;padding:14px 20px;border-top:1px solid var(--hairline);font-size:13.5px;display:none}
+  .preview h4{margin:8px 0 4px}
+  .preview li{margin-left:18px}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">Mom<span>Board</span></div>
+  <span class="crumb"><a href="library.html">Library</a> / <b>Acme Watches — discovery call</b></span>
+  <div class="meta-chips">
+    <span class="mchip">Aug 12, 2026</span><span class="mchip">Jane Doe · Brand Manager</span>
+    <span class="mchip">enterprise</span><span class="mchip">discovery</span>
+    <button class="btn">↻ Re-analyze</button>
+  </div>
+</nav>
+
+<div class="cols">
+  <!-- ───────── transcript ───────── -->
+  <section class="transcript" id="tr">
+    <div class="review">
+      <b>Review mode</b> — 2 suggestions left ·
+      <span><span class="kbd">j</span>/<span class="kbd">k</span> next/prev · <span class="kbd">a</span> accept · <span class="kbd">x</span> reject</span>
+    </div>
+
+    <div class="utt us"><div class="who">David</div><p>Thanks for the time, Jane. Can you walk me through how you handle infringing listings today — like, what happened the last time you found one?</p></div>
+
+    <div class="utt them"><div class="who">Jane</div><p>Sure. Last Tuesday actually — a batch of fake “Acme Chrono” listings showed up on two marketplaces. It took us most of the week to deal with it.</p>
+    </div>
+
+    <div class="utt them hl" data-hl="0"><div class="who">Jane</div>
+      <div><p>Honestly the process is painful. <mark>Every Monday I export all flagged listings to Excel and clean them up by hand</mark> before legal even sees them. It's half my Monday, every Monday.</p>
+      <div class="hl-chips">
+        <span class="hchip accepted">➡️ workaround</span>
+        <span class="hchip accepted">⚡ pain</span>
+      </div></div>
+    </div>
+
+    <div class="utt us"><div class="who">David</div><p>What happens if a listing slips through while that spreadsheet is being cleaned?</p></div>
+
+    <div class="utt them hl" data-hl="1"><div class="who">Jane</div>
+      <div><p><mark>Two months ago a counterfeit outsold our official store for a full week before we caught it</mark>. My VP still brings it up. It was… not a fun meeting.</p>
+      <div class="hl-chips">
+        <span class="hchip accepted">😠 emotion</span>
+        <span class="hchip suggested" data-tag="pain">⚡ pain <span class="conf">0.91</span></span>
+      </div></div>
+    </div>
+
+    <div class="utt us"><div class="who">David</div><p>Is there budget attached to fixing this, or is it more of an annoyance?</p></div>
+
+    <div class="utt them hl" data-hl="2"><div class="who">Jane</div>
+      <div><p><mark>We set aside a brand-protection line item this year — around €40k — that we haven't committed anywhere yet</mark>. Procurement wants it resolved before Q4 planning.</p>
+      <div class="hl-chips"><span class="hchip accepted">💰 money</span></div></div>
+    </div>
+
+    <div class="utt them hl" data-hl="3"><div class="who">Jane</div>
+      <div><p>By the way, this all sounds great — <mark>I'd totally use something like what you're describing</mark>.</p>
+      <div class="hl-chips">
+        <span class="hchip suggested" data-tag="compliment">🎈 compliment <span class="conf">0.97</span></span>
+      </div></div>
+    </div>
+
+    <div class="utt us"><div class="who">David</div><p>Appreciated — though I'd rather earn that. Could we get 30 minutes with the legal team who files the takedowns, to see the Monday export live?</p></div>
+
+    <div class="utt them hl" data-hl="4"><div class="who">Jane</div>
+      <div><p>Yes — <mark>I'll set up a session with Tomas from legal next week and share our takedown log before that</mark>.</p>
+      <div class="hl-chips">
+        <span class="hchip accepted">🤝 commitment</span>
+        <span class="hchip accepted">👤 intro: Tomas (legal)</span>
+        <span class="hchip accepted">☆ follow-up</span>
+      </div></div>
+    </div>
+    <p style="color:var(--muted);font-size:12px;margin-top:18px">Tip: select any text in an utterance to add a manual highlight.</p>
+  </section>
+
+  <!-- ───────── analysis sidebar ───────── -->
+  <aside>
+    <div class="card">
+      <h3>Summary</h3>
+      <p style="font-size:13px;color:var(--ink-2)">Brand manager at enterprise watch brand spends ~4h weekly manually exporting and cleaning flagged listings. A counterfeit outsold the official store for a week. €40k uncommitted budget exists; procurement wants resolution before Q4. Strong advancement: intro to legal + data sharing agreed.</p>
+    </div>
+
+    <div class="card">
+      <h3>Top pains</h3>
+      <div class="pain"><span class="sev h"></span><span>Manual Excel triage consumes half a day weekly <span class="ev" onclick="jump(0)">→ quote</span></span></div>
+      <div class="pain"><span class="sev h"></span><span>Counterfeit outsold official store undetected for a week <span class="ev" onclick="jump(1)">→ quote</span></span></div>
+      <div class="pain"><span class="sev m"></span><span>Legal only sees pre-cleaned data; no live view <span class="ev" onclick="jump(0)">→ quote</span></span></div>
+    </div>
+
+    <div class="card">
+      <h3>Commitments & advancement</h3>
+      <div class="commit"><b>time</b> — session with Tomas (legal) next week</div>
+      <div class="commit"><b>reputation</b> — will share internal takedown log</div>
+    </div>
+
+    <div class="card">
+      <h3>Mom Test critique</h3>
+      <div class="scorebox"><span class="big">8<small>/10</small></span>
+        <span style="font-size:12.5px;color:var(--ink-2)">Asked about the past, dug into specifics, pushed for commitment.</span></div>
+      <div class="viol">Pitched near the end (“what you're describing”) before the intro ask.
+        <span class="better">Better: keep the product out until the workflow demo is booked.</span></div>
+      <div class="viol">Accepted the compliment without deflecting to facts.
+        <span class="better">Better: “What do you do today when X happens?”</span></div>
+    </div>
+
+    <div class="card">
+      <h3>Suggested follow-ups</h3>
+      <ul class="plain">
+        <li>☆ Watch the Monday export live with Tomas</li>
+        <li>☆ Get the takedown log volumes (listings/week)</li>
+        <li>☆ Ask who owns the €40k line item sign-off</li>
+      </ul>
+    </div>
+  </aside>
+</div>
+
+<!-- popover -->
+<div class="pop" id="pop">
+  <b style="font-size:13px" id="popTag">⚡ pain <span style="color:var(--muted);font-weight:400">· suggested 0.91</span></b>
+  <div class="q" id="popQ">“Two months ago a counterfeit outsold our official store…”</div>
+  <select><option>⚡ pain</option><option>🧱 obstacle</option><option>➡️ workaround</option><option>💰 money</option><option>🤝 commitment</option><option>🎈 compliment</option></select>
+  <div class="row"><button class="ok" onclick="resolve(true)">✓ Accept (a)</button><button class="no" onclick="resolve(false)">✕ Reject (x)</button></div>
+</div>
+
+<!-- ───────── notes drawer (the GDoc replacement) ───────── -->
+<div class="drawer" id="drawer">
+  <div class="drawer-bar" onclick="drawer.classList.toggle('open')">
+    <b>📝 Notes</b>
+    <div class="tabs" onclick="event.stopPropagation()">
+      <span class="tab on" onclick="mode(false,this)">Write</span>
+      <span class="tab" onclick="mode(true,this)">Preview</span>
+    </div>
+    <span class="save-state" id="save">Saved · 2 min ago</span>
+  </div>
+  <textarea id="ta" spellcheck="false"># Acme Watches — call notes
+
+## What we learned
+- The Monday Excel ritual is the wedge: **4h/week**, owned by Jane herself
+- €40k budget already exists — this is a *when*, not an *if*
+
+## Watch out
+- VP pressure after the outsold-by-counterfeit incident → urgency is real
+- Jane compliments easily; weight her *actions* (intro booked) not words</textarea>
+  <div class="preview" id="pv"></div>
+</div>
+
+<script>
+/* focusable suggestion queue: j/k/a/x */
+const sugg=[...document.querySelectorAll('.hchip.suggested')];
+let cur=-1;
+const pop=document.getElementById('pop');
+function focusSugg(i){
+  document.querySelectorAll('.utt').forEach(u=>u.classList.remove('focus'));
+  if(i<0||i>=sugg.length){pop.classList.remove('open');return}
+  cur=i; const chip=sugg[i], utt=chip.closest('.utt');
+  utt.classList.add('focus'); utt.scrollIntoView({block:'center',behavior:'smooth'});
+  const r=chip.getBoundingClientRect();
+  pop.style.left=Math.min(r.left,innerWidth-280)+'px'; pop.style.top=(r.bottom+8)+'px';
+  document.getElementById('popTag').innerHTML=chip.textContent.trim();
+  pop.classList.add('open');
+}
+function resolve(ok){
+  if(cur<0)return; const chip=sugg[cur];
+  if(ok){chip.classList.remove('suggested');chip.classList.add('accepted');chip.querySelector('.conf')?.remove();}
+  else chip.remove();
+  sugg.splice(cur,1); pop.classList.remove('open');
+  document.querySelector('.review b').textContent=`Review mode`;
+  document.querySelector('.review span').previousSibling.textContent=` — ${sugg.length} suggestions left · `;
+  if(sugg.length)focusSugg(Math.min(cur,sugg.length-1));
+  else document.querySelectorAll('.utt').forEach(u=>u.classList.remove('focus'));
+}
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='TEXTAREA'||e.target.tagName==='INPUT')return;
+  if(e.key==='j')focusSugg(Math.min(cur+1,sugg.length-1));
+  if(e.key==='k')focusSugg(Math.max(cur-1,0));
+  if(e.key==='a')resolve(true);
+  if(e.key==='x')resolve(false);
+});
+document.addEventListener('click',e=>{
+  const chip=e.target.closest('.hchip');
+  if(chip&&chip.classList.contains('suggested')){focusSugg(sugg.indexOf(chip));e.stopPropagation();}
+  else if(!e.target.closest('.pop'))pop.classList.remove('open');
+});
+function jump(i){const u=document.querySelector(`[data-hl="${i}"]`);u.scrollIntoView({block:'center',behavior:'smooth'});u.classList.add('focus');setTimeout(()=>u.classList.remove('focus'),1400)}
+/* notes: autosave indicator + tiny markdown preview */
+const ta=document.getElementById('ta'),pv=document.getElementById('pv'),save=document.getElementById('save');
+let t; ta.oninput=()=>{save.textContent='Saving…';clearTimeout(t);t=setTimeout(()=>save.textContent='Saved · just now',1500)};
+function mode(preview,el){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));el.classList.add('on');
+  ta.style.display=preview?'none':'';pv.style.display=preview?'block':'none';
+  if(preview)pv.innerHTML=ta.value
+    .replace(/^# (.*)$/gm,'<h3>$1</h3>').replace(/^## (.*)$/gm,'<h4>$1</h4>')
+    .replace(/^\- (.*)$/gm,'<li>$1</li>').replace(/\*\*(.*?)\*\*/g,'<b>$1</b>')
+    .replace(/\*(.*?)\*/g,'<i>$1</i>').replace(/\n\n/g,'<br>');
+  drawer.classList.add('open');
+}
+</script>
+</body>
+</html>

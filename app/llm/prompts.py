@@ -117,6 +117,30 @@ Each theme should reference the highlight IDs that support it.
 Return structured JSON matching the SynthesizerOutput schema.""",
 )
 
+# --- Hypothesis Linker ---
+
+HYPOTHESIS_LINKER_PROMPT = Prompt(
+    name="hypothesis_linker",
+    version="hypothesis_linker-v1",
+    template="""You are a hypothesis evidence linker. Given a set of open hypotheses and recent conversation highlights, determine which highlights provide evidence for or against each hypothesis.
+
+## Open Hypotheses
+{hypotheses}
+
+## Highlights (non-rejected, from recent conversation)
+{highlights}
+
+## Instructions:
+1. For each highlight, determine if it supports or contradicts any open hypothesis.
+2. Only propose links where there is a clear evidential relationship.
+3. Use "supports" when the highlight provides positive evidence for the hypothesis.
+4. Use "contradicts" when the highlight provides counter-evidence.
+5. Assign a confidence score (0-1) reflecting how strongly the highlight relates.
+6. Provide a brief rationale explaining the evidential relationship.
+
+Return structured JSON matching the LinkerOutput schema with a "links" array.""",
+)
+
 # --- Registry ---
 
 PROMPTS: dict[str, Prompt] = {
@@ -124,4 +148,5 @@ PROMPTS: dict[str, Prompt] = {
     "tagger": TAGGER_PROMPT,
     "analyst": ANALYST_PROMPT,
     "synthesizer": SYNTHESIZER_PROMPT,
+    "hypothesis_linker": HYPOTHESIS_LINKER_PROMPT,
 }

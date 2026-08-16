@@ -5,6 +5,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
@@ -12,6 +13,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -192,6 +194,9 @@ class Highlight(Base):
     conversation: Mapped["Conversation"] = relationship(back_populates="highlights")
     utterance: Mapped[Optional["Utterance"]] = relationship()
     tag: Mapped["Tag"] = relationship()
+    hypothesis_links: Mapped[list["HypothesisLink"]] = relationship(
+        back_populates="highlight", cascade="all, delete-orphan"
+    )
 
     __table_args__ = (Index("ix_highlights_tag_status", "tag_key", "status"),)
 
@@ -274,3 +279,58 @@ class Job(Base):
     )
 
     conversation: Mapped[Optional["Conversation"]] = relationship(back_populates="jobs")
+
+
+# --- Hypotheses ---
+
+
+class Hypothesis(Base):
+    __tablename__ = "hypotheses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    statement: Mapped[str] = mapped_column(Text, nullable=False)
+    segment: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")  # open|supported|refuted|parked
+    created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    links: Mapped[list["HypothesisLink"]] = relationship(
+        back_populates="hypothesis", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (Index("ix_hypotheses_status", "status"),)
+
+
+class HypothesisLink(Base):
+    __tablename__ = "hypothesis_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hypothesis_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("hypotheses.id", ondelete="CASCADE"), nullable=False
+    )
+    highlight_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("highlights.id", ondelete="CASCADE"), nullable=False
+    )
+    stance: Mapped[str] = mapped_column(String(20), nullable=False)  # supports|contradicts
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
+    origin: Mapped[str] = mapped_column(String(20), default="ai", server_default="ai")  # ai|human
+    status: Mapped[str] = mapped_column(String(20), default="suggested", server_default="suggested")  # suggested|confirmed|rejected
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    hypothesis: Mapped["Hypothesis"] = relationship(back_populates="links")
+    highlight: Mapped["Highlight"] = relationship(back_populates="hypothesis_links")
+
+    __table_args__ = (
+        Index("ix_hypothesis_links_hypothesis_id", "hypothesis_id"),
+        Index("ix_hypothesis_links_highlight_id", "highlight_id"),
+        CheckConstraint(
+            "stance IN ('supports', 'contradicts')",
+            name="ck_hypothesis_links_stance",
+        ),
+    )

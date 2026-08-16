@@ -130,11 +130,31 @@ export function NotesDrawer({ conversationId }: Props) {
 }
 
 function renderMarkdown(md: string): string {
-  return md
+  let html = md
     .replace(/^# (.*)$/gm, '<h3>$1</h3>')
     .replace(/^## (.*)$/gm, '<h4>$1</h4>')
     .replace(/^- (.*)$/gm, '<li>$1</li>')
     .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
     .replace(/\*(.*?)\*/g, '<i>$1</i>')
     .replace(/\n\n/g, '<br>');
+
+  // Sanitize: remove script tags and event handlers
+  html = sanitizeHtml(html);
+  return html;
+}
+
+/**
+ * Simple HTML sanitizer that removes script tags, event handlers, and dangerous attributes.
+ * Prevents XSS without requiring an external dependency.
+ */
+function sanitizeHtml(html: string): string {
+  // Remove <script> tags and their content
+  html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  // Remove any remaining <script> opening tags
+  html = html.replace(/<script\b[^>]*>/gi, '');
+  // Remove event handler attributes (on*)
+  html = html.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
+  // Remove javascript: protocol in href/src
+  html = html.replace(/(href|src)\s*=\s*["']?\s*javascript:[^"'>]*/gi, '$1=""');
+  return html;
 }

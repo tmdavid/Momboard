@@ -1,0 +1,18 @@
+{
+  "links": [
+    {
+      "hypothesis_id": 1,
+      "highlight_id": 1,
+      "stance": "supports",
+      "confidence": 0.88,
+      "rationale": "Direct evidence of willingness to pay to eliminate manual Monday export"
+    },
+    {
+      "hypothesis_id": 1,
+      "highlight_id": 2,
+      "stance": "contradicts",
+      "confidence": 0.72,
+      "rationale": "Suggests the export is tolerable; pain is elsewhere"
+    }
+  ]
+}

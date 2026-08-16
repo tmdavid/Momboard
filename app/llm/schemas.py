@@ -5,6 +5,8 @@ with strict: true. They also validate the responses we get back.
 """
 
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 # --- Normalizer Output ---
@@ -100,3 +102,18 @@ class SynthesizerOutput(BaseModel):
     themes: list[SynthesisTheme] = Field(default_factory=list)
     contradictions: list[SynthesisContradiction] = Field(default_factory=list)
     validate_next: list[str] = Field(default_factory=list)
+
+
+# --- Hypothesis Linker Output ---
+
+
+class LinkerLink(BaseModel):
+    hypothesis_id: int
+    highlight_id: int
+    stance: Literal["supports", "contradicts"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str = ""
+
+
+class LinkerOutput(BaseModel):
+    links: list[LinkerLink] = Field(default_factory=list)

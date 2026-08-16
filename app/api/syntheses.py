@@ -11,7 +11,7 @@ from app.models import Analysis, Job, User
 router = APIRouter()
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=SynthesisResponse)
 async def create_synthesis(
     body: SynthesisCreate,
     request: Request,
@@ -37,7 +37,7 @@ async def create_synthesis(
     return SynthesisResponse.model_validate(analysis)
 
 
-@router.get("/{synthesis_id}")
+@router.get("/{synthesis_id}", response_model=SynthesisResponse)
 async def get_synthesis(
     synthesis_id: int,
     request: Request,

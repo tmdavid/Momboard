@@ -11,7 +11,7 @@ from app.models import Highlight, User
 router = APIRouter()
 
 
-@router.patch("/{highlight_id}")
+@router.patch("/{highlight_id}", response_model=HighlightResponse)
 async def update_highlight(
     highlight_id: int,
     body: HighlightUpdate,

@@ -1,6 +1,6 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, Highlight, Utterance } from '../api';
+import { api, Highlight } from '../api';
 import { useReviewQueue } from '../hooks/useReviewQueue';
 import { NotesDrawer } from '../components/NotesDrawer';
 import { AnalysisSidebar } from '../components/AnalysisSidebar';
@@ -12,6 +12,7 @@ export function ConversationPage() {
   const { id } = useParams<{ id: string }>();
   const conversationId = Number(id);
   const queryClient = useQueryClient();
+  const location = useLocation();
 
   const { data: convo, isLoading, error } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -19,11 +20,24 @@ export function ConversationPage() {
     enabled: !!conversationId,
   });
 
+  // Local optimistic overrides for highlights
+  const [optimisticOverrides, setOptimisticOverrides] = useState<Record<number, { status?: string; tag_key?: string }>>({});
+
+  // Apply optimistic overrides to highlights
+  const highlights = (convo?.highlights ?? []).map((h) => {
+    const override = optimisticOverrides[h.id];
+    return override ? { ...h, ...override } : h;
+  });
+
   const updateHighlightMutation = useMutation({
     mutationFn: ({ highlightId, body }: { highlightId: number; body: { status?: string; tag_key?: string } }) =>
       api.updateHighlight(highlightId, body),
-    onMutate: async ({ highlightId, body }) => {
-      await queryClient.cancelQueries({ queryKey: ['conversation', conversationId] });
+    onMutate: ({ highlightId, body }) => {
+      // Immediate local state update for optimistic UI
+      setOptimisticOverrides((prev) => ({ ...prev, [highlightId]: body }));
+    },
+    onSuccess: (_data, { highlightId, body }) => {
+      // Server confirmed — update the query cache directly instead of refetching
       queryClient.setQueryData(['conversation', conversationId], (old: typeof convo) => {
         if (!old) return old;
         return {
@@ -33,9 +47,20 @@ export function ConversationPage() {
           ),
         };
       });
+      // Clear the override for this highlight since cache is updated
+      setOptimisticOverrides((prev) => {
+        const next = { ...prev };
+        delete next[highlightId];
+        return next;
+      });
     },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
+    onError: (_err, { highlightId }) => {
+      // Rollback on error — remove the override
+      setOptimisticOverrides((prev) => {
+        const next = { ...prev };
+        delete next[highlightId];
+        return next;
+      });
     },
   });
 
@@ -47,13 +72,28 @@ export function ConversationPage() {
     },
   });
 
-  const suggestedHighlights = convo?.highlights.filter((h) => h.status === 'suggested') ?? [];
+  const reprocessMutation = useMutation({
+    mutationFn: () => api.reprocessConversation(conversationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
+    },
+  });
+
+  const suggestedHighlights = highlights.filter((h) => h.status === 'suggested');
   const { focusNext, focusPrev, currentHighlight } = useReviewQueue(suggestedHighlights);
 
   const [popoverHighlight, setPopoverHighlight] = useState<Highlight | null>(null);
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
   const [flashUtteranceId, setFlashUtteranceId] = useState<number | null>(null);
   const transcriptRef = useRef<HTMLElement>(null);
+
+  // Inline highlight affordance state
+  const [selectionAffordance, setSelectionAffordance] = useState<{
+    text: string;
+    utteranceId: number;
+    show: boolean;
+    showTagSelector: boolean;
+  } | null>(null);
 
   // Keyboard handling
   useEffect(() => {
@@ -126,29 +166,74 @@ export function ConversationPage() {
     }
   }, []);
 
-  // Text selection → manual highlight
-  const handleTextSelect = useCallback(() => {
+  // Consume location hash (e.g. #utterance-2) after conversation data renders
+  const hashConsumedRef = useRef(false);
+  useEffect(() => {
+    if (hashConsumedRef.current || !convo) return;
+    const hash = location.hash;
+    const match = hash.match(/^#utterance-(\d+)$/);
+    if (match) {
+      const utteranceId = Number(match[1]);
+      // Small delay to ensure DOM has rendered the utterance elements
+      requestAnimationFrame(() => {
+        jumpToUtterance(utteranceId);
+      });
+      hashConsumedRef.current = true;
+    }
+  }, [convo, location.hash, jumpToUtterance]);
+
+  // Text selection → inline "add highlight" affordance (replaces window.prompt)
+  const affordanceRef = useRef<HTMLDivElement>(null);
+  const handleTextSelect = useCallback((e: React.MouseEvent) => {
+    // Don't process if click was inside the affordance
+    if (affordanceRef.current?.contains(e.target as Node)) return;
+
     const selection = window.getSelection();
-    if (!selection || selection.isCollapsed) return;
+    if (!selection || selection.isCollapsed) {
+      setSelectionAffordance(null);
+      return;
+    }
     const text = selection.toString().trim();
-    if (!text || text.length < 5) return;
+    if (!text || text.length < 5) {
+      setSelectionAffordance(null);
+      return;
+    }
 
     // Find the utterance element
     const anchorNode = selection.anchorNode;
     const uttEl = (anchorNode as HTMLElement)?.closest?.('[data-utterance-id]') ||
       (anchorNode?.parentElement as HTMLElement)?.closest?.('[data-utterance-id]');
-    if (!uttEl) return;
+    if (!uttEl) {
+      setSelectionAffordance(null);
+      return;
+    }
 
     const utteranceId = Number(uttEl.getAttribute('data-utterance-id'));
-    if (!utteranceId) return;
-
-    // Show a simple prompt for tag selection (minimal affordance)
-    const tagKey = window.prompt(`Add highlight for: "${text.slice(0, 60)}…"\n\nTag key (pain, workaround, money, commitment, etc.):`);
-    if (tagKey && TAG_META[tagKey]) {
-      createHighlightMutation.mutate({ utterance_id: utteranceId, tag_key: tagKey, quote: text });
-      selection.removeAllRanges();
+    if (!utteranceId) {
+      setSelectionAffordance(null);
+      return;
     }
-  }, [createHighlightMutation]);
+
+    setSelectionAffordance({ text, utteranceId, show: true, showTagSelector: false });
+  }, []);
+
+  const handleAddHighlightClick = useCallback(() => {
+    setSelectionAffordance((prev) => prev ? { ...prev, showTagSelector: true } : null);
+  }, []);
+
+  const handleTagSelect = useCallback(
+    (tagKey: string) => {
+      if (!selectionAffordance) return;
+      createHighlightMutation.mutate({
+        utterance_id: selectionAffordance.utteranceId,
+        tag_key: tagKey,
+        quote: selectionAffordance.text,
+      });
+      window.getSelection()?.removeAllRanges();
+      setSelectionAffordance(null);
+    },
+    [selectionAffordance, createHighlightMutation],
+  );
 
   if (isLoading) {
     return (
@@ -183,16 +268,25 @@ export function ConversationPage() {
               {new Date(convo.happened_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
             </span>
           )}
-          {convo.contacts[0] && (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-page border border-hairline text-ink-2">
-              {convo.contacts[0].name}{convo.contacts[0].role ? ` · ${convo.contacts[0].role}` : ''}
+          {/* Show ALL contacts, not just the first */}
+          {convo.contacts.map((ct) => (
+            <span key={ct.id} className="text-xs px-2 py-0.5 rounded-full bg-page border border-hairline text-ink-2">
+              <span>{ct.name}</span>{ct.role ? <span> · <span>{ct.role}</span></span> : ''}
             </span>
-          )}
+          ))}
           {convo.meta && 'segment' in convo.meta && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-page border border-hairline text-ink-2">
               {String(convo.meta.segment)}
             </span>
           )}
+          <button
+            className="text-xs px-2.5 py-1 rounded-lg border border-hairline bg-page hover:bg-accent-soft hover:border-accent text-ink-2 hover:text-accent transition-colors disabled:opacity-50"
+            disabled={reprocessMutation.isPending || convo.status === 'processing'}
+            onClick={() => reprocessMutation.mutate()}
+            title="Re-run AI tagging and analysis"
+          >
+            {reprocessMutation.isPending || convo.status === 'processing' ? '⟳ Processing…' : '🔄 Retag'}
+          </button>
         </div>
       </div>
 
@@ -214,7 +308,7 @@ export function ConversationPage() {
 
           {/* Utterances */}
           {convo.utterances.map((utt) => {
-            const uttHighlights = convo.highlights.filter(
+            const uttHighlights = highlights.filter(
               (h) => h.utterance_id === utt.id && h.status !== 'rejected',
             );
             const hasHighlights = uttHighlights.length > 0;
@@ -239,10 +333,10 @@ export function ConversationPage() {
                   {utt.speaker_label}
                 </div>
                 <div className="flex-1">
-                  <p className={utt.speaker_side === 'us' ? 'text-ink-2' : 'text-ink'}>
-                    {renderHighlightedText(utt, uttHighlights)}
+                  <p className={utt.speaker_side === 'us' ? 'text-ink-2' : 'text-ink'} data-raw-text="true">
+                    {utt.text}
                   </p>
-                  {uttHighlights.length > 0 && (
+                  {uttHighlights.length > 0 && !selectionAffordance?.showTagSelector && (
                     <div className="flex gap-1.5 mt-1.5 flex-wrap">
                       {uttHighlights.map((h) => (
                         <button
@@ -267,13 +361,41 @@ export function ConversationPage() {
             );
           })}
 
+          {/* Inline highlight affordance */}
+          {selectionAffordance?.show && (
+            <div ref={affordanceRef} className="fixed z-20 bg-surface border border-hairline rounded-lg shadow-lg p-2 mt-1" style={{ bottom: 80, right: 40 }}>
+              {!selectionAffordance.showTagSelector ? (
+                <button
+                  className="text-xs text-accent font-semibold bg-transparent border-none cursor-pointer px-2 py-1"
+                  onClick={handleAddHighlightClick}
+                >
+                  + Add highlight
+                </button>
+              ) : (
+                <div className="flex flex-col gap-1" role="listbox" aria-label="Select tag">
+                  <span className="text-xs text-muted px-1 mb-1">Select tag:</span>
+                  {Object.entries(TAG_META).map(([key, meta]) => (
+                    <button
+                      key={key}
+                      role="option"
+                      className="text-xs text-left px-2 py-1 rounded hover:bg-page cursor-pointer bg-transparent border-none"
+                      onClick={() => handleTagSelect(key)}
+                    >
+                      {meta.emoji} {meta.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           <p className="text-muted text-xs mt-4">
             Tip: select any text in an utterance to add a manual highlight.
           </p>
         </section>
 
         {/* Analysis sidebar */}
-        <AnalysisSidebar analysis={analysis ?? null} highlights={convo.highlights} onJumpToUtterance={jumpToUtterance} />
+        <AnalysisSidebar analysis={analysis ?? null} highlights={highlights} onJumpToUtterance={jumpToUtterance} />
       </div>
 
       {/* Popover */}
@@ -294,37 +416,6 @@ export function ConversationPage() {
   );
 }
 
-function renderHighlightedText(utterance: Utterance, highlights: Highlight[]): React.ReactNode {
-  // Simple approach: if a highlight has a quote, mark it in the text
-  let text = utterance.text;
-  const parts: React.ReactNode[] = [];
-  let lastIdx = 0;
-
-  // Sort highlights by their quote position in text
-  const sortedHls = highlights
-    .filter((h) => h.quote)
-    .map((h) => {
-      const idx = text.indexOf(h.quote);
-      return { ...h, startIdx: idx };
-    })
-    .filter((h) => h.startIdx >= 0)
-    .sort((a, b) => a.startIdx - b.startIdx);
-
-  for (const hl of sortedHls) {
-    if (hl.startIdx < lastIdx) continue; // overlapping
-    if (hl.startIdx > lastIdx) {
-      parts.push(<span key={`t-${lastIdx}`}>{text.slice(lastIdx, hl.startIdx)}</span>);
-    }
-    parts.push(
-      <mark key={`hl-${hl.id}`} className="bg-[#fbe9b8] rounded px-0.5">
-        {hl.quote}
-      </mark>,
-    );
-    lastIdx = hl.startIdx + hl.quote.length;
-  }
-  if (lastIdx < text.length) {
-    parts.push(<span key={`t-${lastIdx}`}>{text.slice(lastIdx)}</span>);
-  }
-
-  return parts.length > 0 ? <>{parts}</> : text;
-}
+// Note: highlighted text rendering is intentionally done as plain text
+// to ensure text selection works correctly for manual highlight creation.
+// Visual highlights are shown via chip buttons below each utterance.

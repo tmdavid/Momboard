@@ -1,9 +1,11 @@
 """Conversations API endpoints."""
 
 import asyncio
+import json
 from datetime import datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -15,9 +17,11 @@ from app.api.schemas import (
     CompanyResponse,
     ContactResponse,
     ConversationCreate,
+    ConversationCreateResponse,
     ConversationDetail,
     ConversationListItem,
     ConversationListResponse,
+    ConversationStatusResponse,
     ConversationUpdate,
     HighlightResponse,
     UtteranceResponse,
@@ -37,13 +41,9 @@ from app.models import (
 router = APIRouter()
 
 
-async def _get_or_create_company(
-    db: AsyncSession, name: str, domain: str | None = None
-) -> Company:
+async def _get_or_create_company(db: AsyncSession, name: str, domain: str | None = None) -> Company:
     """Get or create a company by name (case-insensitive)."""
-    result = await db.execute(
-        select(Company).where(func.lower(Company.name) == name.lower())
-    )
+    result = await db.execute(select(Company).where(func.lower(Company.name) == name.lower()))
     company = result.scalar_one_or_none()
     if company is None:
         company = Company(name=name, domain=domain)
@@ -65,7 +65,7 @@ async def _get_or_create_contact(
     return contact
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, response_model=ConversationCreateResponse)
 async def create_conversation(
     body: ConversationCreate,
     request: Request,
@@ -115,7 +115,84 @@ async def create_conversation(
     }
 
 
-@router.get("")
+@router.post("/upload", status_code=201)
+async def upload_audio(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    interviewer: str | None = Form(default=None),
+    language: str | None = Form(default=None),
+):
+    """Upload an audio/video file, transcribe via Whisper, and create a conversation."""
+    from app.transcribe import (
+        MAX_FILE_SIZE,
+        SUPPORTED_EXTENSIONS,
+        TranscriptionError,
+        transcribe_audio,
+    )
+
+    # Validate file extension
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unsupported file type '{suffix}'. Accepted: {sorted(SUPPORTED_EXTENSIONS)}",
+        )
+
+    # Read and validate size
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=422,
+            detail=f"File exceeds {MAX_FILE_SIZE // (1024 * 1024)} MB limit",
+        )
+
+    # Transcribe
+    try:
+        transcript = await transcribe_audio(
+            file_content=content,
+            filename=file.filename or "audio.mp3",
+            content_type=file.content_type or "application/octet-stream",
+            language=language,
+        )
+    except TranscriptionError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Create conversation with the transcribed text
+    convo = Conversation(
+        title=title,
+        interviewer=interviewer,
+        raw_transcript=transcript,
+        transcript_format="vtt",
+        meta={"source_filename": file.filename, "language": language},
+        status="processing",
+        source="audio_upload",
+    )
+    db.add(convo)
+    await db.flush()
+
+    # Enqueue ingest job
+    job = Job(
+        conversation_id=convo.id,
+        kind="ingest",
+        payload={"conversation_id": convo.id},
+        status="queued",
+    )
+    db.add(job)
+    await db.flush()
+
+    return {
+        "id": convo.id,
+        "title": convo.title,
+        "status": convo.status,
+        "created_at": convo.created_at.isoformat() if convo.created_at else None,
+        "transcript_preview": transcript[:500],
+    }
+
+
+@router.get("", response_model=ConversationListResponse)
 async def list_conversations(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -124,12 +201,17 @@ async def list_conversations(
     offset: int = Query(default=0, ge=0),
     company_id: int | None = None,
     status: str | None = None,
-    tag: str | None = None,
+    tag: list[str] = Query(default=[]),
     q: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    deal_stage: str | None = None,
 ):
-    """List conversations with filtering."""
+    """List conversations with filtering.
+
+    The `tag` parameter supports repeated query params for AND filtering:
+    ?tag=pain&tag=workaround returns conversations having BOTH tags.
+    """
     query = select(Conversation).options(
         selectinload(Conversation.company),
         selectinload(Conversation.contacts),
@@ -149,15 +231,24 @@ async def list_conversations(
         query = query.where(
             Conversation.title.ilike(like_q) | Conversation.raw_transcript.ilike(like_q)
         )
+    if deal_stage:
+        # Filter by meta.deal_stage JSON path — portable across SQLite/Postgres
+        query = query.where(Conversation.meta["deal_stage"].as_string() == deal_stage)
     if tag:
-        query = query.where(
-            Conversation.id.in_(
-                select(Highlight.conversation_id).where(
-                    Highlight.tag_key == tag,
-                    Highlight.status.in_(["suggested", "accepted"]),
+        # Flatten any comma-separated values and apply AND logic:
+        # conversation must have highlights for ALL specified tags
+        tag_keys: list[str] = []
+        for t in tag:
+            tag_keys.extend(part.strip() for part in t.split(",") if part.strip())
+        for tag_key in tag_keys:
+            query = query.where(
+                Conversation.id.in_(
+                    select(Highlight.conversation_id).where(
+                        Highlight.tag_key == tag_key,
+                        Highlight.status.in_(["suggested", "accepted"]),
+                    )
                 )
             )
-        )
 
     # Count total
     count_query = select(func.count()).select_from(query.subquery())
@@ -215,7 +306,7 @@ async def list_conversations(
     return ConversationListResponse(items=items, total=total, limit=limit, offset=offset)
 
 
-@router.get("/{conversation_id}")
+@router.get("/{conversation_id}", response_model=ConversationDetail)
 async def get_conversation(
     conversation_id: int,
     request: Request,
@@ -293,7 +384,7 @@ async def delete_conversation(
     await db.flush()
 
 
-@router.post("/{conversation_id}/reprocess")
+@router.post("/{conversation_id}/reprocess", response_model=ConversationStatusResponse)
 async def reprocess_conversation(
     conversation_id: int,
     request: Request,
@@ -328,7 +419,7 @@ async def reprocess_conversation(
     return {"id": convo.id, "status": "processing"}
 
 
-@router.post("/{conversation_id}/highlights", status_code=201)
+@router.post("/{conversation_id}/highlights", status_code=201, response_model=HighlightResponse)
 async def create_highlight(
     conversation_id: int,
     request: Request,
@@ -366,33 +457,46 @@ async def conversation_events(
     request: Request,
     user: User = Depends(get_current_user),
 ):
-    """SSE stream of job state changes for a conversation."""
+    """SSE stream of job state transitions for a conversation.
+
+    Only emits each transition once (transition-only). Terminates with a 'done'
+    event when the conversation reaches a terminal state (ready/failed/partial).
+    """
 
     async def event_generator():
         session_factory = request.app.state.session_factory
-        last_status = None
+        emitted: set[str] = set()  # Track already-sent event keys
+
         while True:
             async with session_factory() as db:
                 result = await db.execute(
                     select(Job)
                     .where(Job.conversation_id == conversation_id)
-                    .order_by(Job.created_at.desc())
-                    .limit(5)
+                    .order_by(Job.created_at)
                 )
                 jobs = result.scalars().all()
 
                 convo = await db.get(Conversation, conversation_id)
                 current_status = convo.status if convo else "unknown"
 
+                # Emit only NEW transitions
                 for job in jobs:
-                    event_data = f'{{"kind":"{job.kind}","status":"{job.status}"}}'
-                    yield {"event": f"{job.kind}.{job.status}", "data": event_data}
+                    event_key = f"{job.kind}.{job.status}"
+                    if event_key not in emitted:
+                        emitted.add(event_key)
+                        event_data = json.dumps({"kind": job.kind, "status": job.status})
+                        yield {"event": event_key, "data": event_data}
 
-                if current_status in ("ready", "failed") and current_status != last_status:
-                    yield {"event": "done", "data": f'{{"status":"{current_status}"}}'}
+                # Terminal states
+                if current_status in ("ready", "failed", "partial"):
+                    done_key = "done"
+                    if done_key not in emitted:
+                        emitted.add(done_key)
+                        yield {
+                            "event": "done",
+                            "data": json.dumps({"status": current_status}),
+                        }
                     return
-
-                last_status = current_status
 
             await asyncio.sleep(1)
 

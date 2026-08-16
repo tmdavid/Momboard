@@ -18,8 +18,45 @@ services:
       retries: 3
     restart: unless-stopped
 
-  # Optional: Postgres for production-like local dev
-  # Uncomment and set DATABASE_URL=postgresql+asyncpg://momboard:secret@db:5432/momboard
+  # Optional: Local LLM via Ollama (activate with: docker compose --profile local-llm up)
+  ollama:
+    image: ollama/ollama:0.9.0
+    profiles:
+      - local-llm
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+  # Model bootstrap: pulls the default model then exits
+  ollama-bootstrap:
+    image: ollama/ollama:0.9.0
+    profiles:
+      - local-llm
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["ollama", "pull", "qwen3:8b"]
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    restart: "no"
+
+  # Optional: Postgres for production-like local dev.
+  # Before enabling, change the Dockerfile install to `pip install --no-cache-dir '.[postgres]'`,
+  # rebuild, then set DATABASE_URL=postgresql+asyncpg://momboard:secret@db:5432/momboard
   # db:
   #   image: postgres:16-alpine
   #   environment:
@@ -36,5 +73,6 @@ services:
   #     timeout: 5s
   #     retries: 5
 
-# volumes:
-#   pgdata:
+volumes:
+  ollama_data:
+# pgdata:

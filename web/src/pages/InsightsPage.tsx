@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -7,7 +7,6 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   AreaChart,
   Area,
@@ -29,6 +28,18 @@ export function InsightsPage() {
     queryKey: ['stats'],
     queryFn: () => api.getStats(),
   });
+
+  // Track which series are hidden (toggled off)
+  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
+
+  const toggleSeries = useCallback((tag: string) => {
+    setHiddenSeries((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }, []);
 
   // Transform tag_counts_by_month into chart data
   const tagVolumeData = useMemo(() => {
@@ -127,7 +138,6 @@ export function InsightsPage() {
                   <XAxis dataKey="month" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} />
                   <Tooltip />
-                  <Legend />
                   {Object.keys(CHART_COLORS).map((tag) => (
                     <Line
                       key={tag}
@@ -137,10 +147,32 @@ export function InsightsPage() {
                       strokeWidth={2}
                       dot={false}
                       name={`${tagEmoji(tag)} ${tag}`}
+                      hide={hiddenSeries.has(tag)}
                     />
                   ))}
                 </LineChart>
               </ResponsiveContainer>
+              {/* Custom interactive legend */}
+              <ul className="flex flex-wrap gap-3 mt-2 list-none p-0" role="list" aria-label="Chart legend">
+                {Object.entries(CHART_COLORS).map(([tag, color]) => (
+                  <li key={tag} role="listitem">
+                    <button
+                      className="inline-flex items-center gap-1 text-xs cursor-pointer border-none bg-transparent p-0"
+                      onClick={() => toggleSeries(tag)}
+                      aria-pressed={!hiddenSeries.has(tag)}
+                      aria-label={`Toggle ${tagEmoji(tag)} ${tag} series`}
+                      style={{ opacity: hiddenSeries.has(tag) ? 0.4 : 1 }}
+                    >
+                      <span
+                        className="inline-block w-3 h-0.5 rounded"
+                        style={{ backgroundColor: color }}
+                        aria-hidden="true"
+                      />
+                      {tagEmoji(tag)} {tag}
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </div>
 
             {/* Row of two smaller charts */}
