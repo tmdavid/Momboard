@@ -1,0 +1,24 @@
+Meeting transcript - Customer Discovery Acme Corp
+2026-08-05
+
+Attendees: Alice Johnson, Bob Smith, Maria Garcia (Acme Corp)
+
+Alice Johnson: Hey everyone, thanks for joining. Maria, could you walk us through how your team currently handles brand protection?
+
+Maria Garcia: Sure! So right now we have this massive spreadsheet where the team logs every infringement they find manually. Every Monday I export it to Excel and clean it by hand, takes about 2 hours.
+
+Alice Johnson: That sounds painful. What happens after you clean it?
+
+Maria Garcia: Then I send it to legal and they prioritize which ones to pursue. But honestly, half the time they come back saying the data is incomplete or the links are dead by the time they look at it.
+
+Bob Smith: How many infringements does the team find per week roughly?
+
+Maria Garcia: On a good week maybe 200, but during product launches it can spike to 500+. That's when the spreadsheet really breaks down. People overwrite each other's entries, we lose tracking.
+
+Alice Johnson: Have you tried any tools to automate this?
+
+Maria Garcia: We looked at BrandShield last year but it was way too expensive for what we got. Like 50k a year and they only covered marketplace listings, not social media. We need both.
+
+Bob Smith: What would a working solution need to do differently?
+
+Maria Garcia: Honestly if it just kept the links alive and auto-categorized by platform, that alone would save us 10 hours a week. Legal keeps asking for screenshots as evidence too, which is another manual step.

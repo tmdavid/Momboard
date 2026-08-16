@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-page text-ink font-sans text-sm leading-relaxed;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply border-none rounded-lg px-3.5 py-2 font-semibold cursor-pointer text-sm;
+  }
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-[#1c5cab];
+  }
+  .btn-ghost {
+    @apply bg-transparent text-ink-2 border border-hairline hover:bg-page;
+  }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-spin-slow {
+  animation: spin 1s linear infinite;
+}

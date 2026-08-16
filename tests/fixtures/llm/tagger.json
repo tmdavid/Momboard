@@ -1,0 +1,60 @@
+{
+  "highlights": [
+    {
+      "utterance_idx": 1,
+      "tag_key": "context",
+      "quote": "right now we have this spreadsheet where the team logs every infringement they find manually",
+      "confidence": 0.85,
+      "rationale": "Background information about their current process"
+    },
+    {
+      "utterance_idx": 3,
+      "tag_key": "workaround",
+      "quote": "Every Monday I export it to Excel and clean it by hand, takes about 2 hours",
+      "confidence": 0.95,
+      "rationale": "Describes actual recurring past behavior - a workaround for lack of proper tooling"
+    },
+    {
+      "utterance_idx": 5,
+      "tag_key": "pain",
+      "quote": "The manual review is killing us. My analyst quit partly because of the tedium",
+      "confidence": 0.92,
+      "rationale": "Clear pain point with concrete consequence (employee quit)"
+    },
+    {
+      "utterance_idx": 7,
+      "tag_key": "workaround",
+      "quote": "We tried a freelancer doing the initial categorization, but accuracy dropped to about 60%",
+      "confidence": 0.88,
+      "rationale": "Past attempt at solving the problem - a failed workaround"
+    },
+    {
+      "utterance_idx": 9,
+      "tag_key": "money",
+      "quote": "she'd approve up to $2000 monthly",
+      "confidence": 0.91,
+      "rationale": "Specific budget information and buying criteria"
+    },
+    {
+      "utterance_idx": 11,
+      "tag_key": "commitment",
+      "quote": "I can get you a sample dataset by Friday",
+      "confidence": 0.93,
+      "rationale": "Giving up time - concrete commitment to provide data for pilot"
+    },
+    {
+      "utterance_idx": 13,
+      "tag_key": "commitment",
+      "quote": "I'll send an intro email this afternoon",
+      "confidence": 0.94,
+      "rationale": "Giving up reputation - introducing to VP, concrete time commitment"
+    },
+    {
+      "utterance_idx": 13,
+      "tag_key": "person",
+      "quote": "Her name is Sarah Chen, she runs all of brand protection",
+      "confidence": 0.87,
+      "rationale": "Specific person and their role for follow-up"
+    }
+  ]
+}

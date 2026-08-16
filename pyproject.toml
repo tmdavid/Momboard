@@ -1,0 +1,68 @@
+[project]
+name = "momboard"
+version = "0.1.0"
+description = "Mom Test conversation repository"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi==0.115.0",
+    "uvicorn[standard]==0.30.6",
+    "pydantic==2.9.2",
+    "pydantic-settings==2.5.2",
+    "sqlalchemy[asyncio]==2.0.35",
+    "aiosqlite==0.20.0",
+    "alembic==1.13.3",
+    "httpx==0.27.2",
+    "argon2-cffi==23.1.0",
+    "itsdangerous==2.2.0",
+    "python-multipart==0.0.12",
+    "sse-starlette==2.1.3",
+]
+
+[project.optional-dependencies]
+postgres = [
+    "asyncpg==0.29.0",
+]
+dev = [
+    "pytest==8.3.3",
+    "pytest-asyncio==0.24.0",
+    "httpx==0.27.2",
+    "ruff==0.6.9",
+    "mypy==1.11.2",
+    "respx==0.21.1",
+    "coverage==7.6.1",
+]
+
+[build-system]
+requires = ["setuptools>=68.0,<72.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/versions/*.py" = ["UP035", "I001"]  # Migration template conventions
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_return_any = true
+warn_unused_configs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["aiosqlite.*", "asyncpg.*"]
+ignore_missing_imports = true

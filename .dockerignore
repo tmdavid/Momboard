@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Tests (not needed in production image)
+tests/
+prototypes/
+tasks/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment / secrets
+.env
+.env.*
+
+# Database / data
+*.db
+data/
+backups/
+
+# Caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+
+# Node (frontend build handled in Docker stage)
+web/node_modules/
+web/dist/
+web/dist-types/
+web/*.tsbuildinfo
+
+# Git
+.git/
+.gitignore
+
+# Docker
+docker-compose*.yml
+Dockerfile
+.dockerignore
+
+# Docs
+*.md
+!DEPLOY.md
+
+# CI
+.github/
+
+# OS
+.DS_Store
+Thumbs.db

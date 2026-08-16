@@ -1,0 +1,35 @@
+{
+  "kind": "drive#fileList",
+  "nextPageToken": "~!!~AI9FV7Txxxxxxxxxxxxxxxxxxxxxxxx",
+  "incompleteSearch": false,
+  "files": [
+    {
+      "id": "1AbCdEfGhIjKlMnOpQrStUvWxYz_001",
+      "name": "Meeting transcript - Sprint Planning 2026-08-01",
+      "mimeType": "application/vnd.google-apps.document",
+      "createdTime": "2026-08-01T10:30:00.000Z",
+      "modifiedTime": "2026-08-01T11:45:00.000Z",
+      "owners": [
+        {
+          "displayName": "Alice Johnson",
+          "emailAddress": "alice.johnson@example.com"
+        }
+      ],
+      "webViewLink": "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz_001/edit"
+    },
+    {
+      "id": "1AbCdEfGhIjKlMnOpQrStUvWxYz_002",
+      "name": "Meeting transcript - Customer Discovery Acme Corp",
+      "mimeType": "application/vnd.google-apps.document",
+      "createdTime": "2026-08-05T14:00:00.000Z",
+      "modifiedTime": "2026-08-05T15:30:00.000Z",
+      "owners": [
+        {
+          "displayName": "Bob Smith",
+          "emailAddress": "bob.smith@example.com"
+        }
+      ],
+      "webViewLink": "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz_002/edit"
+    }
+  ]
+}

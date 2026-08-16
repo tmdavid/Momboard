@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MomBoard — Insights</title>
+<style>
+  :root{
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --hairline:#e1e0d9; --accent:#2a78d6; --accent-soft:#e8f1fc; --good-text:#006300;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--page);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  a{color:inherit;text-decoration:none}
+  nav{display:flex;align-items:center;gap:28px;padding:0 28px;height:52px;background:var(--surface);border-bottom:1px solid var(--hairline)}
+  .logo{font-weight:700}.logo span{color:var(--accent)}
+  .nav-links{display:flex;gap:4px}
+  .nav-links a{padding:6px 12px;border-radius:8px;color:var(--ink-2)}
+  .nav-links a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  main{max-width:1100px;margin:0 auto;padding:28px}
+  .head{display:flex;align-items:baseline;gap:12px;margin-bottom:18px}
+  h1{font-size:20px;letter-spacing:-.02em}
+  .range{margin-left:auto;font:inherit;padding:7px 8px;border:1px solid var(--hairline);border-radius:8px;background:var(--surface);color:var(--ink-2)}
+  /* stat tiles */
+  .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+  .tile{background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:14px 16px}
+  .tile .lbl{font-size:12.5px;color:var(--ink-2);margin-bottom:6px}
+  .tile .val{font-size:28px;font-weight:600;letter-spacing:-.02em;line-height:1.1}
+  .tile .sub{display:flex;align-items:center;gap:8px;margin-top:6px}
+  .delta{font-size:12px;font-weight:600}
+  .delta.up-good{color:var(--good-text)} .delta.down-bad{color:#a32222}
+  .delta small{color:var(--muted);font-weight:400}
+  /* panels */
+  .grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+  .panel{background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:16px}
+  .panel h2{font-size:13.5px;font-weight:600;margin-bottom:2px}
+  .panel .sub{font-size:12px;color:var(--muted);margin-bottom:10px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  /* legend */
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:6px}
+  .lg{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2);cursor:pointer;user-select:none}
+  .lg.off{opacity:.35}
+  .sw{width:10px;height:10px;border-radius:3px}
+  svg text{font:11px system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--muted)}
+  svg .endlbl{font-size:11.5px;font-weight:600;fill:var(--ink-2)}
+  .tooltip{position:fixed;z-index:30;background:var(--ink);color:#fff;border-radius:8px;padding:8px 10px;font-size:12px;pointer-events:none;display:none;line-height:1.6;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+  .tooltip .trow{display:flex;align-items:center;gap:6px}
+  .tooltip .sw{width:8px;height:8px}
+  /* follow-ups */
+  .fu{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px solid var(--hairline);font-size:13px}
+  .fu:last-child{border-bottom:none}
+  .fu .age{margin-left:auto;font-size:12px;color:var(--muted);white-space:nowrap}
+  .fu .age.old{color:#a32222;font-weight:600}
+  .fu a{color:var(--accent)}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">Mom<span>Board</span></div>
+  <div class="nav-links">
+    <a href="library.html">Library</a>
+    <a href="explore.html">Explore</a>
+    <a class="active" href="#">Insights</a>
+  </div>
+</nav>
+
+<main>
+  <div class="head"><h1>Insights</h1>
+    <select class="range"><option>Last 6 months</option><option>This quarter</option><option>All time</option></select>
+  </div>
+
+  <div class="kpis">
+    <div class="tile"><div class="lbl">Conversations</div><div class="val">23</div>
+      <div class="sub"><span class="delta up-good">▲ +6 <small>vs prior 6 mo</small></span><svg id="spark1" width="72" height="22"></svg></div></div>
+    <div class="tile"><div class="lbl">Open follow-ups ☆</div><div class="val">7</div>
+      <div class="sub"><span class="delta down-bad">3 overdue <small>&gt; 2 weeks</small></span></div></div>
+    <div class="tile"><div class="lbl">Avg interview score</div><div class="val">7.2<span style="font-size:14px;color:var(--muted)">/10</span></div>
+      <div class="sub"><span class="delta up-good">▲ +0.4 <small>vs June</small></span><svg id="spark2" width="72" height="22"></svg></div></div>
+    <div class="tile"><div class="lbl">Compliment ratio</div><div class="val">24%</div>
+      <div class="sub"><span class="delta up-good">▼ −3 pts <small>lower is better</small></span><svg id="spark3" width="72" height="22"></svg></div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Signal volume over time</h2>
+    <div class="sub">Accepted highlights per month, by tag · click legend to toggle</div>
+    <div class="legend" id="legend"></div>
+    <svg id="main" width="100%" height="260" viewBox="0 0 700 260" preserveAspectRatio="none" style="overflow:visible"></svg>
+  </div>
+
+  <div class="row2">
+    <div class="panel">
+      <h2>Compliment ratio trend</h2>
+      <div class="sub">🎈 share of all highlights — are interviews getting less fluffy?</div>
+      <svg id="small1" width="100%" height="150" viewBox="0 0 330 150" style="overflow:visible"></svg>
+    </div>
+    <div class="panel">
+      <h2>Interview quality trend</h2>
+      <div class="sub">Avg Mom Test critique score per month</div>
+      <svg id="small2" width="100%" height="150" viewBox="0 0 330 150" style="overflow:visible"></svg>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:14px">
+    <h2>Open follow-ups</h2>
+    <div class="sub">Every unresolved ☆ across all conversations — your action list</div>
+    <div class="fu">☆ Watch the Monday export live with Tomas <a href="conversation.html">Acme Watches ↗</a><span class="age">3 days</span></div>
+    <div class="fu">☆ Get takedown log volumes (listings/week) <a href="conversation.html">Acme Watches ↗</a><span class="age">3 days</span></div>
+    <div class="fu">☆ Send ROI one-pager for procurement <a href="#">Northwind Apparel ↗</a><span class="age old">17 days</span></div>
+    <div class="fu">☆ Intro to distributor compliance lead <a href="#">Bergmann Audio ↗</a><span class="age old">21 days</span></div>
+    <div class="fu">☆ Ask who signs off the €40k line item <a href="conversation.html">Acme Watches ↗</a><span class="age">3 days</span></div>
+  </div>
+</main>
+
+<div class="tooltip" id="tt"></div>
+
+<script>
+const MONTHS=["Mar","Apr","May","Jun","Jul","Aug"];
+const SERIES=[
+  {key:"pain",     label:"⚡ pain",       color:"var(--s1)", hex:"#2a78d6", v:[4,6,9,8,11,14], on:true},
+  {key:"workaround",label:"➡️ workaround",color:"var(--s2)", hex:"#eb6834", v:[2,3,5,6,7,9],  on:true},
+  {key:"money",    label:"💰 money",      color:"var(--s3)", hex:"#1baf7a", v:[1,2,2,4,5,6],  on:true},
+  {key:"commitment",label:"🤝 commitment",color:"var(--s4)", hex:"#eda100", v:[0,1,2,2,4,5],  on:true},
+];
+const svg=document.getElementById('main'), tt=document.getElementById('tt');
+const W=700,H=260,PL=34,PR=110,PT=10,PB=26, ymax=15;
+const x=i=>PL+i*(W-PL-PR)/(MONTHS.length-1);
+const y=v=>PT+(H-PT-PB)*(1-v/ymax);
+
+function drawMain(){
+  let s="";
+  // hairline gridlines + clean ticks
+  [0,5,10,15].forEach(t=>{ s+=`<line x1="${PL}" y1="${y(t)}" x2="${W-PR}" y2="${y(t)}" stroke="var(--hairline)" stroke-width="1"/>
+    <text x="${PL-8}" y="${y(t)+4}" text-anchor="end">${t}</text>`; });
+  MONTHS.forEach((m,i)=>s+=`<text x="${x(i)}" y="${H-8}" text-anchor="middle">${m}</text>`);
+  SERIES.filter(sr=>sr.on).forEach(sr=>{
+    const pts=sr.v.map((v,i)=>`${x(i)},${y(v)}`).join(" ");
+    s+=`<polyline points="${pts}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    const li=sr.v.length-1;
+    // end marker: 8px dot with 2px surface ring
+    s+=`<circle cx="${x(li)}" cy="${y(sr.v[li])}" r="6" fill="var(--surface)"/>
+        <circle cx="${x(li)}" cy="${y(sr.v[li])}" r="4" fill="${sr.color}"/>
+        <text class="endlbl" x="${x(li)+10}" y="${y(sr.v[li])+4}">${sr.v[li]} ${sr.label}</text>`;
+  });
+  s+=`<line id="xh" y1="${PT}" y2="${H-PB}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>`;
+  svg.innerHTML=s;
+}
+function legend(){
+  document.getElementById('legend').innerHTML=SERIES.map((sr,i)=>
+    `<span class="lg ${sr.on?'':'off'}" onclick="SERIES[${i}].on=!SERIES[${i}].on;legend();drawMain()">
+      <span class="sw" style="background:${sr.hex}"></span>${sr.label}</span>`).join('');
+}
+svg.addEventListener('mousemove',e=>{
+  const r=svg.getBoundingClientRect();
+  const mx=(e.clientX-r.left)*(W/r.width);
+  const i=Math.max(0,Math.min(MONTHS.length-1,Math.round((mx-PL)/((W-PL-PR)/(MONTHS.length-1)))));
+  const xh=document.getElementById('xh');
+  xh.setAttribute('x1',x(i)); xh.setAttribute('x2',x(i)); xh.setAttribute('visibility','visible');
+  tt.style.display='block'; tt.style.left=(e.clientX+14)+'px'; tt.style.top=(e.clientY-10)+'px';
+  tt.innerHTML=`<b>${MONTHS[i]} 2026</b>`+SERIES.filter(s=>s.on).map(s=>
+    `<div class="trow"><span class="sw" style="background:${s.hex}"></span>${s.label}: <b>${s.v[i]}</b></div>`).join('');
+});
+svg.addEventListener('mouseleave',()=>{tt.style.display='none';document.getElementById('xh').setAttribute('visibility','hidden')});
+
+/* single-series small charts: accent line + 10% area wash, no legend (title names it) */
+function smallChart(id,vals,fmt,goodDir){
+  const el=document.getElementById(id), w=330,h=150,pl=34,pr=16,pt=10,pb=22;
+  const min=Math.min(...vals)*0.9, max=Math.max(...vals)*1.08;
+  const sx=i=>pl+i*(w-pl-pr)/(vals.length-1), sy=v=>pt+(h-pt-pb)*(1-(v-min)/(max-min));
+  let s="";
+  [min,(min+max)/2,max].forEach(t=>{s+=`<line x1="${pl}" x2="${w-pr}" y1="${sy(t)}" y2="${sy(t)}" stroke="var(--hairline)"/>
+    <text x="${pl-6}" y="${sy(t)+4}" text-anchor="end">${fmt(t)}</text>`});
+  MONTHS.forEach((m,i)=>s+=`<text x="${sx(i)}" y="${h-6}" text-anchor="middle">${m}</text>`);
+  const pts=vals.map((v,i)=>`${sx(i)},${sy(v)}`).join(" ");
+  s+=`<polygon points="${pl},${sy(min)} ${pts} ${w-pr},${sy(min)}" fill="var(--accent)" opacity="0.1"/>`;
+  s+=`<polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  const li=vals.length-1;
+  s+=`<circle cx="${sx(li)}" cy="${sy(vals[li])}" r="6" fill="var(--surface)"/><circle cx="${sx(li)}" cy="${sy(vals[li])}" r="4" fill="var(--accent)"/>
+      <text class="endlbl" x="${sx(li)}" y="${sy(vals[li])-10}" text-anchor="middle">${fmt(vals[li])}</text>`;
+  vals.forEach((v,i)=>{s+=`<circle cx="${sx(i)}" cy="${sy(v)}" r="9" fill="transparent"><title>${MONTHS[i]}: ${fmt(v)}</title></circle>`});
+  el.innerHTML=s;
+}
+function spark(id,vals){
+  const el=document.getElementById(id),w=72,h=22;
+  const min=Math.min(...vals),max=Math.max(...vals);
+  const sx=i=>2+i*(w-4)/(vals.length-1), sy=v=>2+(h-4)*(1-(v-min)/(max-min||1));
+  const pts=vals.map((v,i)=>`${sx(i)},${sy(v)}`).join(" ");
+  el.innerHTML=`<polyline points="${pts}" fill="none" stroke="var(--hairline)" stroke-width="2" stroke-linecap="round"/>
+    <polyline points="${vals.slice(-2).map((v,i)=>`${sx(vals.length-2+i)},${sy(v)}`).join(" ")}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="${sx(vals.length-1)}" cy="${sy(vals.at(-1))}" r="2.5" fill="var(--accent)"/>`;
+}
+legend(); drawMain();
+smallChart('small1',[42,38,33,31,27,24],v=>Math.round(v)+"%","down");
+smallChart('small2',[4.2,5.0,5.6,6.1,6.8,7.2],v=>v.toFixed(1),"up");
+spark('spark1',[2,3,3,4,5,6]); spark('spark2',[4.2,5,5.6,6.1,6.8,7.2]); spark('spark3',[42,38,33,31,27,24]);
+</script>
+</body>
+</html>

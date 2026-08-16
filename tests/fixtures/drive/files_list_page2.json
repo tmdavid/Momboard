@@ -1,0 +1,20 @@
+{
+  "kind": "drive#fileList",
+  "incompleteSearch": false,
+  "files": [
+    {
+      "id": "1AbCdEfGhIjKlMnOpQrStUvWxYz_003",
+      "name": "Meeting transcript - Weekly Standup 2026-08-10",
+      "mimeType": "application/vnd.google-apps.document",
+      "createdTime": "2026-08-10T09:00:00.000Z",
+      "modifiedTime": "2026-08-10T09:45:00.000Z",
+      "owners": [
+        {
+          "displayName": "Charlie Lee",
+          "emailAddress": "charlie.lee@example.com"
+        }
+      ],
+      "webViewLink": "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz_003/edit"
+    }
+  ]
+}

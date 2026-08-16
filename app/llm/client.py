@@ -1,0 +1,188 @@
+"""LLM client implementations: protocol, OpenAI Responses API, and Fake for testing."""
+
+import json
+import logging
+from pathlib import Path
+from typing import Any, Protocol, TypeVar
+
+import httpx
+from pydantic import BaseModel, ValidationError
+
+from app.llm.prompts import PROMPTS
+
+logger = logging.getLogger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
+
+
+class LLMSchemaError(Exception):
+    """Raised when LLM response doesn't match the expected schema."""
+
+    pass
+
+
+class LLMEnvelope(BaseModel):
+    """Metadata envelope returned with every LLM call."""
+
+    response_id: str = ""
+    model: str = ""
+    prompt_version: str = ""
+    data: Any = None
+
+
+class LLMClient(Protocol):
+    """Protocol for LLM clients."""
+
+    async def structured(
+        self, prompt_name: str, input_data: dict[str, Any], schema: type[T]
+    ) -> tuple[T, LLMEnvelope]:
+        """Call LLM with structured output, returning validated model + envelope."""
+        ...
+
+
+class OpenAIResponsesClient:
+    """Real OpenAI Responses API client using httpx."""
+
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str = "https://api.openai.com/v1",
+        model_map: dict[str, str] | None = None,
+    ):
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model_map = model_map or {}
+        self._client = httpx.AsyncClient(
+            timeout=120.0,
+            headers={"Authorization": f"Bearer {api_key}"},
+        )
+
+    async def structured(
+        self, prompt_name: str, input_data: dict[str, Any], schema: type[T]
+    ) -> tuple[T, LLMEnvelope]:
+        """Call OpenAI Responses API with strict JSON schema output."""
+        prompt = PROMPTS.get(prompt_name)
+        if prompt is None:
+            raise ValueError(f"Unknown prompt: {prompt_name}")
+
+        model = self.model_map.get(prompt_name, "gpt-4o")
+        rendered = prompt.render(input_data)
+
+        json_schema = schema.model_json_schema()
+        # Ensure all properties have defaults for strict mode
+        payload = {
+            "model": model,
+            "input": rendered,
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": schema.__name__,
+                    "schema": json_schema,
+                    "strict": True,
+                }
+            },
+        }
+
+        retries = 3
+        for attempt in range(retries):
+            try:
+                response = await self._client.post(
+                    f"{self.base_url}/responses",
+                    json=payload,
+                )
+                if response.status_code == 429 or response.status_code >= 500:
+                    if attempt < retries - 1:
+                        import asyncio
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                response.raise_for_status()
+                break
+            except httpx.HTTPStatusError:
+                if attempt == retries - 1:
+                    raise
+                import asyncio
+                await asyncio.sleep(2 ** attempt)
+
+        resp_data = response.json()
+        response_id = resp_data.get("id", "")
+
+        # Extract the text output
+        output_text = ""
+        for item in resp_data.get("output", []):
+            if item.get("type") == "message":
+                for content in item.get("content", []):
+                    if content.get("type") == "output_text":
+                        output_text = content.get("text", "")
+
+        if not output_text:
+            raise LLMSchemaError("No output text in response")
+
+        try:
+            parsed = schema.model_validate_json(output_text)
+        except (ValidationError, json.JSONDecodeError) as e:
+            raise LLMSchemaError(f"Response doesn't match schema: {e}")
+
+        envelope = LLMEnvelope(
+            response_id=response_id,
+            model=model,
+            prompt_version=prompt.version,
+            data=parsed,
+        )
+
+        return parsed, envelope
+
+    async def close(self) -> None:
+        await self._client.aclose()
+
+
+class FakeLLMClient:
+    """Fake LLM client that replays fixture files for testing."""
+
+    def __init__(self, fixtures: dict[str, Any] | None = None):
+        self._fixtures = fixtures or {}
+        self.calls: list[dict[str, Any]] = []
+
+    @classmethod
+    def from_dir(cls, path: str | Path) -> "FakeLLMClient":
+        """Load all .json files from a directory as fixtures keyed by filename stem."""
+        fixtures: dict[str, Any] = {}
+        p = Path(path)
+        if p.exists():
+            for f in p.glob("*.json"):
+                with open(f) as fh:
+                    fixtures[f.stem] = json.load(fh)
+        return cls(fixtures)
+
+    def set_fixture(self, prompt_name: str, data: dict[str, Any]) -> None:
+        """Set a fixture for a specific prompt."""
+        self._fixtures[prompt_name] = data
+
+    async def structured(
+        self, prompt_name: str, input_data: dict[str, Any], schema: type[T]
+    ) -> tuple[T, LLMEnvelope]:
+        """Return fixture data validated against the schema."""
+        self.calls.append({"prompt_name": prompt_name, "input_data": input_data})
+
+        fixture = self._fixtures.get(prompt_name)
+        if fixture is None:
+            raise ValueError(
+                f"No fixture for prompt '{prompt_name}'. "
+                f"Available: {list(self._fixtures.keys())}"
+            )
+
+        try:
+            parsed = schema.model_validate(fixture)
+        except ValidationError as e:
+            raise LLMSchemaError(f"Fixture doesn't match schema: {e}")
+
+        prompt = PROMPTS.get(prompt_name)
+        version = prompt.version if prompt else "fake-v0"
+
+        envelope = LLMEnvelope(
+            response_id="fake-response-id",
+            model="fake-model",
+            prompt_version=version,
+            data=parsed,
+        )
+
+        return parsed, envelope

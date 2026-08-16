@@ -1,0 +1,14 @@
+David: Hey Tom, thanks for chatting. So I've been working on this AI tool that automatically detects brand infringements online.
+Customer: Oh wow, that sounds amazing! AI is so hot right now.
+David: Yeah exactly, it uses computer vision and NLP to scan marketplaces. Would you find something like that useful?
+Customer: Absolutely! That would be incredible. We definitely need something like that.
+David: Great! So it can process thousands of listings per hour. What do you think about that?
+Customer: That's impressive. I can see how that would save a lot of time. Sounds like exactly what the industry needs.
+David: And we're thinking of pricing it around $500 per month. Would that work for your budget?
+Customer: Oh yeah, $500 seems very reasonable for what you're describing. I'd totally pay that.
+David: Awesome. Can you think of anyone else who might want this?
+Customer: Hmm, I could probably think of some people. Let me get back to you on that.
+David: Perfect. So you'd say this is something you'd buy when we launch?
+Customer: For sure! Put me on the waitlist. This sounds really promising.
+David: Thanks Tom! Really appreciate the positive feedback.
+Customer: No problem! Good luck with everything, it sounds like you're onto something big.

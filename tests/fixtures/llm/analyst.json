@@ -1,0 +1,53 @@
+{
+  "summary": "Maria from Acme Watches describes a growing brand infringement problem with 340 cases last quarter. Her team manually processes infringements via spreadsheet exports taking 2+ hours weekly. Budget exists ($2000/mo) pending ROI proof. She committed to providing a sample dataset by Friday and an intro to her VP.",
+  "top_pains": [
+    {
+      "pain": "Manual infringement review is unsustainable and caused analyst attrition",
+      "evidence_highlight_ids": [3, 5],
+      "severity": "high"
+    },
+    {
+      "pain": "Growing case volume (180→340/quarter) overwhelming small team",
+      "evidence_highlight_ids": [5],
+      "severity": "high"
+    }
+  ],
+  "commitments": [
+    {
+      "what": "Provide sample dataset by Friday for pilot",
+      "type": "time",
+      "next_step": "Follow up Thursday if not received"
+    },
+    {
+      "what": "Send intro email to VP Sarah Chen this afternoon",
+      "type": "reputation",
+      "next_step": "Prepare VP-level pitch focusing on ROI"
+    }
+  ],
+  "compliment_ratio": 0.0,
+  "mom_test_critique": {
+    "score": 8,
+    "good_questions": [
+      "Asked about current process (how they handle brand monitoring)",
+      "Followed up on specifics (what happens next, two hours getting worse)",
+      "Asked what they've tried (speed things up, $3000 tool)"
+    ],
+    "violations": [
+      {
+        "utterance_idx": 10,
+        "type": "pitched_the_idea",
+        "better": "Instead of suggesting a pilot, ask what a successful solution would look like to them"
+      }
+    ]
+  },
+  "suggested_followups": [
+    "Confirm dataset received by Friday",
+    "Prepare for VP Sarah Chen meeting - focus on 10+ hours/week savings proof",
+    "Quantify the cost of the analyst who quit"
+  ],
+  "open_questions": [
+    "What does their legal team's capacity look like?",
+    "How do they prioritize which infringements to pursue?",
+    "What platforms beyond Amazon are problematic?"
+  ]
+}

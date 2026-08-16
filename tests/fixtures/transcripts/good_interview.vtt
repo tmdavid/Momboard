@@ -1,0 +1,43 @@
+WEBVTT
+
+00:00:01.000 --> 00:00:04.000
+<v David>Hey Maria, thanks for taking the time today. I wanted to understand how your team handles brand monitoring right now.</v>
+
+00:00:04.500 --> 00:00:12.000
+<v Maria>Sure! So right now we have this spreadsheet where the team logs every infringement they find manually. It's been growing for about two years.</v>
+
+00:00:12.500 --> 00:00:18.000
+<v David>And when you find an infringement, what happens next?</v>
+
+00:00:18.500 --> 00:00:28.000
+<v Maria>Every Monday I export it to Excel and clean it by hand, takes about 2 hours. Then I categorize them by platform and severity before sending to legal.</v>
+
+00:00:29.000 --> 00:00:35.000
+<v David>Two hours every Monday — has that been getting worse over time?</v>
+
+00:00:35.500 --> 00:00:45.000
+<v Maria>Definitely. Last quarter we had 340 new cases, up from 180 the quarter before. The manual review is killing us. My analyst quit partly because of the tedium.</v>
+
+00:00:46.000 --> 00:00:52.000
+<v David>That's rough. What have you tried to speed things up?</v>
+
+00:00:52.500 --> 00:01:02.000
+<v Maria>We tried a freelancer doing the initial categorization, but accuracy dropped to about 60% and we ended up redoing most of it. Also looked at one tool but it was $3000/month.</v>
+
+00:01:03.000 --> 00:01:08.000
+<v David>What happened with the $3000 tool?</v>
+
+00:01:08.500 --> 00:01:18.000
+<v Maria>Budget got rejected. Our VP said we need to prove ROI first with what we have. If we could show time savings of 10+ hours per week, she'd approve up to $2000 monthly.</v>
+
+00:01:19.000 --> 00:01:25.000
+<v David>Would you be open to a 2-week pilot where we process your backlog?</v>
+
+00:01:25.500 --> 00:01:32.000
+<v Maria>Yes, actually. I can get you a sample dataset by Friday. Let me check with my VP but I think a pilot is exactly what we need to make the case.</v>
+
+00:01:33.000 --> 00:01:38.000
+<v David>Great. And could you introduce me to your VP for a quick alignment call?</v>
+
+00:01:38.500 --> 00:01:44.000
+<v Maria>Absolutely. I'll send an intro email this afternoon. Her name is Sarah Chen, she runs all of brand protection.</v>
