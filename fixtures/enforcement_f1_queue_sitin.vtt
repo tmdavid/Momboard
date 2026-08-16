@@ -1,0 +1,71 @@
+WEBVTT
+NOTE Follow-up 1 of 3 — queue sit-in with Marta & Jonas, 2026-08-26 08:45 CEST (~6 min excerpt)
+
+00:00:03.000 --> 00:00:10.000
+Marta: David, morning! You survived the calendar invite. This is Jonas, the famous Jonas.
+
+00:00:10.000 --> 00:00:16.000
+Jonas: Hi. She oversells me. Coffee status? Because we don't start the queue without coffee, that's a rule.
+
+00:00:16.000 --> 00:00:24.000
+David: Fully caffeinated. Pretend I'm not here — I really just want to watch a normal Tuesday. What's the overnight damage?
+
+00:00:24.000 --> 00:00:41.000
+Jonas: Sharing my screen… 312 new detections. Slightly above normal, there was a flash sale on one of the Asian marketplaces yesterday, that always pulls the fakes out. Okay so, standard drill — Marta takes counterfeits, I take gray market and the weird stuff.
+
+00:00:41.000 --> 00:00:50.000
+David: Wait, before you split — how do you decide what's "weird stuff"? Is that written down anywhere?
+
+00:00:50.000 --> 00:01:03.000
+Marta: Ha! No. It's vibes. Three years of vibes. If Jonas got hit by a bus, honestly, half our triage logic is gone. We keep saying we'll document it. We will never document it.
+
+00:01:03.000 --> 00:01:26.000
+Jonas: Okay watch this one, this is the alias sheet in action. New detection, storefront "TechDeals-Mall-EU". Never seen it. But — switching tabs — I search the sheet for the bank beneficiary… there. Same beneficiary as "EUTech-Outlet" and "MallTech-Deals", which we killed in June. That's hydra cluster fourteen. So this is not a new seller, this is takedown number, let me count, eleven for these guys.
+
+00:01:26.000 --> 00:01:31.000
+David: And where does the beneficiary name come from? The platform doesn't show that, right?
+
+00:01:31.000 --> 00:01:47.000
+Jonas: No, that's from our test buys. Every test buy, I copy the payment details into the sheet. Two years of that. Then my script — it's just Python, don't get excited — hashes the listing photos too, because these guys reuse photos before they reuse names. The photo match catches maybe a third of them.
+
+00:01:47.000 --> 00:01:56.000
+David: When the sheet says it's cluster fourteen, what changes? Does the enforcement itself go differently?
+
+00:01:56.000 --> 00:02:16.000
+Marta: That's the frustrating part — no. We file it like it's the first offense, every time, because there's no way to say "this is a repeat network" in the complaint flow. The marketplace treats it as new, the platform treats it as new. The eleven takedowns exist only in our sheet. If we could attach history, honestly the marketplaces escalate repeat offenders differently, there's a fast lane we never qualify for.
+
+00:02:16.000 --> 00:02:26.000
+David: Hold on — you know about the fast lane? Have you ever gotten a case into it?
+
+00:02:26.000 --> 00:02:45.000
+Marta: Twice, ever. Both times because I emailed a human at the marketplace directly with a spreadsheet of the whole cluster. Took me an afternoon to build each dossier, but those takedowns happened in 48 hours instead of two weeks. I have a contact there, Lena, she basically told me: give us networks, not listings, and we can act on networks.
+
+00:02:45.000 --> 00:02:50.000
+Jonas: Ooh, false positive. Look. See the flag?
+
+00:02:50.000 --> 00:03:12.000
+Jonas: This storefront — that's actually one of our authorized resellers in Czechia. They launched a new outlet store name last month and nobody told us, so it detects as unauthorized. If Marta hadn't recognized the company number we'd have filed against our own partner. Again. We did that in April, actual legal letter to an actual partner, their CEO called our CEO. Fun week.
+
+00:03:12.000 --> 00:03:16.000
+David: How do you prevent that today? Is there an allowlist?
+
+00:03:16.000 --> 00:03:33.000
+Marta: There's an allowlist by storefront name, which is exactly the problem — partners rename, open outlet stores, expand countries, and we find out when the queue flags them. After April I started asking sales for a monthly partner-changes email. I got two emails, in May and, mm, never again.
+
+00:03:33.000 --> 00:03:44.000
+David: Okay, I promised to just watch, and I've already broken that twice. Last question and then I'm muting: if you could only fix one thing you showed me today, which?
+
+00:03:44.000 --> 00:03:59.000
+Jonas: The history. Cluster history attached to enforcement. The sheet, but real. Everything else — even the false positives — is annoying, this one is the job. Half of what makes us good at this lives in a Google Sheet only two people can read.
+
+00:03:59.000 --> 00:04:11.000
+Marta: Agreed. And you owe me — I want to hear what you build from this. Also I'm sending you the export sample after this, Jonas remind me. The one with the ID columns, so David sees the raw shape of it.
+
+00:04:11.000 --> 00:04:18.000
+David: Please do. And Marta — would Lena, your marketplace contact, ever take a call with me? Not to sell, to understand the fast lane from her side.
+
+00:04:18.000 --> 00:04:28.000
+Marta: I can ask. She's careful, but if I frame it as "the network-level reporting thing", she might. She complains about listing-by-listing complaints as much as we do, funnily enough.
+
+00:04:28.000 --> 00:04:33.000
+David: Muting now. For real. Thank you both — go do the other 297.

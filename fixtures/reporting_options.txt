@@ -1,0 +1,59 @@
+Call: Priya N. — Head of Brand Protection, consumer electronics (EMEA)
+Date: 2026-08-13, 16:00 CEST, 8 min (recording auto-transcribed)
+Interviewer: David
+
+David: Priya! Good to see you. How was the conference in the end? I saw your panel got moved to the small room, that seemed criminal.
+
+Priya: Ha, it was fine, the small room was packed at least, so it looked great in photos. That's all that matters, right? Optics. Speaking of which, that's basically what this call is about for me, so, fitting.
+
+David: Ha, well. Yeah, thanks for making time. Like I said in the email, this isn't a sales call and there's no roadmap pitch hiding at the end. I just want to understand how you report on brand protection internally. You mentioned "optics" — start wherever you want with that.
+
+Priya: Okay so. Context. I report into the General Counsel, but since the reorg in March I also present quarterly to what they call the commercial council — CFO, VP sales, VP ecommerce. Twenty minutes, four times a year, and honestly those twenty minutes decide my budget. Last one was end of June.
+
+David: Walk me through preparing for that June one. Like, actually — when did you start, what did you do?
+
+Priya: I blocked two full days the week before, which turned into three. The routine is, I export everything from the platform as CSVs — enforcements, detections, the economic impact numbers — then Diego on my team rebuilds everything in spreadsheets, and then I make the deck. The platform has reports, you know, the PDF ones, but I can't use them in front of a CFO.
+
+David: Why not? What happens if you show the PDF?
+
+Priya: It happened once, my first quarter here, two years ago. Two problems. One, it shows global numbers and the council thinks in regions and business units — audio versus wearables versus accessories. The PDF can't split it that way, or at least I've never found how. Two, the economic impact figure. The methodology is, let's say, generous. Our CFO looked at the number, did some mental math against category revenue, and said, and I quote, "so this tool saved us more than we made in Portugal?" In front of everyone.
+
+David: Ouch.
+
+Priya: Ouch, yes. So now we compute our own version. Diego takes the enforcement volumes, multiplies by our internal average order values per category, applies a displacement rate our finance team signed off on — 30 percent, they'll defend that number — and that's what goes on the slide. It's less impressive than the platform's number, like a third of it, but nobody's laughed at it since.
+
+David: How long does Diego's rebuild take each quarter?
+
+Priya: The data pull and rebuild, a day and a half, roughly. It used to be faster, we had a Looker Studio dashboard connected to the CSVs that our analyst built — but she left in January and nobody can maintain it, so we're back to raw spreadsheets. There's an API, I think, but it's gated behind the enterprise tier and when I asked, the quote for upgrading was, mm, not something I could justify for what is essentially my own reporting convenience.
+
+David: Do you remember the number, roughly?
+
+Priya: It was around 20K a year on top of what we pay. Which, look — if it were just the API, no. But it's a renewals year, so everything's on the table. We renew in November.
+
+David: What else is on the table for November, if you can share?
+
+Priya: The usual dance. Procurement wants ten percent off, I want to keep scope. My honest position is the platform earns its keep operationally — the team lives in it every day and I have no appetite to migrate, migrations are a year of pain. But I need the renewal memo to say something better than "team likes it". Time-to-takedown is the metric I actually want, we measure it by hand for a sample right now. Diego literally samples thirty cases a quarter and checks timestamps one by one.
+
+David: Hold on — by hand? The timestamps are in the platform though, right?
+
+Priya: Individually, yes, on each case. In bulk, in the export? The CSV has the enforcement date but not the original detection date, or maybe it's a different export, and joining the two files never quite matches up — there's some ID mismatch Diego swears at every quarter. So, sample of thirty, by hand. Our number is around nine days average, by the way, down from thirteen last year, which is a genuinely good story and it's nowhere in any official report. I made that slide myself.
+
+David: That's a great story. So June's deck — what happened after those twenty minutes? Any actual decisions?
+
+Priya: Budget held flat, which these days counts as a win. And the VP ecommerce asked for a monthly one-pager per region, which — I mean, flattering that he wants it, but that's now twelve more mini-reports a year that Diego and I produce by hand. I've been assembling them the last Friday of every month. My August one is due, well, in two weeks, ha.
+
+David: If I sat in while you assembled one of those Friday one-pagers, would that be okay? I want to see the actual steps, the swearing included.
+
+Priya: Ha! Sure. The 28th, in the afternoon probably. I'll send you an invite. If you can handle Diego's opinions about CSV encodings, you're welcome to the whole thing.
+
+David: I'd love Diego's opinions, actually — can you copy him in? Sounds like he's the one with scars.
+
+Priya: He is the scars. I'll copy him. And look, if this call is going where I think it's going — I don't need dashboards with rocket ships. I need the export to have both dates in one file, per-region splits, and an impact number a CFO won't laugh at. That's the whole wishlist. Everything else is decoration. Would I pay for that? Ask me in November, ha. Right now what I'd say is: the tool is great at what it does, this is genuinely not a complaint call — but I currently spend more time explaining the tool's value than the tool spends explaining itself.
+
+David: That last sentence is going in my notes verbatim.
+
+Priya: It's yours. Anything else? I have a hard stop at half past, the wearables launch review, which will be its own kind of fun.
+
+David: No, that's everything — 28th with you and Diego, and good luck with the launch review.
+
+Priya: Thanks David. Talk soon.

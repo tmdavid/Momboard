@@ -1,0 +1,50 @@
+Call: Priya N. + Diego M. — follow-up #1, one-pager assembly sit-in, 2026-08-28, 15:00 CEST, ~7 min excerpt
+Interviewer: David
+
+Priya: David, welcome to the glamour. Diego, this is David, the one I told you about. Be yourself but, like, twenty percent less.
+
+Diego: No promises. Okay, sharing screen. So this is the monthly one-pager for the VP ecommerce, region EMEA edition. Step one, I export three CSVs from the platform. Watch the encoding thing — see? The enforcement export comes out UTF-8, the detection export comes out with a BOM, and if I open them in the wrong order Excel decides the seller names are in, I don't know, hieroglyphics. Every month. I have a note taped to my monitor about the order.
+
+David: You said three exports. What's the third?
+
+Diego: Economic impact. Which we don't use, but Priya makes me pull it anyway.
+
+Priya: Because once a quarter someone forwards me the platform's own report and asks why my numbers are smaller, and I need to show the derivation from their raw file to mine. It's a defensive export. I keep receipts.
+
+David: Has that actually happened — someone challenging the numbers?
+
+Priya: Twice this year. Last time was July, a regional sales director pulled the platform dashboard himself, saw the big number, and emailed my GC asking why brand protection was "underreporting its own impact" in my deck. I spent a morning writing a two-page explanation of displacement rates. A morning. For an email.
+
+David: Okay Diego, keep going — I want to see the join.
+
+Diego: The famous join. So, detections file has detection ID and detected date. Enforcements file has enforcement ID, enforcement date, and a column called related detection. Which is empty about, let me filter, yeah — 18 percent empty this month. Better than usual. For those I match on listing URL, except the URLs have tracking parameters sometimes, so I have a formula that strips everything after the question mark, except one marketplace puts the item ID after the question mark, so there's an exception column. This is the part where I usually swear.
+
+Priya: This is him being twenty percent less, by the way.
+
+David: And this join is what produces the time-to-takedown number?
+
+Diego: This join IS the time-to-takedown number. Nine point two days last month, if you trust my URL surgery. Which I do, because I sample-check thirty by hand every quarter, and the surgery holds up. But should the flagship metric of this department depend on my regex? Probably not?
+
+David: Priya, last time you said the renewal memo needs to say something better than "team likes it". Is time-to-takedown going in?
+
+Priya: It's in. Draft went to my GC on Tuesday. The structure is: nine-day time-to-takedown versus thirteen last year, coverage of top-five marketplaces, and cost per enforcement trending down. All three computed by us, none of them available as a report in the platform, which is a sentence I also put in the memo, in bold, because procurement asked me directly what we'd lose by switching vendors and my honest answer was: operationally a lot, reporting-wise almost nothing, we built the reporting.
+
+David: Whoa. What did procurement do with that?
+
+Priya: They've asked the vendor — you, I suppose, ha — for a pricing call in October. I genuinely don't know where it lands. My recommendation is renew, I want to be clear, the operational side earns it. But the 20K API quote is now part of that conversation, because if the API were included, half of Diego's monthly ritual disappears and that's a real argument in the memo.
+
+Diego: I would like to state for the record that I have mixed feelings about my ritual disappearing.
+
+David: Noted for the record. Diego — if you had the API tomorrow, what breaks first, honestly?
+
+Diego: Honestly? Probably nothing breaks, that's the annoying part. I'd rebuild the Looker dashboard Ana left behind in a weekend, the one-pagers become a scheduled query, and the quarterly deck becomes half a day instead of three. I've already written the schema I'd want, actually, in a doc somewhere, from the last time we thought we were getting the API. 2024, I think. I can send it to you, it's probably still ninety percent right.
+
+David: Please. And can I get the two CSVs from this month too, with whatever anonymization you need? I want to reproduce the join pain myself.
+
+Diego: You want the pain? You can have the pain. I'll send both plus my notes file, it's called join_hell_v7.xlsx and I'm not renaming it.
+
+Priya: And this is why nobody lets Diego near customers. Anything else, David? I have the launch retro at half past — the wearables thing shipped, by the way, only two weeks late.
+
+David: Congrats! Nothing else. October pricing call aside — can I check in with you after the GC reads the memo?
+
+Priya: Sure. Week of the 15th. If the memo survives first contact, I'll tell you which parts they underlined.

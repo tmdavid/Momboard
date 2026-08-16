@@ -1,0 +1,42 @@
+Call: Marta R. — follow-up #2, 2026-09-15, 14:00 CEST, ~5 min
+Interviewer: David
+
+David: Marta, hey. Thanks for squeezing me in. You said on email something changed with the gray market situation?
+
+Marta: Yes, so, remember I told you we'd quietly stopped enforcing gray market on the two smaller platforms? We un-stopped on one of them. Not by choice.
+
+David: What happened?
+
+Marta: Our Nordic distributor happened. They found thirty-odd unauthorized listings undercutting them on one of those platforms, made a formal complaint through their account manager, and it went up to our commercial director. So suddenly the queue we'd been ignoring for five months is a priority-one project with my name on it. I spent most of last week just doing archaeology on cases from April.
+
+David: When it became priority one, did anything change about resources? Or same team, new priority?
+
+Marta: Ha. Same team, new priority, plus a weekly status meeting about it, which is of course extra work rather than help. The one real change — my boss got sign-off to double the agency budget through Q4. They're doing the evidence dossiers for the whole backlog now, we're at, I think, twenty-five dossiers this month already.
+
+David: That's real money at 180 each. Was that an easy approval?
+
+Marta: Easier than I expected. The magic words were "distributor escalation". Nothing unlocks budget in this company like a distributor being angry. Two years I've said the gray market queue is a risk, nothing. One angry email from Oslo, doubled budget in four days. Lesson learned about how things actually work, I suppose.
+
+David: Noted, genuinely. And the alias sheet? Jonas sent me the export sample by the way, that was useful — the ID mismatch he mentioned is real, I reproduced it.
+
+Marta: He'll be delighted someone confirmed his suffering. Actually, update there too — we moved the sheet to Airtable over the summer break. Jonas built views per cluster, it's much less horrible. Still completely disconnected from the platform and the marketplaces, but at least it doesn't die when two people edit at once.
+
+David: What triggered the move? It survived as a Google Sheet for four years.
+
+Marta: It broke. Literally — we hit some cell limit in August, the sheet wouldn't load on Monday morning, and we did triage half-blind for two days. That was the push. Jonas migrated it that same week, evenings. Nobody asked permission, nobody noticed, story of this whole function.
+
+David: You mentioned Q4 last time — "December I don't take holidays." What are you doing differently this year, if anything?
+
+Marta: We started prep two weeks ago, earliest ever. Pre-loading the allowlist, chasing sales again for the partner list — I actually got a proper response this time because, guess what, the distributor thing made everyone jumpy. And I'm drafting the 2027 tooling budget with my boss. First time we get our own line item instead of borrowing from legal's.
+
+David: What's going in the line item? What are you actually asking for?
+
+Marta: Honestly, still figuring it out. The framing my boss wants is "reduce manual hours per enforcement". If someone can prove they cut our triage time or make cluster history real, there's room. I'd say the envelope being discussed is thirty to fifty a year, tooling total, not per tool. I can share the draft structure once it's not embarrassing, if you're interested.
+
+David: Very. And Lena — any luck?
+
+Marta: Pending. She didn't say no. She said "after peak season", which from her means November. I'll nudge her once Q4 calms down. Don't let me forget.
+
+David: I won't. Same time next month? Fifteen minutes, more archaeology updates.
+
+Marta: Deal. If I survive the weekly status meeting, ha. Bye David.

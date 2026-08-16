@@ -1,0 +1,103 @@
+WEBVTT
+
+00:00:02.000 --> 00:00:09.500
+David: Marta, hey! Can you hear me okay? Your camera's frozen I think — no wait, there you are.
+
+00:00:09.500 --> 00:00:16.000
+Marta: Ha, yeah, sorry, hotel wifi. I'm still in Alicante, we drove down for the week. Everyone's at the beach except me apparently.
+
+00:00:16.000 --> 00:00:24.000
+David: Oh nice, I'm jealous. And thanks for taking this during your holidays, seriously. Twenty-five minutes max, I promise.
+
+00:00:24.000 --> 00:00:33.000
+Marta: It's fine, honestly. If I don't take calls I just end up checking the queue anyway, so. You know how it is. What's this about again — you said it wasn't a support thing?
+
+00:00:33.000 --> 00:00:48.000
+David: Right, no, nothing to do with support, and I'm not selling you anything either. I'm trying to understand how enforcement work actually happens day to day for people like you. Less about our tool, more about your Tuesday, basically. So maybe start there — what did your last normal workday look like?
+
+00:00:48.000 --> 00:01:12.000
+Marta: Um, okay. So a normal day. I get in around 8:30, coffee, and the first thing is always the detection queue. That's non-negotiable because it piles up overnight, especially anything from Asia-Pacific marketplaces. Right now we're at something like 250, 300 new detections a day across all channels. I'd say the first two hours of every single day is just me and Jonas going through that queue.
+
+00:01:12.000 --> 00:01:16.500
+David: Two hours each, or two hours between the two of you?
+
+00:01:16.500 --> 00:01:31.000
+Marta: Each. Yeah. And Jonas is technically only supposed to be on this half-time, he also does customs stuff. The detection side works great, honestly, I have no complaints there — it finds way more than we ever did manually. The problem is everything after.
+
+00:01:31.000 --> 00:01:36.000
+David: What do you mean, after? Walk me through what happens after you validate something.
+
+00:01:36.000 --> 00:02:05.000
+Marta: So say I confirm a listing is counterfeit. Fine, one click, enforcement goes out. That part's fine. But then — okay, last month, real example. There's this seller network, we call them "the hydra" internally, which tells you everything. We took down forty-two of their listings on one marketplace in a single week. The following Tuesday, thirty-something new listings, same products, same photos even, under three new storefront names. And in the platform those are new sellers, new cases. All the history is gone.
+
+00:02:05.000 --> 00:02:08.500
+David: When that happened, what did you actually do?
+
+00:02:08.500 --> 00:02:34.000
+Marta: What we always do. We keep our own spreadsheet — I'm not proud of this — a Google Sheet with, I think we're at 1,800 seller aliases now. Storefront names, the bank beneficiary names when we can get them from test buys, photos hashes Jonas does with some script of his. Every morning we cross-check new detections against the sheet manually. Because the platform sees storefronts, and we're fighting people, if that makes sense.
+
+00:02:34.000 --> 00:02:38.000
+David: It does. How long has the sheet existed?
+
+00:02:38.000 --> 00:02:47.000
+Marta: Since before me. My predecessor started it in 2022 I think? It's kind of a rite of passage, whoever's newest maintains the sheet. It's horrible, everyone hates it.
+
+00:02:47.000 --> 00:02:57.000
+David: You mentioned test buys. Is that a regular thing? Last time you did one, what triggered it?
+
+00:02:57.000 --> 00:03:26.000
+Marta: Yeah, so for the gray market cases — not counterfeits, actual product but unauthorized sellers — the marketplaces basically won't act without proof. So we do test buys. Last one was maybe three weeks ago, a seller in Poland undercutting our MAP by forty percent. We bought two units, photographed everything, serial numbers, the works. That whole dossier took Jonas most of two days. And then the marketplace rejected the complaint anyway, first round. Asked for a notarized authorization letter. It eventually went through on appeal, took nineteen days total.
+
+00:03:26.000 --> 00:03:29.000
+David: Nineteen days. Is that typical?
+
+00:03:29.000 --> 00:03:47.000
+Marta: For that marketplace? Yes, and that's a success story, ha. Counterfeits are fast, gray market is a swamp. We actually stopped enforcing gray market on two smaller platforms entirely — not worth the effort. Which drives sales insane, because those sellers show up in their channel reports.
+
+00:03:47.000 --> 00:03:53.000
+David: So when you decided to stop enforcing there — who made that call? Was that you?
+
+00:03:53.000 --> 00:04:11.000
+Marta: Me and my boss, our IP counsel. It wasn't formal, we just… stopped. There was a moment in the spring where I had, I want to say sixty open gray market cases, all waiting on evidence, and something had to give. Nobody above us ever noticed, by the way. Which maybe tells you something about how visible this work is.
+
+00:04:11.000 --> 00:04:24.000
+David: Hm. Actually — we're building some workflow automation around exactly this repeat-offender clustering, it would group those aliases automatically. Would that be useful?
+
+00:04:24.000 --> 00:04:32.000
+Marta: I mean, sure, sounds great. If it works. You know we've heard about a linking feature for a while now, ha.
+
+00:04:32.000 --> 00:04:44.000
+David: Fair. Forget I said that — I'm more interested in the sixty-case pile-up. When it got that bad, did you look at other tools, more people, anything?
+
+00:04:44.000 --> 00:05:12.000
+Marta: We asked for headcount. Got refused — hiring freeze, whole legal department. My boss then asked whether we could pay the agency we use for China filings to also do marketplace evidence packs, and finance actually said yes to that, weirdly. So there's money, it's just not allowed to become a salary. The agency does maybe ten dossiers a month for us now, they charge I think 180 per dossier? Which adds up, but it's the only thing keeping the gray market queue moving at all.
+
+00:05:12.000 --> 00:05:17.000
+David: That's really useful. So roughly 1,800 a month going to an agency for evidence work.
+
+00:05:17.000 --> 00:05:26.000
+Marta: More some months. December was brutal, obviously. Q4 everything doubles, the queue, the fakes, the panic from sales. Ha. December I don't take holidays, ever.
+
+00:05:26.000 --> 00:05:35.000
+David: Okay. If I could sit next to you for one of those 8:30 queue sessions — literally watch you and Jonas work through it — would that be weird?
+
+00:05:35.000 --> 00:05:50.000
+Marta: Not weird at all, we do it on a call anyway since Jonas is in the Hamburg office. Honestly you should see the alias sheet in action, it's tragicomic. I'm back on the 26th, any morning that week works. I'll send you the recurring invite, it's at 8:45 Berlin time.
+
+00:05:50.000 --> 00:05:57.000
+David: Perfect, please do. And would Jonas be okay with me asking him about his photo-hash script?
+
+00:05:57.000 --> 00:06:08.000
+Marta: He'd be thrilled, nobody ever asks Jonas about his scripts. I'll intro you on email. He also built the thing that exports our enforcement stats for the monthly report, which is its own nightmare, but that's a different conversation.
+
+00:06:08.000 --> 00:06:15.000
+David: I might take you up on that different conversation too. Last thing — anything I should have asked and didn't?
+
+00:06:15.000 --> 00:06:38.000
+Marta: Hmm. Maybe just — everyone always asks us about detection accuracy, surveys and stuff, and detection is fine. Detection has been fine for two years. Nobody ever asks what happens in the four hours after detection. That's where our week goes. Anyway. It's a good tool, David, we'd be lost without it, genuinely — but yeah. The four hours after.
+
+00:06:38.000 --> 00:06:47.000
+David: That's exactly what I needed. Enjoy the beach, say hi to the family, and I'll see you on the 26th at 8:45.
+
+00:06:47.000 --> 00:06:52.000
+Marta: Deal. Bye David.

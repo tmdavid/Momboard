@@ -1,0 +1,30 @@
+Call: Priya N. — follow-up #2, renewal memo debrief, 2026-10-16, 11:30 CEST, ~4 min
+Interviewer: David
+
+David: Priya, hey — how did the memo land?
+
+Priya: Better and worse than expected. Better: the GC underlined the time-to-takedown trend and used it, verbatim, in his budget summary to the CFO. My hand-made metric is now officially how this department is measured. Which, victory, I suppose.
+
+David: And the worse?
+
+Priya: The worse is the same thing. The CFO's office came back and asked for time-to-takedown monthly, per region, starting January. So the number Diego produces with URL surgery and a sample of thirty is about to become a standing KPI with my name on it, twelve times a year. When I told Diego he laughed for a genuinely concerning amount of time.
+
+David: So the workaround got promoted into infrastructure.
+
+Priya: Exactly. That's exactly what happened, I'm stealing that phrasing. And it changes the renewal math, honestly. In August I told you the API was a convenience. It's not a convenience anymore — if this KPI is standing, I need the join to be real, not regex. Either the export gets fixed, or the API gets bundled, or Diego's regex becomes load-bearing corporate infrastructure and I lose sleep.
+
+David: Where's the pricing conversation at?
+
+Priya: October call happened last week. Without details I shouldn't share — the API is on the table as part of the renewal, at meaningfully less than the 20K, in exchange for a two-year term. Procurement likes two-year terms about as much as they like anything, so, cautiously positive. Decision lands mid-November, before the contract lapses.
+
+David: You said the GC underlined time-to-takedown. Anything in the memo they pushed back on?
+
+Priya: One thing, and it surprised me. I'd included a line about consolidating our screenshot evidence library — we keep every takedown screenshot in a shared drive, eleven thousand files now, because marketplaces sometimes dispute that a listing ever existed. Legal flagged it as a retention risk, not a feature request. Apparently keeping eleven thousand files with no policy is worse than keeping zero. So now there's a side project about evidence retention that nobody asked for. Every time I write a memo something grows a side project.
+
+David: Last time Diego mentioned Ana's old Looker dashboard. If the API lands in the renewal — what happens in the first month, realistically?
+
+Priya: Realistically? Diego rebuilds the dashboard, first week, he's been ready for two years. The one-pagers get automated by December. And the January per-region KPI launches on real joins instead of surgery. That's the plan I already sketched for the GC, because "what do we do with it" was his first question about paying for the API at all. I can send you that sketch, actually — it's one page, and it's basically a spec of every report this platform doesn't have.
+
+David: Yes please. And I'll check in after mid-November when the decision lands?
+
+Priya: Do. If it lands well, I'll be insufferably smug, fair warning. Ciao David.
