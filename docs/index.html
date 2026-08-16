@@ -47,37 +47,37 @@
   .scoreline{display:flex;align-items:center;gap:10px;border-top:1px solid var(--hairline);padding:12px 20px;font-size:13px;color:var(--ink-2)}
   .score{background:#e6f4e6;color:var(--good);font-weight:800;border-radius:7px;padding:2px 9px}
   /* sections */
-  section{padding:64px 0}
+  section{padding:80px 0}
   .sec-h{font-size:clamp(22px,3.2vw,30px);letter-spacing:-.02em;text-align:center;margin-bottom:10px}
-  .sec-sub{text-align:center;color:var(--ink-2);max-width:560px;margin:0 auto 40px}
-  .cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
-  .card{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;padding:22px}
-  .card h3{font-size:16px;margin-bottom:8px;letter-spacing:-.01em}
-  .card p{font-size:14.5px;color:var(--ink-2)}
-  .punch{text-align:center;margin-top:34px;font-size:17px;font-weight:600}
+  .sec-sub{text-align:center;color:var(--ink-2);max-width:560px;margin:0 auto 44px}
+  .cols3{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:20px}
+  .card{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;padding:26px 24px}
+  .card h3{font-size:16px;margin-bottom:10px;letter-spacing:-.01em}
+  .card p{font-size:14.5px;color:var(--ink-2);line-height:1.65}
+  .punch{text-align:center;margin-top:38px;font-size:17px;font-weight:600}
   .step-n{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:14px;margin-bottom:12px}
   /* taxonomy strip */
-  .strip{background:var(--surface);border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);padding:26px 0}
-  .tags{display:flex;flex-wrap:wrap;gap:10px;justify-content:center}
-  .tag{font-size:13.5px;padding:6px 13px;border-radius:99px;border:1px solid var(--hairline);background:var(--page);color:var(--ink-2)}
+  .strip{background:var(--surface);border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline);padding:40px 0}
+  .tags{display:flex;flex-wrap:wrap;gap:12px;justify-content:center}
+  .tag{font-size:13.5px;padding:7px 14px;border-radius:99px;border:1px solid var(--hairline);background:var(--page);color:var(--ink-2)}
   .tag b{color:var(--ink)}
-  .strip .fine{text-align:center;display:block;margin-top:14px}
+  .strip .fine{text-align:center;display:block;margin-top:18px}
   /* privacy */
-  .dark{background:#12121a;color:#e8e8e4}
+  .dark{background:#12121a;color:#e8e8e4;padding:90px 0}
   .dark .sec-h{color:#fff}
   .dark .card{background:#1b1b25;border-color:#2c2c3a}
   .dark .card h3{color:#fff}.dark .card p{color:#b8b8c4}
   .dark .check{color:#7fb5f2;font-weight:700;margin-right:8px}
   /* scoreboard */
-  .board{max-width:620px;margin:0 auto;background:var(--surface);border:1px solid var(--hairline);border-radius:14px;padding:26px;text-align:center}
-  .board .nums{display:flex;justify-content:center;gap:40px;margin:18px 0 6px}
+  .board{max-width:620px;margin:0 auto;background:var(--surface);border:1px solid var(--hairline);border-radius:14px;padding:32px;text-align:center}
+  .board .nums{display:flex;justify-content:center;gap:48px;margin:22px 0 10px}
   .board .n{font-size:30px;font-weight:700;letter-spacing:-.02em}
-  .board .l{font-size:12.5px;color:var(--muted)}
+  .board .l{font-size:12.5px;color:var(--muted);margin-top:4px}
   .strike{color:var(--muted)}
   /* faq */
-  details{background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:16px 20px;margin-bottom:10px;max-width:680px;margin-left:auto;margin-right:auto}
+  details{background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:18px 22px;margin-bottom:12px;max-width:680px;margin-left:auto;margin-right:auto}
   summary{font-weight:600;cursor:pointer;font-size:15px}
-  details p{margin-top:10px;font-size:14.5px;color:var(--ink-2)}
+  details p{margin-top:12px;font-size:14.5px;color:var(--ink-2);line-height:1.65}
   /* footer */
   footer{padding:80px 0 60px;text-align:center}
   footer h2{font-size:clamp(24px,3.6vw,34px);letter-spacing:-.02em;margin-bottom:22px}
@@ -193,6 +193,7 @@
 
 <section class="wrap" id="faq">
   <h2 class="sec-h">The five real questions</h2>
+  <p class="sec-sub">Everything else is in the README.</p>
   <details><summary>Is my data used to train anything?</summary><p>No. Self-hosted, your database, your models if you want. There is no telemetry — the footer of this site is the whole privacy policy.</p></details>
   <details><summary>Do I need a GPU?</summary><p>No. A CPU with 32GB of RAM runs a local MoE model comfortably. Tagging happens as a background job, so speed genuinely doesn't matter — quality does.</p></details>
   <details><summary>What if the AI tags something wrong?</summary><p>Everything lands as a suggestion until you accept it. Review is keyboard-first — j/k to move, a to accept, x to reject — and takes about a minute per call.</p></details>
