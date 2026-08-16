@@ -40,6 +40,9 @@ T01 ─ T02 ─ T03 ─┬─ T04 (auth)
                           └─ T20, T22 (after T19, T21)   │
                      T19 ─ T21 ─────────────────────────┤
                      T23 (deploy)  T24 (Meet)  T25 (MCP)─┘
+
+Extensions (M10, after core is green): T27─T28 (hypotheses) · T29─T30 (contact memory)
+                                       T31 (digest, needs T19) · T26 (prototype ideas, needs T21)
 ```
 
 T14–T18 can start as soon as T05/T08's OpenAPI contract is merged (develop against MSW mocks); they do not block on T09–T13.
@@ -54,5 +57,7 @@ Static, self-contained HTML mockups in `../prototypes/`. They are the **spec for
 | `prototypes/conversation.html` | T17, T18 |
 | `prototypes/explore.html` | T20 |
 | `prototypes/insights.html` | T22 |
+| `prototypes/hypotheses.html` | T28 |
+| `prototypes/contact.html` | T30 |
 
 Fidelity contract: match layout, component structure, empty/loading states, and keyboard interactions. Colors/spacing may be tokenized in Tailwind config rather than copied literally.
