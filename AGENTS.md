@@ -42,7 +42,7 @@
 - Reprocess preserves `accepted`/`rejected` highlights; replaces only `suggested`.
 
 ## Deployment and operations
-- [`docs/agent-deployment.md`](docs/agent-deployment.md) is the canonical coding-agent runbook. Do not improvise a second setup sequence in task output.
+- [`agent-deployment.md`](agent-deployment.md) is the canonical coding-agent runbook. Do not improvise a second setup sequence in task output.
 - Preserve an existing `.env`, `data/`, Docker volume, database, and backup. Copy `.env.example` only when `.env` is absent.
 - Choose one runtime mode per database: source or Docker Compose. SQLite requires one Uvicorn worker and one application machine/process.
 - The order is: install → configure → `alembic upgrade head` → `python -m app.seed` → OpenAPI check/frontend build → optional admin creation → start → verification gate.

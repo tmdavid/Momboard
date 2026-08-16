@@ -63,3 +63,6 @@ transcript.mp4
 *.mp3
 *.wav
 *.m4a
+
+# Source bundles
+v0.2/

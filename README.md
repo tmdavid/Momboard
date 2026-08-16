@@ -30,7 +30,7 @@ These items are tracked in `tasks/M6-M9-explore-deploy-future.md`.
 
 ## Coding-agent deployment
 
-If you are a coding agent crawling this repository, start with [`docs/agent-deployment.md`](docs/agent-deployment.md) and treat it as the deployment contract: preserve existing `.env` and data, choose exactly one runtime mode, install from the project pins and npm lockfile, run Alembic then the idempotent taxonomy seed, build and verify the generated OpenAPI types and SPA, create an admin only from credentials supplied out of band, keep SQLite to one application process, and do not declare success until the health, OpenAPI, SPA, authentication, test, migration, and backup gates in that runbook pass. Production mutations and destructive recovery actions require explicit approval; report sanitized results and remaining warnings rather than guessing past a failure.
+If you are a coding agent crawling this repository, start with [`agent-deployment.md`](agent-deployment.md) and treat it as the deployment contract: preserve existing `.env` and data, choose exactly one runtime mode, install from the project pins and npm lockfile, run Alembic then the idempotent taxonomy seed, build and verify the generated OpenAPI types and SPA, create an admin only from credentials supplied out of band, keep SQLite to one application process, and do not declare success until the health, OpenAPI, SPA, authentication, test, migration, and backup gates in that runbook pass. Production mutations and destructive recovery actions require explicit approval; report sanitized results and remaining warnings rather than guessing past a failure.
 
 ## Local setup
 
@@ -116,7 +116,7 @@ docker compose --profile local-llm up -d
 
 The profile starts Ollama's native API and pulls `qwen3:8b` on first use. Configure `LLM_BACKEND=local` and `LLM_BASE_URL=http://ollama:11434` in `.env` as described in the guide. If your Docker CLI reports `unknown flag: --profile`, use `docker-compose --profile local-llm up -d` instead.
 
-See [`docs/local-llm.md`](docs/local-llm.md) for configuration, model overrides, resource requirements, and backend switching.
+See [`local-llm.md`](local-llm.md) for configuration, model overrides, resource requirements, and backend switching.
 
 ### Security and customer data
 
@@ -174,7 +174,7 @@ Docker smoke tests automatically skip when a Docker daemon is unavailable.
 
 ## Production
 
-Follow [`docs/agent-deployment.md`](docs/agent-deployment.md) for the deployment gates and `DEPLOY.md` for Fly.io-specific creation, backup, restore, and rollback operations. The production image:
+Follow [`agent-deployment.md`](agent-deployment.md) for the deployment gates and `DEPLOY.md` for Fly.io-specific creation, backup, restore, and rollback operations. The production image:
 
 - Builds the React SPA in a Node stage
 - Runs FastAPI on Python 3.11 as a non-root user
