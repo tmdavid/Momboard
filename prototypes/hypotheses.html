@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MomBoard — Hypotheses</title>
+<style>
+  :root{
+    --page:#f9f9f7; --surface:#fcfcfb; --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --hairline:#e1e0d9; --accent:#2a78d6; --accent-soft:#e8f1fc; --track:#cde2fb;
+    --good:#006300; --bad:#a32222;
+  }
+  *{box-sizing:border-box;margin:0}
+  body{background:var(--page);color:var(--ink);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+  a{color:inherit;text-decoration:none}
+  nav{display:flex;align-items:center;gap:28px;padding:0 28px;height:52px;background:var(--surface);border-bottom:1px solid var(--hairline)}
+  .logo{font-weight:700}.logo span{color:var(--accent)}
+  .nav-links{display:flex;gap:4px}
+  .nav-links a{padding:6px 12px;border-radius:8px;color:var(--ink-2)}
+  .nav-links a.active{background:var(--accent-soft);color:var(--accent);font-weight:600}
+  main{max-width:860px;margin:0 auto;padding:28px}
+  h1{font-size:20px;letter-spacing:-.02em;margin-bottom:4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:18px}
+  /* composer */
+  .composer{display:flex;gap:8px;margin-bottom:22px}
+  .composer input{flex:1;font:inherit;padding:10px 12px;border:1px solid var(--hairline);border-radius:10px;background:var(--surface)}
+  .btn{border:none;border-radius:10px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:#fff}
+  /* hypothesis card */
+  .hyp{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;padding:16px 18px;margin-bottom:14px}
+  .hyp-head{display:flex;align-items:flex-start;gap:12px;cursor:pointer}
+  .statement{font-size:15px;font-weight:600;flex:1}
+  .chip{flex:none;font-size:11.5px;font-weight:700;padding:3px 10px;border-radius:99px;letter-spacing:.02em}
+  .c-open{background:var(--accent-soft);color:#1c5cab}
+  .c-supported{background:#e6f4e6;color:var(--good)}
+  .c-refuted{background:#fbe7e7;color:var(--bad)}
+  /* evidence meter: fill = confirmed support share, track = lighter step of same ramp */
+  .meter-row{display:flex;align-items:center;gap:10px;margin-top:12px}
+  .meter{flex:1;height:8px;border-radius:99px;background:var(--track);overflow:hidden;display:flex}
+  .meter .fill{background:var(--accent);height:100%}
+  .meter .sugg{height:100%;background:repeating-linear-gradient(45deg,var(--accent) 0 3px,transparent 3px 6px);opacity:.5}
+  .mstats{font-size:12px;color:var(--muted);white-space:nowrap}
+  .mstats b{color:var(--ink-2)}
+  .verdict{font-size:12px;color:var(--good);font-weight:600;white-space:nowrap}
+  /* evidence detail */
+  .detail{display:none;margin-top:14px;border-top:1px solid var(--hairline);padding-top:14px}
+  .hyp.open .detail{display:block}
+  .stance{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px}
+  .stance.s{color:var(--good)} .stance.c{color:var(--bad)}
+  .evq{display:flex;gap:10px;align-items:baseline;font-size:13px;padding:7px 10px;border-radius:8px;background:var(--page);margin-bottom:6px}
+  .evq blockquote{flex:1;color:var(--ink-2)} .evq blockquote::before{content:"“"}.evq blockquote::after{content:"”"}
+  .evq .src{font-size:12px;color:var(--accent);white-space:nowrap;cursor:pointer}
+  .evq.suggested{border:1.5px dashed #c9a227;background:#fdf6e0}
+  .mini{border:none;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer}
+  .ok{background:#e6f4e6;color:var(--good)} .no{background:#fbe7e7;color:var(--bad)}
+  .decide{display:flex;gap:8px;margin-top:12px}
+  .ghost{background:var(--surface);border:1px solid var(--hairline);color:var(--ink-2);border-radius:8px;padding:6px 12px;font:inherit;font-weight:600;cursor:pointer}
+  .review-badge{font-size:12px;color:#8a5b00;background:#fdf6e0;border:1px solid #eeddad;padding:2px 8px;border-radius:99px}
+</style>
+</head>
+<body>
+<nav>
+  <div class="logo">Mom<span>Board</span></div>
+  <div class="nav-links">
+    <a href="library.html">Library</a>
+    <a href="explore.html">Explore</a>
+    <a class="active" href="#">Hypotheses</a>
+    <a href="insights.html">Insights</a>
+  </div>
+</nav>
+
+<main>
+  <h1>Hypotheses</h1>
+  <div class="sub">Falsifiable beliefs, tested against what customers actually said. New conversations auto-propose evidence; you confirm it.</div>
+
+  <div class="composer">
+    <input placeholder="State a falsifiable belief… e.g. “Mid-market brands won't pay >€10k without a detection-speed SLA”">
+    <button class="btn">＋ Add hypothesis</button>
+  </div>
+
+  <!-- leaning supported -->
+  <div class="hyp open">
+    <div class="hyp-head" onclick="this.parentElement.classList.toggle('open')">
+      <div class="statement">Enterprise brands will pay to eliminate the manual "Monday export" triage ritual</div>
+      <span class="review-badge">1 to review</span>
+      <span class="chip c-open">OPEN</span>
+    </div>
+    <div class="meter-row">
+      <div class="meter"><div class="fill" style="width:56%"></div><div class="sugg" style="width:11%"></div></div>
+      <span class="mstats"><b>5 support</b> (4 companies) · <b>1 contradicts</b> · 1 suggested</span>
+      <span class="verdict">↗ leaning supported</span>
+    </div>
+    <div class="detail">
+      <div class="stance s">Supports · confirmed</div>
+      <div class="evq"><blockquote>Every Monday I export all flagged listings to Excel and clean them up by hand</blockquote><span class="src">Acme Watches ↗</span></div>
+      <div class="evq"><blockquote>If it saves Maria's Mondays it pays for itself, but procurement needs an ROI sheet</blockquote><span class="src">Northwind ↗</span></div>
+      <div class="evq"><blockquote>We set aside a brand-protection line item this year — around €40k</blockquote><span class="src">Acme Watches ↗</span></div>
+      <div class="stance c">Contradicts · confirmed</div>
+      <div class="evq"><blockquote>Honestly the export is fine, it's the nine takedown templates that kill us</blockquote><span class="src">Lumina ↗</span></div>
+      <div class="stance s">Suggested by AI · needs review</div>
+      <div class="evq suggested"><blockquote>My intern screenshots suspicious listings into a shared drive folder every Friday</blockquote>
+        <span style="display:flex;gap:5px"><button class="mini ok" onclick="confirmEv(this)">✓ supports</button><button class="mini no" onclick="this.closest('.evq').remove()">✕</button></span></div>
+      <div class="decide">
+        <button class="ghost" style="color:var(--good)">Mark supported</button>
+        <button class="ghost" style="color:var(--bad)">Mark refuted</button>
+        <button class="ghost">Park</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- refuted -->
+  <div class="hyp">
+    <div class="hyp-head" onclick="this.parentElement.classList.toggle('open')">
+      <div class="statement">Customers primarily want broader marketplace coverage (more platforms monitored)</div>
+      <span class="chip c-refuted">REFUTED</span>
+    </div>
+    <div class="meter-row">
+      <div class="meter"><div class="fill" style="width:14%"></div></div>
+      <span class="mstats"><b>1 supports</b> · <b>6 contradict</b> (5 companies)</span>
+      <span class="verdict" style="color:var(--bad)">↘ refuted Aug 8</span>
+    </div>
+    <div class="detail">
+      <div class="stance c">Contradicts · confirmed</div>
+      <div class="evq"><blockquote>A counterfeit outsold our official store for a full week before we caught it</blockquote><span class="src">Acme Watches ↗</span></div>
+      <div class="evq"><blockquote>We only find gray-market sellers when a distributor complains — usually weeks late</blockquote><span class="src">Bergmann ↗</span></div>
+      <div class="sub" style="margin-top:8px">Decision note: pains cluster on <b>detection speed</b>, not coverage breadth. Superseded by the hypothesis below.</div>
+    </div>
+  </div>
+
+  <!-- fresh -->
+  <div class="hyp">
+    <div class="hyp-head" onclick="this.parentElement.classList.toggle('open')">
+      <div class="statement">Detection speed (time-to-first-flag) matters more than coverage breadth for renewal decisions</div>
+      <span class="chip c-open">OPEN</span>
+    </div>
+    <div class="meter-row">
+      <div class="meter"><div class="fill" style="width:22%"></div><div class="sugg" style="width:12%"></div></div>
+      <span class="mstats"><b>2 support</b> · <b>0 contradict</b> · 1 suggested</span>
+      <span class="verdict" style="color:var(--muted)">needs evidence — 2 companies</span>
+    </div>
+    <div class="detail">
+      <div class="stance s">Supports · confirmed</div>
+      <div class="evq"><blockquote>My VP still brings it up. It was… not a fun meeting.</blockquote><span class="src">Acme Watches ↗</span></div>
+      <div class="sub" style="margin-top:8px">💡 Next interviews: ask for the last renewal discussion — what metric came up?</div>
+    </div>
+  </div>
+</main>
+
+<script>
+function confirmEv(btn){
+  const q=btn.closest('.evq'); q.classList.remove('suggested');
+  q.querySelector('span[style]').remove();
+  q.insertAdjacentHTML('beforeend','<span class="src">Northwind ↗</span>');
+}
+</script>
+</body>
+</html>
