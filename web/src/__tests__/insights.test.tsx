@@ -1,5 +1,5 @@
 import { describe, test, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render';
@@ -55,6 +55,52 @@ describe('Insights page', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Not enough data yet/)).toBeInTheDocument();
+    });
+  });
+
+  test('single-month signal columns stay contained at high volume and wrap across tags', async () => {
+    server.use(
+      http.get('/api/stats', () => {
+        return HttpResponse.json({
+          tag_counts_by_month: {
+            '2026-08': {
+              pain: 250,
+              obstacle: 175,
+              workaround: 120,
+              emotion_pos: 90,
+              emotion_neg: 75,
+              context: 60,
+              feature_request: 45,
+              money: 30,
+              person: 20,
+              followup: 15,
+              commitment: 10,
+              compliment: 5,
+            },
+          },
+          critique_trend: [],
+          compliment_ratio_trend: [],
+          open_followups: [],
+        });
+      }),
+    );
+
+    renderInsights();
+
+    const chart = await screen.findByTestId('single-month-signal-chart');
+    expect(chart).toHaveClass('grid');
+
+    const plots = within(chart).getAllByTestId('single-month-signal-plot');
+    expect(plots).toHaveLength(12);
+    plots.forEach((plot) => expect(plot).toHaveClass('overflow-hidden'));
+
+    const bars = within(chart).getAllByRole('meter');
+    expect(bars).toHaveLength(12);
+    bars.forEach((bar) => {
+      const height = Number.parseFloat(bar.style.height);
+      expect(bar.style.height).toMatch(/%$/);
+      expect(height).toBeGreaterThan(0);
+      expect(height).toBeLessThanOrEqual(100);
     });
   });
 

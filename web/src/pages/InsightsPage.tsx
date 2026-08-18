@@ -132,66 +132,104 @@ export function InsightsPage() {
           <>
             <div className="bg-surface border border-hairline rounded-xl p-4 mb-3.5">
               <h2 className="text-[13.5px] font-semibold mb-0.5">Signal volume over time</h2>
-              <p className="text-xs text-muted mb-3">Accepted highlights per month, by tag · click legend to toggle</p>
+              <p className="text-xs text-muted mb-3">
+                {tagVolumeData.length >= 2
+                  ? 'Accepted highlights per month, by tag · click legend to toggle'
+                  : 'Accepted highlights this month, by tag'}
+              </p>
               {tagVolumeData.length >= 2 ? (
-                <ResponsiveContainer width="100%" height={260}>
-                  <LineChart data={tagVolumeData}>
-                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} />
-                    <Tooltip />
-                    {Object.keys(CHART_COLORS).map((tag) => (
-                      <Line
-                        key={tag}
-                        type="monotone"
-                        dataKey={tag}
-                        stroke={CHART_COLORS[tag]}
-                        strokeWidth={2}
-                        dot={false}
-                        name={`${tagEmoji(tag)} ${tag}`}
-                        hide={hiddenSeries.has(tag)}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="text-center py-8">
-                  <p className="text-sm text-muted mb-2" data-testid="sparse-chart-msg">First month — trends appear next month</p>
-                  {tagVolumeData.length === 1 && (
-                    <div className="flex justify-center gap-2 items-end h-16">
-                      {Object.entries(tagVolumeData[0]).filter(([k]) => k !== 'month').map(([tag, val]) => (
-                        <div key={tag} className="flex flex-col items-center">
-                          <div
-                            className="w-6 rounded-t"
-                            style={{ height: `${Math.max(8, Number(val) * 4)}px`, backgroundColor: CHART_COLORS[tag] || '#888' }}
-                          />
-                          <span className="text-[10px] text-muted mt-1">{tagEmoji(tag)}</span>
-                        </div>
+                <>
+                  <ResponsiveContainer width="100%" height={260}>
+                    <LineChart data={tagVolumeData}>
+                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip />
+                      {Object.keys(CHART_COLORS).map((tag) => (
+                        <Line
+                          key={tag}
+                          type="monotone"
+                          dataKey={tag}
+                          stroke={CHART_COLORS[tag]}
+                          strokeWidth={2}
+                          dot={false}
+                          name={`${tagEmoji(tag)} ${tag}`}
+                          hide={hiddenSeries.has(tag)}
+                        />
                       ))}
-                    </div>
-                  )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                  <ul className="flex flex-wrap gap-3 mt-2 list-none p-0" role="list" aria-label="Chart legend">
+                    {Object.entries(CHART_COLORS).map(([tag, color]) => (
+                      <li key={tag} role="listitem">
+                        <button
+                          className="inline-flex items-center gap-1 text-xs cursor-pointer border-none bg-transparent p-0"
+                          onClick={() => toggleSeries(tag)}
+                          aria-pressed={!hiddenSeries.has(tag)}
+                          aria-label={`Toggle ${tagEmoji(tag)} ${tag} series`}
+                          style={{ opacity: hiddenSeries.has(tag) ? 0.4 : 1 }}
+                        >
+                          <span
+                            className="inline-block w-3 h-0.5 rounded"
+                            style={{ backgroundColor: color }}
+                            aria-hidden="true"
+                          />
+                          {tagEmoji(tag)} {tag}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : (
+                <div className="text-center py-6">
+                  <p className="text-sm text-muted mb-5" data-testid="sparse-chart-msg">First month — trends appear next month</p>
+                  {tagVolumeData.length === 1 && (() => {
+                    const entries = Object.entries(tagVolumeData[0])
+                      .filter(([tag]) => tag !== 'month')
+                      .map(([tag, value]) => ({ tag, count: Number(value) }))
+                      .filter(({ count }) => Number.isFinite(count) && count > 0)
+                      .sort((a, b) => b.count - a.count);
+                    const maxCount = Math.max(1, ...entries.map(({ count }) => count));
+
+                    return (
+                      <div
+                        className="grid gap-x-3 gap-y-5 [grid-template-columns:repeat(auto-fit,minmax(64px,1fr))]"
+                        data-testid="single-month-signal-chart"
+                      >
+                        {entries.map(({ tag, count }) => {
+                          const heightPercent = Math.max(8, Math.round((count / maxCount) * 100));
+                          return (
+                            <div key={tag} className="min-w-0">
+                              <div
+                                className="h-24 overflow-hidden flex items-end justify-center border-b border-hairline"
+                                data-testid="single-month-signal-plot"
+                              >
+                                <div
+                                  role="meter"
+                                  aria-label={`${tag.replace(/_/g, ' ')}: ${count}`}
+                                  aria-valuemin={0}
+                                  aria-valuemax={maxCount}
+                                  aria-valuenow={count}
+                                  className="w-7 max-w-full rounded-t"
+                                  style={{
+                                    height: `${heightPercent}%`,
+                                    backgroundColor: CHART_COLORS[tag] || '#888',
+                                  }}
+                                />
+                              </div>
+                              <div className="mt-1 text-center">
+                                <div className="text-xs font-medium tabular-nums">{count}</div>
+                                <div className="text-[10px] leading-tight text-muted break-words">
+                                  {tagEmoji(tag)} {tag.replace(/_/g, ' ')}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
-              {/* Custom interactive legend */}
-              <ul className="flex flex-wrap gap-3 mt-2 list-none p-0" role="list" aria-label="Chart legend">
-                {Object.entries(CHART_COLORS).map(([tag, color]) => (
-                  <li key={tag} role="listitem">
-                    <button
-                      className="inline-flex items-center gap-1 text-xs cursor-pointer border-none bg-transparent p-0"
-                      onClick={() => toggleSeries(tag)}
-                      aria-pressed={!hiddenSeries.has(tag)}
-                      aria-label={`Toggle ${tagEmoji(tag)} ${tag} series`}
-                      style={{ opacity: hiddenSeries.has(tag) ? 0.4 : 1 }}
-                    >
-                      <span
-                        className="inline-block w-3 h-0.5 rounded"
-                        style={{ backgroundColor: color }}
-                        aria-hidden="true"
-                      />
-                      {tagEmoji(tag)} {tag}
-                    </button>
-                  </li>
-                ))}
-              </ul>
             </div>
 
             {/* Row of two smaller charts */}
