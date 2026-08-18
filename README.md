@@ -4,23 +4,32 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 
 ## Status
 
-The core application (T01–T23) is implemented:
+**v0.2** — "From archive to advisor"
+
+The core application (T01–T23, T27–T28) plus v0.2 features are implemented:
 
 - Transcript ingestion for pasted text, `Name: text`, and WebVTT
-- Database-backed normalize → tag → analyze worker pipeline
+- Database-backed normalize → tag → analyze → hypothesis-link worker pipeline
 - Human review of suggested highlights and manual highlights
 - Conversation notes with optimistic concurrency
-- Library, conversation, explore, synthesis, and insights UI
-- Session authentication and admin-managed taxonomy
+- Library, conversation, explore, synthesis, insights, and hypotheses UI
+- Session authentication, live Settings status, admin-managed taxonomy, and companies/contacts directory
 - SQLite/PostgreSQL-compatible schema and Alembic migrations
 - Production Docker/Fly configuration and rotating SQLite backups
-
-Not yet implemented:
-
-- **T24 Google Meet ingestion:** Drive API polling and automatic import
-- **T25 MCP server:** tools for external MCP clients
-
-These items are tracked in `tasks/M6-M9-explore-deploy-future.md`.
+- **T34 Staging inbox:** pending_import/ignored/imported/parse_error lifecycle, source_ref dedupe
+- **T29/T30 Contact memory + drift:** timelines, drift detection, contact/company detail API
+- **T38 Pre-call briefs:** compile history + suggest past-behavior questions, 1h cache
+- **T24 Google Meet/Drive polling:** Drive Doc parser, fixture-pinned, parse_error retention
+- **T41 Evidence staleness:** freshness bands computed read-time, integrated into hypotheses
+- **T31 Weekly digest:** pure builder, Slack delivery, idempotent self-rescheduling
+- **T42 Corpus chat:** SQL-first retrieval, validated citations, per-user chat storage
+- **T25 MCP tools:** 7 tools (search, get, highlights, commitments, synthesis, create, ask_corpus) over stdio; an HTTP helper exists but is not mounted by default
+- **T44 Quote cards:** 1600×900 PNG/SVG export with themes, anonymization, rejected guard
+- **T35 Audio upload:** Whisper transcription with format/size validation, VTT-formatted output
+- **T36 Vexa meeting bot:** configurable integration (VEXA_BASE_URL/VEXA_API_KEY), send/stop/preview/import with speaker-attributed transcript, deterministic dedupe
+- **T39 Interview simulator:** persona builder from segment filters, chat loop with Mom Test behaviors, critique via standard worker chain, corpus isolation (simulated excluded from all corpus features)
+- **T40 Decision log:** CRUD with evidence receipts, proposed→decided→superseded lifecycle, integrity checks (undermined on contradictions/drifts), automatic refresh in worker jobs, highlight deletion blocked (409) when cited, successor linkage
+- **T43 Segment lenses:** compare two filter sets, per-side attribution validated in code, "Compare as lens" flow from Explore page
 
 ## Requirements
 
@@ -38,7 +47,7 @@ If you are a coding agent crawling this repository, start with [`agent-deploymen
 python3.11 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 
-cp .env.example .env
+test -f .env || cp .env.example .env
 mkdir -p data
 
 .venv/bin/alembic upgrade head
@@ -108,13 +117,23 @@ After configuring a real key, re-run an existing conversation with `POST /api/co
 
 MomBoard optionally supports a local LLM backend via [Ollama](https://ollama.com) with a pinned `qwen3:8b` model — no OpenAI API key required.
 
-Start the Ollama sidecar alongside MomBoard:
+When running MomBoard from source, start only the Compose-managed Ollama services:
 
 ```bash
-docker compose --profile local-llm up -d
+docker compose --profile local-llm up -d ollama ollama-bootstrap
 ```
 
-The profile starts Ollama's native API and pulls `qwen3:8b` on first use. Configure `LLM_BACKEND=local` and `LLM_BASE_URL=http://ollama:11434` in `.env` as described in the guide. If your Docker CLI reports `unknown flag: --profile`, use `docker-compose --profile local-llm up -d` instead.
+The bootstrap service pulls `qwen3:8b` on first use and then exits successfully. Configure the source process with:
+
+```dotenv
+LLM_BACKEND=local
+LLM_BASE_URL=http://127.0.0.1:11434
+LLM_LOCAL_MODEL=qwen3:8b
+```
+
+Use `LLM_BASE_URL=http://ollama:11434` only when the MomBoard application itself runs in Compose. If your Docker CLI reports `unknown flag: --profile`, use `docker-compose --profile local-llm up -d ollama ollama-bootstrap` instead.
+
+> **Current Compose caveat:** `docker-compose.yml` still hardcodes the relative three-slash URL `sqlite+aiosqlite:///data/momboard.db`. Before starting the full application through Compose, change it to the absolute volume URL `sqlite+aiosqlite:////data/momboard.db`; otherwise it does not target the mounted `/data` database. The standalone Docker/Fly image already uses the correct absolute URL.
 
 See [`local-llm.md`](local-llm.md) for configuration, model overrides, resource requirements, and backend switching.
 
