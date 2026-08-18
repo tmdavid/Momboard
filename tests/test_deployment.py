@@ -154,6 +154,11 @@ class TestDbPathFromUrl:
     """Test URL parsing for database path extraction."""
 
     def test_aiosqlite_absolute(self):
+        assert _db_path_from_url("sqlite+aiosqlite:////data/momboard.db") == Path(
+            "/data/momboard.db"
+        )
+
+    def test_aiosqlite_relative(self):
         assert _db_path_from_url("sqlite+aiosqlite:///data/momboard.db") == Path(
             "data/momboard.db"
         )
@@ -357,6 +362,26 @@ class TestSPAFallback:
         assert r.status_code == 200
         body = r.json()
         assert "openapi" in body
+
+
+# ─── Container Contract Tests ────────────────────────────────────────────────
+
+
+class TestContainerContract:
+    """Static checks for persistent storage and Docker command overrides."""
+
+    project_root = Path(__file__).parent.parent
+
+    def test_dockerfile_uses_absolute_data_volume_database(self):
+        dockerfile = (self.project_root / "Dockerfile").read_text()
+        assert 'DATABASE_URL="sqlite+aiosqlite:////data/momboard.db"' in dockerfile
+
+    def test_entrypoint_execs_supplied_command_before_migrations(self):
+        entrypoint = (self.project_root / "entrypoint.sh").read_text()
+        passthrough = 'exec "$@"'
+        migration = "python -m alembic upgrade head"
+        assert passthrough in entrypoint
+        assert entrypoint.index(passthrough) < entrypoint.index(migration)
 
 
 # ─── Docker Build Tests ──────────────────────────────────────────────────────

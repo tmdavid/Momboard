@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 
+if [ "$#" -gt 0 ]; then
+    exec "$@"
+fi
+
 echo "=== MomBoard startup ==="
 echo "ENV: ${ENV:-production}"
 echo "Database: ${DATABASE_URL}"

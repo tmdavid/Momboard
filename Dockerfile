@@ -45,8 +45,8 @@ RUN mkdir -p /data/backups && chown -R momboard:momboard /data
 # Switch to non-root user
 USER momboard
 
-# The application reads DATABASE_URL which defaults to sqlite+aiosqlite:///data/momboard.db
-ENV DATABASE_URL="sqlite+aiosqlite:///data/momboard.db" \
+# Store SQLite in the absolute, writable /data volume path.
+ENV DATABASE_URL="sqlite+aiosqlite:////data/momboard.db" \
     ENV="production" \
     PORT=8080
 
