@@ -81,7 +81,16 @@ async def seeded_explore_data(session_factory: async_sessionmaker[AsyncSession])
             result={
                 "summary": "Test summary",
                 "top_pains": [],
-                "commitments": [],
+                "commitments": [
+                    {
+                        "what": "Friday one-pager observation",
+                        "actor": "Jonas",
+                        "cost": "one hour on Friday",
+                        "type": "time",
+                        "next_step": "Sit in on the Friday one-pager session — the 28th",
+                        "evidence_highlight_ids": [h_followup.id],
+                    }
+                ],
                 "compliment_ratio": 0.2,
                 "mom_test_critique": {"score": 7, "good_questions": [], "violations": []},
                 "suggested_followups": [],
@@ -215,4 +224,6 @@ async def test_stats_open_followups(auth_client: AsyncClient, seeded_explore_dat
     followups = body["open_followups"]
     assert len(followups) >= 1
     assert "quote" in followups[0]
+    assert followups[0]["quote"] == "send proposal"
+    assert followups[0]["task"] == "Sit in on the Friday one-pager session — the 28th"
     assert "conversation_title" in followups[0]

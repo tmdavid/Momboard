@@ -440,9 +440,10 @@ describe('T17 — Safe Markdown preview', () => {
     });
     await user.click(screen.getByText('Preview'));
 
-    // Wait for preview to render
+    // Wait for preview to render. Raw HTML is escaped, so the safe text may
+    // share a text container with the inert literal script markup.
     await waitFor(() => {
-      expect(screen.getByText('Safe content')).toBeInTheDocument();
+      expect(document.body).toHaveTextContent('Safe content');
     });
 
     // Script should NOT have executed

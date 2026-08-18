@@ -5,6 +5,7 @@ import { api, ConversationListItem } from '../api';
 import { NewConversationModal, NewConversationFormData } from '../components/NewConversationModal';
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { TAG_META } from '../constants';
+import { InboxPane } from './InboxPage';
 
 export function LibraryPage() {
   const navigate = useNavigate();
@@ -13,6 +14,9 @@ export function LibraryPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Tab state: 'conversations' (default) or 'inbox'
+  const activeTab = searchParams.get('tab') === 'inbox' ? 'inbox' : 'conversations';
 
   // Track conversation IDs that need SSE monitoring (lifted from modal)
   const [trackingIds, setTrackingIds] = useState<number[]>([]);
@@ -37,12 +41,32 @@ export function LibraryPage() {
         offset,
         limit,
       }),
+    // UX#10: 5s polling fallback when any rows are processing
+    refetchInterval: trackingIds.length > 0 ? 5000 : false,
+    enabled: activeTab === 'conversations',
   });
 
+  // #15: Only show companies with at least one conversation
   const { data: companies } = useQuery({
-    queryKey: ['companies'],
-    queryFn: () => api.listCompanies(),
+    queryKey: ['companies', 'active'],
+    queryFn: async () => {
+      const res = await fetch('/api/companies?active_only=true', { credentials: 'include' });
+      if (!res.ok) return [];
+      return res.json();
+    },
   });
+
+  // Inbox pending count for the badge on the Inbox subtab
+  const { data: inboxData } = useQuery({
+    queryKey: ['inbox', 'pending_import'],
+    queryFn: async () => {
+      const res = await fetch('/api/inbox?status=pending_import', { credentials: 'include' });
+      if (!res.ok) return { total: 0 };
+      return res.json() as Promise<{ total: number }>;
+    },
+    staleTime: 30_000,
+  });
+  const pendingCount = inboxData?.total ?? 0;
 
   const handleSearch = useCallback(
     (value: string) => {
@@ -112,6 +136,49 @@ export function LibraryPage() {
   const total = data?.total ?? 0;
   const isEmpty = !isLoading && conversations.length === 0;
 
+  // #16: Active filter detection + clear all
+  const hasActiveFilters = activeTags.length > 0 || !!companyId || !!q || !!dateFrom || !!dateTo;
+  const clearAllFilters = useCallback(() => {
+    setSearchInput('');
+    setSearchParams((prev) => {
+      prev.delete('tag');
+      prev.delete('company_id');
+      prev.delete('q');
+      prev.delete('date_from');
+      prev.delete('date_to');
+      prev.delete('offset');
+      return prev;
+    });
+  }, [setSearchParams]);
+
+  const setTab = useCallback(
+    (tab: 'conversations' | 'inbox') => {
+      setSearchParams((prev) => {
+        if (tab === 'inbox') prev.set('tab', 'inbox');
+        else prev.delete('tab');
+        return prev;
+      });
+    },
+    [setSearchParams],
+  );
+
+  // T-UX10: Track ALL processing rows (including already-processing ones loaded on
+  // page open), not only newly-created rows. Merge server-loaded processing IDs
+  // into the tracking set so their status updates without manual reload.
+  const processingStatuses = new Set(['processing', 'normalizing', 'tagging', 'analyzing']);
+  useEffect(() => {
+    const processingIds = conversations
+      .filter((c) => processingStatuses.has(c.status) && c.id > 0)
+      .map((c) => c.id);
+    if (processingIds.length > 0) {
+      setTrackingIds((prev) => {
+        const merged = new Set([...prev, ...processingIds]);
+        return Array.from(merged);
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
   // Callback for SSE completion — invalidate conversations list
   const handleSseDone = useCallback(
     (id: number) => {
@@ -120,6 +187,10 @@ export function LibraryPage() {
     },
     [queryClient],
   );
+
+  const handleSseStage = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+  }, [queryClient]);
 
   // Optimistic insert mutation — lives in the parent so it survives modal close
   const optimisticInsertMutation = useMutation({
@@ -180,17 +251,50 @@ export function LibraryPage() {
   return (
     <main className="flex-1 overflow-auto">
       <div className="max-w-[1100px] mx-auto p-7">
-        {/* Header */}
-        <div className="flex items-center mb-4">
-          <h1 className="text-xl font-bold tracking-tight">
-            Conversations{' '}
-            <span className="text-muted font-normal ml-2">({total})</span>
-          </h1>
-          <div className="flex-1" />
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-            ＋ New conversation
+        {/* Subtabs: Conversations | Inbox */}
+        <div className="flex gap-0.5 border-b border-hairline mb-4" role="tablist">
+          <button
+            role="tab"
+            aria-selected={activeTab === 'conversations'}
+            className={`relative px-3.5 py-2 font-medium border-b-2 -mb-px text-sm ${
+              activeTab === 'conversations' ? 'text-ink border-accent' : 'text-muted border-transparent cursor-pointer'
+            }`}
+            onClick={() => setTab('conversations')}
+          >
+            Conversations
+          </button>
+          <button
+            role="tab"
+            aria-selected={activeTab === 'inbox'}
+            className={`relative px-3.5 py-2 font-medium border-b-2 -mb-px text-sm ${
+              activeTab === 'inbox' ? 'text-ink border-accent' : 'text-muted border-transparent cursor-pointer'
+            }`}
+            onClick={() => setTab('inbox')}
+          >
+            Inbox
+            {pendingCount > 0 && (
+              <span className="ml-1.5 bg-crit text-white text-[10.5px] font-bold rounded-full px-1.5 py-px">{pendingCount}</span>
+            )}
           </button>
         </div>
+
+        {/* Inbox tab content */}
+        {activeTab === 'inbox' && <InboxPane />}
+
+        {/* Conversations tab content */}
+        {activeTab === 'conversations' && (
+          <>
+            {/* Header */}
+            <div className="flex items-center mb-4">
+              <h1 className="text-xl font-bold tracking-tight">
+                Library{' '}
+                <span className="text-muted font-normal ml-2">({total})</span>
+              </h1>
+              <div className="flex-1" />
+              <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
+                ＋ New conversation
+              </button>
+            </div>
 
         {/* Filters */}
         <div className="flex flex-wrap gap-2.5 items-center p-3 bg-surface border border-hairline rounded-xl mb-4">
@@ -210,7 +314,7 @@ export function LibraryPage() {
                 onClick={() => toggleTag(key)}
                 className={`px-2.5 py-1 rounded-full border text-[13px] cursor-pointer ${
                   activeTags.includes(key)
-                    ? 'bg-accent-soft border-accent text-accent font-semibold'
+                    ? 'bg-accent text-white border-accent font-semibold'
                     : 'bg-surface border-hairline text-ink-2'
                 }`}
               >
@@ -232,7 +336,7 @@ export function LibraryPage() {
             aria-hidden={modalOpen ? 'true' : undefined}
           >
             <option value="">All companies</option>
-            {!modalOpen && companies?.map((c) => (
+            {!modalOpen && companies?.map((c: { id: number; name: string }) => (
               <option key={c.id} value={c.id}>
                 {c.name}
               </option>
@@ -256,6 +360,15 @@ export function LibraryPage() {
               onChange={(e) => handleDateTo(e.target.value)}
             />
           </div>
+          {/* #16: Clear all button */}
+          {hasActiveFilters && (
+            <button
+              className="px-2.5 py-1 text-xs font-medium text-crit hover:underline"
+              onClick={clearAllFilters}
+            >
+              Clear all
+            </button>
+          )}
         </div>
 
         {/* Loading */}
@@ -353,6 +466,8 @@ export function LibraryPage() {
             )}
           </>
         )}
+        </>
+        )}
       </div>
 
       {modalOpen && (
@@ -366,15 +481,28 @@ export function LibraryPage() {
 
       {/* SSE trackers — lives in the parent so it survives modal close */}
       {trackingIds.map((id) => (
-        <SseTracker key={id} conversationId={id} onDone={() => handleSseDone(id)} />
+        <SseTracker
+          key={id}
+          conversationId={id}
+          onStage={handleSseStage}
+          onDone={() => handleSseDone(id)}
+        />
       ))}
     </main>
   );
 }
 
 /** Invisible SSE tracker component */
-function SseTracker({ conversationId, onDone }: { conversationId: number; onDone: () => void }) {
-  useConversationEvents(conversationId, onDone);
+function SseTracker({
+  conversationId,
+  onDone,
+  onStage,
+}: {
+  conversationId: number;
+  onDone: () => void;
+  onStage: (stage: 'normalizing' | 'tagging' | 'analyzing') => void;
+}) {
+  useConversationEvents(conversationId, onDone, onStage);
   return null;
 }
 
@@ -396,16 +524,7 @@ function ConversationRow({ conversation: c, onClick }: { conversation: Conversat
         {c.title}
       </td>
       <td className="px-3.5 py-3">
-        <div className="flex gap-1.5 flex-wrap">
-          {Object.entries(c.tag_counts).map(([tag, count]) => (
-            <span
-              key={tag}
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border border-hairline bg-page text-xs text-ink-2"
-            >
-              {TAG_META[tag]?.emoji || '?'} {count}
-            </span>
-          ))}
-        </div>
+        <SignalChips tagCounts={c.tag_counts} />
       </td>
       <td className="px-3.5 py-3">
         {c.status === 'ready' && c.critique_score != null ? (
@@ -432,10 +551,53 @@ function ConversationRow({ conversation: c, onClick }: { conversation: Conversat
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
             <span className="w-3 h-3 border-2 border-hairline border-t-accent rounded-full animate-spin-slow" />
-            {c.status}
+            {c.status === 'normalizing' ? 'Normalizing…' :
+             c.status === 'tagging' ? 'Tagging…' :
+             c.status === 'analyzing' ? 'Analyzing…' :
+             'Processing…'}
           </span>
         )}
       </td>
     </tr>
+  );
+}
+
+/**
+ * #13: Signal chips in taxonomy order, capped at ~6 with "+N more",
+ * context tag visually de-emphasized. Preserves all data — presentation only.
+ */
+const TAXONOMY_ORDER = Object.keys(TAG_META);
+const CHIP_CAP = 6;
+const CONTEXT_TAGS = new Set(['context', 'person']);
+
+function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
+  // Sort entries by taxonomy order
+  const sorted = Object.entries(tagCounts).sort(
+    ([a], [b]) => (TAXONOMY_ORDER.indexOf(a) === -1 ? 99 : TAXONOMY_ORDER.indexOf(a)) - (TAXONOMY_ORDER.indexOf(b) === -1 ? 99 : TAXONOMY_ORDER.indexOf(b)),
+  );
+
+  const visible = sorted.slice(0, CHIP_CAP);
+  const overflow = sorted.length - CHIP_CAP;
+
+  return (
+    <div className="flex gap-1 flex-wrap">
+      {visible.map(([tag, count]) => (
+        <span
+          key={tag}
+          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-xs ${
+            CONTEXT_TAGS.has(tag)
+              ? 'border-hairline bg-page text-muted'
+              : 'border-hairline bg-page text-ink-2'
+          }`}
+        >
+          {TAG_META[tag]?.emoji || '?'} {count}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs text-muted">
+          +{overflow}
+        </span>
+      )}
+    </div>
   );
 }

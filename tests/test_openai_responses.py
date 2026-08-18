@@ -374,3 +374,27 @@ async def test_auth_header_sent():
         assert auth_header == "Bearer sk-test-12345"
     finally:
         await client.close()
+
+
+def test_make_schema_strict_removes_defaults_from_nullable_fields():
+    """OpenAI strict mode rejects Pydantic default annotations at any depth."""
+    schema = {
+        "type": "object",
+        "properties": {
+            "actor": {
+                "anyOf": [{"type": "string"}, {"type": "null"}],
+                "default": None,
+            },
+            "nested": {
+                "type": "object",
+                "properties": {"enabled": {"type": "boolean", "default": True}},
+            },
+        },
+    }
+
+    _make_schema_strict(schema)
+
+    assert "default" not in schema["properties"]["actor"]
+    assert "default" not in schema["properties"]["nested"]["properties"]["enabled"]
+    assert schema["required"] == ["actor", "nested"]
+    assert schema["properties"]["nested"]["required"] == ["enabled"]

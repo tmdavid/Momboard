@@ -31,7 +31,10 @@ async def run_synthesize(
         select(Highlight, Conversation, Company)
         .join(Conversation, Highlight.conversation_id == Conversation.id)
         .outerjoin(Company, Conversation.company_id == Company.id)
-        .where(Highlight.status.in_(["suggested", "accepted"]))
+        .where(
+            Highlight.status.in_(["suggested", "accepted"]),
+            Conversation.source != "simulator",  # T39: exclude simulated evidence
+        )
     )
 
     if "tag" in filters and filters["tag"]:

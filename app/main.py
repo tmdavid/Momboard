@@ -13,6 +13,46 @@ from app.config import Settings, get_settings
 from app.db import create_engine, create_session_factory
 
 
+async def _seed_recurring_jobs(
+    session_factory: Any, settings: Settings
+) -> None:
+    """Seed initial recurring jobs (gmeet_poll, digest) if none queued."""
+    from sqlalchemy import select
+
+    from app.models import Job
+
+    async with session_factory() as db:
+        # Seed gmeet_poll if configured and no queued job exists
+        if getattr(settings, "gdrive_folder_id", ""):
+            existing = await db.execute(
+                select(Job.id).where(Job.kind == "gmeet_poll", Job.status == "queued").limit(1)
+            )
+            if existing.scalar_one_or_none() is None:
+                db.add(Job(kind="gmeet_poll", payload={}, status="queued"))
+
+        # Seed digest if no queued digest job exists
+        existing_digest = await db.execute(
+            select(Job.id).where(Job.kind == "digest", Job.status == "queued").limit(1)
+        )
+        if existing_digest.scalar_one_or_none() is None:
+            from datetime import date, timedelta
+
+            from app.services.digest import _next_monday_0800_utc
+
+            today = date.today()
+            next_run = _next_monday_0800_utc(today)
+            # Target next Monday's ISO week
+            next_week_of = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
+            db.add(Job(
+                kind="digest",
+                payload={"week_of": next_week_of.isoformat()},
+                status="queued",
+                run_after=next_run,
+            ))
+
+        await db.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """App lifespan: start worker + backup scheduler, dispose engine on shutdown."""
@@ -26,6 +66,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start background worker
     task = asyncio.create_task(worker_loop(app.state.session_factory, settings))
     app.state.worker_task = task
+
+    # Seed initial recurring jobs if not already queued
+    await _seed_recurring_jobs(app.state.session_factory, settings)
 
     # Start backup scheduler if /data exists (production)
     backup_task = None

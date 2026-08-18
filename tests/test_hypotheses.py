@@ -830,6 +830,46 @@ class TestHypothesisDetailRollup:
         assert "last_evidence_at" in data
 
     @pytest.mark.asyncio
+    async def test_detail_groups_evidence_with_quote_and_source_context(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        """Detail evidence is directly renderable by the hypothesis board."""
+        create = await auth_client.post(
+            "/api/hypotheses",
+            json={"statement": "Enterprise brands will pay to eliminate Monday export"},
+        )
+        hyp_id = create.json()["id"]
+        link = await auth_client.post(
+            f"/api/hypotheses/{hyp_id}/links",
+            json={
+                "highlight_id": hyp_seeded["highlight1"].id,
+                "stance": "supports",
+            },
+        )
+
+        r = await auth_client.get(f"/api/hypotheses/{hyp_id}")
+
+        assert r.status_code == 200
+        data = r.json()
+        assert data["rollup"]["supports"]["suggested"] == 1
+        evidence = data["evidence"]["supports"]
+        assert len(evidence) == 1
+        assert evidence[0] == {
+            "link_id": link.json()["id"],
+            "highlight_id": hyp_seeded["highlight1"].id,
+            "quote": "Every Monday I export it to Excel and clean it by hand",
+            "conversation_id": hyp_seeded["conversation1"].id,
+            "conversation_title": "Acme discovery",
+            "utterance_id": hyp_seeded["highlight1"].utterance_id,
+            "company_name": "Acme Watches",
+            "contact_name": "Maria",
+            "confidence": None,
+            "origin": "human",
+            "status": "suggested",
+            "rationale": None,
+        }
+
+    @pytest.mark.asyncio
     async def test_rollup_counts_distinct_confirmed_companies(
         self, auth_client: AsyncClient, hyp_seeded: dict
     ):

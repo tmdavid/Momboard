@@ -1,6 +1,7 @@
 """Syntheses API endpoints."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -9,6 +10,17 @@ from app.auth import get_current_user
 from app.models import Analysis, Job, User
 
 router = APIRouter()
+
+
+def _response_for(analysis: Analysis, job: Job | None = None) -> SynthesisResponse:
+    response = SynthesisResponse.model_validate(analysis)
+    if analysis.result is not None:
+        response.status = "done"
+    elif job is not None:
+        response.status = job.status
+        if job.status == "error":
+            response.error = "Synthesis failed. Please retry."
+    return response
 
 
 @router.post("", status_code=201, response_model=SynthesisResponse)
@@ -34,7 +46,7 @@ async def create_synthesis(
     db.add(job)
     await db.flush()
 
-    return SynthesisResponse.model_validate(analysis)
+    return _response_for(analysis, job)
 
 
 @router.get("/{synthesis_id}", response_model=SynthesisResponse)
@@ -48,4 +60,15 @@ async def get_synthesis(
     analysis = await db.get(Analysis, synthesis_id)
     if analysis is None or analysis.kind != "synthesis":
         raise HTTPException(status_code=404, detail="Synthesis not found")
-    return SynthesisResponse.model_validate(analysis)
+
+    job_result = await db.execute(
+        select(Job)
+        .where(
+            Job.kind == "synthesize",
+            Job.payload["analysis_id"].as_integer() == synthesis_id,
+        )
+        .order_by(Job.created_at.desc())
+        .limit(1)
+    )
+    job = job_result.scalar_one_or_none()
+    return _response_for(analysis, job)

@@ -48,34 +48,75 @@ function EvidenceMeter({ rollup }: { rollup: HypothesisListItem['rollup'] }) {
   const confirmedSupport = rollup.supports.confirmed;
   const confirmedContradict = rollup.contradicts.confirmed;
   const suggestedSupport = rollup.supports.suggested;
-  const total = confirmedSupport + confirmedContradict + suggestedSupport + rollup.contradicts.suggested;
+  const suggestedContradict = rollup.contradicts.suggested;
+  const total = confirmedSupport + confirmedContradict + suggestedSupport + suggestedContradict;
 
-  // Calculate meter fill percentages
-  const supportPct = total > 0 ? (confirmedSupport / total) * 100 : 0;
-  const suggestedPct = total > 0 ? (suggestedSupport / total) * 100 : 0;
+  // Deterministic widths: equal input → identical widths
+  const denom = total > 0 ? total : 1;
+  const confirmedSupportPct = (confirmedSupport / denom) * 100;
+  const suggestedSupportPct = (suggestedSupport / denom) * 100;
+  const confirmedContradictPct = (confirmedContradict / denom) * 100;
+  const suggestedContradictPct = (suggestedContradict / denom) * 100;
+  // Track = remainder (grey)
+  const trackPct = 100 - confirmedSupportPct - suggestedSupportPct - confirmedContradictPct - suggestedContradictPct;
+
+  // Label for screen readers
+  const ariaLabel = `${confirmedSupport} confirmed support, ${suggestedSupport} suggested support, ${confirmedContradict} confirmed contradictions, ${suggestedContradict} suggested contradictions`;
 
   return (
     <div
       role="meter"
-      aria-label="Evidence meter"
+      aria-label={ariaLabel}
       aria-valuenow={confirmedSupport}
       aria-valuemin={0}
       aria-valuemax={total || 1}
-      className="flex-1 h-2 rounded-full bg-blue-100 overflow-hidden flex"
+      className="flex-1 h-2 rounded-full bg-gray-200 overflow-hidden flex"
+      title={ariaLabel}
     >
-      <div
-        className="h-full bg-accent"
-        style={{ width: `${supportPct}%` }}
-      />
-      <div
-        data-testid="meter-suggested"
-        aria-label="suggested evidence"
-        className="h-full opacity-50"
-        style={{
-          width: `${suggestedPct}%`,
-          background: 'repeating-linear-gradient(45deg, var(--color-accent, #2a78d6) 0 3px, transparent 3px 6px)',
-        }}
-      />
+      {/* Confirmed support: solid accent */}
+      {confirmedSupportPct > 0 && (
+        <div
+          className="h-full bg-accent"
+          style={{ width: `${confirmedSupportPct}%` }}
+          data-testid="meter-confirmed-support"
+        />
+      )}
+      {/* Suggested support: hatched accent */}
+      {suggestedSupportPct > 0 && (
+        <div
+          data-testid="meter-suggested"
+          className="h-full"
+          style={{
+            width: `${suggestedSupportPct}%`,
+            background: 'repeating-linear-gradient(45deg, var(--color-accent, #2a78d6) 0 3px, transparent 3px 6px)',
+            opacity: 0.6,
+          }}
+        />
+      )}
+      {/* Confirmed contradictions: solid red */}
+      {confirmedContradictPct > 0 && (
+        <div
+          className="h-full bg-red-500"
+          style={{ width: `${confirmedContradictPct}%` }}
+          data-testid="meter-confirmed-contradict"
+        />
+      )}
+      {/* Suggested contradictions: hatched red */}
+      {suggestedContradictPct > 0 && (
+        <div
+          className="h-full"
+          style={{
+            width: `${suggestedContradictPct}%`,
+            background: 'repeating-linear-gradient(45deg, #ef4444 0 3px, transparent 3px 6px)',
+            opacity: 0.6,
+          }}
+          data-testid="meter-suggested-contradict"
+        />
+      )}
+      {/* Track: remainder */}
+      {trackPct > 0 && (
+        <div className="h-full bg-gray-200" style={{ width: `${trackPct}%` }} />
+      )}
     </div>
   );
 }
@@ -175,10 +216,10 @@ function EvidenceLinkItem({
           </>
         )}
         <a
-          href={`/conversations/${link.conversation_id}#utterance-${link.utterance_id}`}
+          href={`/conversations/${link.conversation_id}${link.utterance_id == null ? '' : `#utterance-${link.utterance_id}`}`}
           className="text-xs text-accent whitespace-nowrap hover:underline"
         >
-          {link.company_name} ↗
+          {link.company_name || link.contact_name || link.conversation_title} ↗
         </a>
       </div>
     </div>
@@ -243,26 +284,64 @@ function EvidenceSection({
       {/* Evidence content — hidden during confirmation to avoid text collisions */}
       {confirmAction === null && (
         <>
-          {/* Supports section */}
-          <h4 className="text-xs font-bold uppercase tracking-wider text-green-800 mb-2">
-            Supports · confirmed
-          </h4>
-          {supportsFiltered.map((link) => (
-            <EvidenceLinkItem
-              key={link.link_id}
-              link={link}
-              onAccept={() => handleAccept(link.link_id)}
-              onReject={() => handleReject(link.link_id)}
-            />
-          ))}
+          {/* Supports section — confirmed */}
+          {supportsFiltered.filter(l => l.status === 'confirmed').length > 0 && (
+            <>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-green-800 mb-2">
+                Supports · confirmed
+              </h4>
+              {supportsFiltered.filter(l => l.status === 'confirmed').map((link) => (
+                <EvidenceLinkItem
+                  key={link.link_id}
+                  link={link}
+                  onAccept={() => handleAccept(link.link_id)}
+                  onReject={() => handleReject(link.link_id)}
+                />
+              ))}
+            </>
+          )}
 
-          {/* Contradicts section */}
-          {contradictsFiltered.length > 0 && (
+          {/* Supports section — suggested AI links */}
+          {supportsFiltered.filter(l => l.status === 'suggested').length > 0 && (
+            <>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-700 mt-3 mb-2">
+                Supports · suggested (AI)
+              </h4>
+              {supportsFiltered.filter(l => l.status === 'suggested').map((link) => (
+                <EvidenceLinkItem
+                  key={link.link_id}
+                  link={link}
+                  onAccept={() => handleAccept(link.link_id)}
+                  onReject={() => handleReject(link.link_id)}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Contradicts section — confirmed */}
+          {contradictsFiltered.filter(l => l.status === 'confirmed').length > 0 && (
             <>
               <h4 className="text-xs font-bold uppercase tracking-wider text-red-800 mt-4 mb-2">
-                Contradicts
+                Contradicts · confirmed
               </h4>
-              {contradictsFiltered.map((link) => (
+              {contradictsFiltered.filter(l => l.status === 'confirmed').map((link) => (
+                <EvidenceLinkItem
+                  key={link.link_id}
+                  link={link}
+                  onAccept={() => handleAccept(link.link_id)}
+                  onReject={() => handleReject(link.link_id)}
+                />
+              ))}
+            </>
+          )}
+
+          {/* Contradicts section — suggested AI links */}
+          {contradictsFiltered.filter(l => l.status === 'suggested').length > 0 && (
+            <>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-yellow-700 mt-3 mb-2">
+                Contradicts · suggested (AI)
+              </h4>
+              {contradictsFiltered.filter(l => l.status === 'suggested').map((link) => (
                 <EvidenceLinkItem
                   key={link.link_id}
                   link={link}
@@ -358,7 +437,11 @@ function HypothesisCard({
         (old) =>
           (old || []).map((h) =>
             h.id === hypothesis.id
-              ? { ...h, status: data.status, decided_at: data.decided_at }
+              ? {
+                  ...h,
+                  status: data.status,
+                  decided_at: data.decided_at ?? h.decided_at,
+                }
               : h,
           ),
       );
@@ -477,11 +560,16 @@ function HypothesisComposer() {
       setSubmitError(true);
     },
     onSuccess: (data, _body, context) => {
-      // Replace the optimistic entry with the real server response
+      // The mutation endpoint returns the base hypothesis fields only. Preserve
+      // the optimistic card's empty rollup until the authoritative list refetch.
       queryClient.setQueryData<HypothesisListItem[]>(
         ['hypotheses'],
         (old) =>
-          (old || []).map((h) => (h.id === context?.optimisticId ? data : h)),
+          (old || []).map((h) =>
+            h.id === context?.optimisticId
+              ? { ...h, ...data, rollup: h.rollup, verdict_hint: h.verdict_hint }
+              : h,
+          ),
       );
     },
   });
@@ -521,18 +609,26 @@ function HypothesisComposer() {
           }}
           onKeyDown={handleKeyDown}
           placeholder={'State a falsifiable belief\u2026 e.g. \u201CMid-market brands won\u2019t pay >€10k without SLA\u201D'}
-          className="flex-1 px-3 py-2.5 border border-gray-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+          className="flex-1 px-3 py-2.5 border border-hairline rounded-xl bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
           aria-invalid={!!validationError}
-          aria-describedby={validationError ? 'composer-error' : undefined}
+          aria-describedby={validationError ? 'composer-error' : 'composer-help'}
         />
         <button
           type="submit"
           aria-disabled={isDisabled || undefined}
-          className={`px-4 py-2.5 rounded-xl text-sm font-semibold bg-accent text-white hover:bg-accent/90 ${isDisabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+          className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+            isDisabled
+              ? 'bg-hairline text-muted cursor-not-allowed'
+              : 'bg-accent text-white hover:bg-[#1c5cab]'
+          }`}
         >
           Add hypothesis
         </button>
       </form>
+      {/* #17: Helper text naming segment + behavior format */}
+      <p id="composer-help" className="text-xs text-muted mt-1.5">
+        Name a <b>segment</b> + <b>behavior</b>. Example: "Enterprise ops teams won't switch without SSO."
+      </p>
       {validationError && (
         <p id="composer-error" className="text-xs text-red-600 mt-1.5" role="alert">
           {validationError}

@@ -25,7 +25,7 @@ interface ContactEntry {
   role: string;
 }
 
-export function NewConversationModal({ onClose, onSubmit, isSubmitting }: Props) {
+export function NewConversationModal({ onClose, onCreated, onSubmit, isSubmitting }: Props) {
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(new Date().toISOString().slice(0, 16));
   const [interviewer, setInterviewer] = useState('');
@@ -37,6 +37,15 @@ export function NewConversationModal({ onClose, onSubmit, isSubmitting }: Props)
   const [transcript, setTranscript] = useState('');
   const [detectedFormat, setDetectedFormat] = useState('');
   const dialogRef = useRef<HTMLDialogElement>(null);
+
+  // Audio upload state
+  const [mode, setMode] = useState<'text' | 'audio'>('text');
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [audioUploading, setAudioUploading] = useState(false);
+  const [audioError, setAudioError] = useState<string | null>(null);
+  const [audioLanguage, setAudioLanguage] = useState('');
+
+  const AUDIO_EXTENSIONS = ['.mp3', '.mp4', '.mpeg', '.mpga', '.m4a', '.wav', '.webm', '.ogg'];
 
   // Fetch existing companies for the combobox
   const { data: companies } = useQuery({
@@ -67,6 +76,44 @@ export function NewConversationModal({ onClose, onSubmit, isSubmitting }: Props)
   }, []);
 
   const handleSubmit = useCallback(() => {
+    if (mode === 'audio' && audioFile) {
+      // Audio upload via multipart
+      setAudioUploading(true);
+      setAudioError(null);
+      const formData = new FormData();
+      formData.append('file', audioFile);
+      formData.append('title', title);
+      if (interviewer) formData.append('interviewer', interviewer);
+      if (audioLanguage) formData.append('language', audioLanguage);
+
+      fetch('/api/conversations/upload', {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const err = await r.json().catch(() => ({ detail: `HTTP ${r.status}` }));
+            throw new Error(err.detail || `Upload failed (${r.status})`);
+          }
+          return r.json();
+        })
+        .then((data) => {
+          setAudioUploading(false);
+          if (onCreated) {
+            onCreated(data.id, data.title);
+          } else {
+            onClose();
+          }
+        })
+        .catch((err) => {
+          setAudioUploading(false);
+          setAudioError(err.message);
+        });
+      return;
+    }
+
+    // Text/paste mode
     const formData: NewConversationFormData = {
       title,
       happened_at: date ? new Date(date).toISOString() : undefined,
@@ -80,7 +127,7 @@ export function NewConversationModal({ onClose, onSubmit, isSubmitting }: Props)
     if (onSubmit) {
       onSubmit(formData);
     }
-  }, [title, date, interviewer, companyName, contacts, dealStage, segment, transcript, detectedFormat, onSubmit]);
+  }, [mode, audioFile, title, date, interviewer, companyName, contacts, dealStage, segment, transcript, detectedFormat, onSubmit, onCreated, onClose, audioLanguage]);
 
   const handleTranscriptChange = useCallback((value: string) => {
     setTranscript(value);
@@ -312,30 +359,118 @@ export function NewConversationModal({ onClose, onSubmit, isSubmitting }: Props)
           </select>
         </div>
         <div className="col-span-2 flex flex-col gap-1">
-          <label htmlFor="modal-transcript" className="text-xs font-semibold text-ink-2">
-            Transcript{' '}
-            {detectedFormat && (
-              <span className="text-accent font-semibold">
-                · detected: {detectedFormat === 'vtt' ? 'VTT' : 'Name: text'}
-              </span>
-            )}
-          </label>
-          <textarea
-            id="modal-transcript"
-            className="min-h-[130px] resize-y px-2.5 py-2 border border-hairline rounded-lg bg-page text-ink font-mono text-xs"
-            placeholder={`Paste the transcript here…\n\nDavid: How are you handling infringing listings today?\nJane: Honestly, every Monday I export everything to Excel…`}
-            value={transcript}
-            onChange={(e) => handleTranscriptChange(e.target.value)}
-          />
-          <div
-            className="border-2 border-dashed border-hairline rounded-lg p-2 text-center text-muted text-xs cursor-pointer"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={handleFileDrop}
-            onClick={() => document.getElementById('file-input')?.click()}
-          >
-            …or drop a .txt / .vtt file
+          <div className="flex items-center gap-3 mb-1">
+            <label className="text-xs font-semibold text-ink-2">Input mode</label>
+            <label className="flex items-center gap-1 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name="input-mode"
+                value="text"
+                checked={mode === 'text'}
+                onChange={() => setMode('text')}
+              />
+              Paste / .txt / .vtt
+            </label>
+            <label className="flex items-center gap-1 text-xs cursor-pointer">
+              <input
+                type="radio"
+                name="input-mode"
+                value="audio"
+                checked={mode === 'audio'}
+                onChange={() => setMode('audio')}
+              />
+              Audio / Video upload
+            </label>
           </div>
-          <input id="file-input" type="file" accept=".txt,.vtt" className="hidden" onChange={handleFileInput} />
+
+          {mode === 'text' && (
+            <>
+              <label htmlFor="modal-transcript" className="text-xs font-semibold text-ink-2">
+                Transcript{' '}
+                {detectedFormat && (
+                  <span className="text-accent font-semibold">
+                    · detected: {detectedFormat === 'vtt' ? 'VTT' : 'Name: text'}
+                  </span>
+                )}
+              </label>
+              <textarea
+                id="modal-transcript"
+                className="min-h-[130px] resize-y px-2.5 py-2 border border-hairline rounded-lg bg-page text-ink font-mono text-xs"
+                placeholder={`Paste the transcript here…\n\nDavid: How are you handling infringing listings today?\nJane: Honestly, every Monday I export everything to Excel…`}
+                value={transcript}
+                onChange={(e) => handleTranscriptChange(e.target.value)}
+              />
+              <div
+                className="border-2 border-dashed border-hairline rounded-lg p-2 text-center text-muted text-xs cursor-pointer"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={handleFileDrop}
+                onClick={() => document.getElementById('file-input')?.click()}
+              >
+                …or drop a .txt / .vtt file
+              </div>
+              <input id="file-input" type="file" accept=".txt,.vtt" className="hidden" onChange={handleFileInput} />
+            </>
+          )}
+
+          {mode === 'audio' && (
+            <>
+              <label htmlFor="audio-file-input" className="text-xs font-semibold text-ink-2">
+                Audio / Video file
+              </label>
+              <div className="border-2 border-dashed border-hairline rounded-lg p-4 text-center">
+                <input
+                  id="audio-file-input"
+                  type="file"
+                  accept={AUDIO_EXTENSIONS.join(',')}
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) { setAudioFile(f); setAudioError(null); }
+                  }}
+                />
+                {audioFile ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <span className="text-sm font-medium text-ink">{audioFile.name}</span>
+                    <span className="text-xs text-muted">({(audioFile.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                    <button
+                      type="button"
+                      className="text-xs text-red-600 hover:underline"
+                      onClick={() => setAudioFile(null)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-sm text-accent hover:underline"
+                    onClick={() => document.getElementById('audio-file-input')?.click()}
+                  >
+                    Choose file (.mp3, .mp4, .wav, .webm, .ogg, .m4a)
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-2 items-center mt-1">
+                <label htmlFor="audio-lang" className="text-xs text-muted">Language (optional):</label>
+                <input
+                  id="audio-lang"
+                  className="px-2 py-1 border border-hairline rounded text-xs w-20"
+                  placeholder="en"
+                  value={audioLanguage}
+                  onChange={(e) => setAudioLanguage(e.target.value)}
+                />
+              </div>
+              {audioUploading && (
+                <div className="flex items-center gap-2 mt-2 text-sm text-muted" role="status">
+                  <span className="w-3 h-3 border-2 border-hairline border-t-accent rounded-full animate-spin" aria-hidden="true" />
+                  Transcribing…
+                </div>
+              )}
+              {audioError && (
+                <p className="text-sm text-red-600 mt-1" role="alert">{audioError}</p>
+              )}
+            </>
+          )}
         </div>
         <p className="col-span-2 text-xs text-muted">
           On save, MomBoard normalizes speakers, tags Mom Test signals, and runs the analysis — you'll see progress
@@ -349,10 +484,10 @@ export function NewConversationModal({ onClose, onSubmit, isSubmitting }: Props)
         </button>
         <button
           className="btn btn-primary"
-          disabled={!title || !transcript || isSubmitting}
+          disabled={!title || (mode === 'text' && !transcript) || (mode === 'audio' && !audioFile) || isSubmitting || audioUploading}
           onClick={handleSubmit}
         >
-          {isSubmitting ? 'Creating…' : 'Create & analyze'}
+          {audioUploading ? 'Transcribing…' : isSubmitting ? 'Creating…' : 'Create & analyze'}
         </button>
       </div>
     </dialog>

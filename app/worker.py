@@ -118,25 +118,34 @@ async def handle_tag(db: AsyncSession, job: Job, settings: Settings) -> None:
     db.add(analyze_job)
     await db.flush()
 
-    # Chain hypothesis_link job only when open hypotheses exist (no delay to analyze)
-    from app.models import Hypothesis
+    # Chain hypothesis_link job only when open hypotheses exist AND conversation
+    # is not simulated (T39 corpus isolation: simulated conversations must not
+    # feed hypothesis linking)
+    convo = await db.get(Conversation, conversation_id)
+    is_simulated = convo and convo.source == "simulator"
 
-    open_count_result = await db.execute(
-        select(Hypothesis.id).where(Hypothesis.status == "open").limit(1)
-    )
-    if open_count_result.scalar_one_or_none() is not None:
-        hypothesis_link_job = Job(
-            conversation_id=conversation_id,
-            kind="hypothesis_link",
-            payload={"conversation_id": conversation_id},
-            status="queued",
+    if not is_simulated:
+        from app.models import Hypothesis
+
+        open_count_result = await db.execute(
+            select(Hypothesis.id).where(Hypothesis.status == "open").limit(1)
         )
-        db.add(hypothesis_link_job)
-        await db.flush()
+        if open_count_result.scalar_one_or_none() is not None:
+            hypothesis_link_job = Job(
+                conversation_id=conversation_id,
+                kind="hypothesis_link",
+                payload={"conversation_id": conversation_id},
+                status="queued",
+            )
+            db.add(hypothesis_link_job)
+            await db.flush()
 
 
 async def handle_analyze(db: AsyncSession, job: Job, settings: Settings) -> None:
-    """Analyze handler: run analyst LLM → persist analysis → mark conversation ready."""
+    """Analyze handler: run analyst LLM → persist analysis → mark conversation ready.
+
+    Chains drift_check when the conversation's contacts have prior accepted highlights.
+    """
     from app.llm.analyst import run_analyze
     from app.llm.factory import create_llm_client
 
@@ -144,7 +153,6 @@ async def handle_analyze(db: AsyncSession, job: Job, settings: Settings) -> None
     if not conversation_id:
         raise ValueError("Analyze job missing conversation_id")
 
-    # Use factory to select appropriate client (openai, local/ollama, or fake)
     llm = create_llm_client(settings, agent="analyst")
 
     try:
@@ -158,6 +166,52 @@ async def handle_analyze(db: AsyncSession, job: Job, settings: Settings) -> None
     if convo:
         convo.status = "ready"
     await db.flush()
+
+    # Chain drift_check only when contacts have prior accepted history (Blocker 6)
+    from app.models import ConversationContact, Highlight
+
+    contact_ids_result = await db.execute(
+        select(ConversationContact.contact_id)
+        .where(ConversationContact.conversation_id == conversation_id)
+    )
+    contact_ids = [r[0] for r in contact_ids_result.all()]
+
+    if contact_ids:
+        # Check if any contact has prior accepted highlights (from other conversations)
+        prior_convo_ids_result = await db.execute(
+            select(ConversationContact.conversation_id)
+            .where(
+                ConversationContact.contact_id.in_(contact_ids),
+                ConversationContact.conversation_id != conversation_id,
+            )
+            .limit(1)
+        )
+        has_prior = prior_convo_ids_result.scalar_one_or_none() is not None
+
+        if has_prior:
+            # Check for accepted highlights in those prior conversations
+            prior_accepted = await db.execute(
+                select(Highlight.id)
+                .join(
+                    ConversationContact,
+                    ConversationContact.conversation_id == Highlight.conversation_id,
+                )
+                .where(
+                    ConversationContact.contact_id.in_(contact_ids),
+                    Highlight.conversation_id != conversation_id,
+                    Highlight.status == "accepted",
+                )
+                .limit(1)
+            )
+            if prior_accepted.scalar_one_or_none() is not None:
+                drift_job = Job(
+                    conversation_id=conversation_id,
+                    kind="drift_check",
+                    payload={"conversation_id": conversation_id},
+                    status="queued",
+                )
+                db.add(drift_job)
+                await db.flush()
 
 
 async def handle_synthesize(db: AsyncSession, job: Job, settings: Settings) -> None:
@@ -199,6 +253,109 @@ async def handle_hypothesis_link(db: AsyncSession, job: Job, settings: Settings)
         if hasattr(llm, "close"):
             await llm.close()
 
+    # T40: Re-check decision integrity after new hypothesis links
+    await _refresh_decision_integrity(db, conversation_id)
+
+
+async def handle_drift_check(db: AsyncSession, job: Job, settings: Settings) -> None:
+    """Drift check handler: detect contradictions in contact statements."""
+    from app.llm.factory import create_llm_client
+    from app.services.contacts import run_drift_check
+
+    conversation_id = job.conversation_id
+    if not conversation_id:
+        raise ValueError("drift_check job missing conversation_id")
+
+    llm = create_llm_client(settings, agent="drift_checker")
+
+    try:
+        await run_drift_check(db, conversation_id, llm)
+    finally:
+        if hasattr(llm, "close"):
+            await llm.close()
+
+    # T40: Re-check decision integrity after drift detection
+    await _refresh_decision_integrity(db, conversation_id)
+
+
+async def _refresh_decision_integrity(db: AsyncSession, conversation_id: int) -> None:
+    """T40: Re-check integrity of decisions citing highlights from this conversation.
+
+    Runs after drift_check and hypothesis_link jobs. Updates integrity status
+    and persists reasons without changing decision status (human decision).
+    """
+    from app.models import DecisionEvidence, Highlight
+    from app.services.decisions import check_decision_integrity
+
+    # Find highlights from this conversation that are cited by decisions
+    cited_result = await db.execute(
+        select(DecisionEvidence.decision_id)
+        .join(Highlight, Highlight.id == DecisionEvidence.highlight_id)
+        .where(Highlight.conversation_id == conversation_id)
+    )
+    affected_decision_ids = list(set(r[0] for r in cited_result.all()))
+
+    for decision_id in affected_decision_ids:
+        try:
+            await check_decision_integrity(db, decision_id)
+        except ValueError:
+            pass  # Decision may have been deleted
+
+    await db.flush()
+
+
+async def handle_digest(db: AsyncSession, job: Job, settings: Settings) -> None:
+    """Digest handler: build and deliver weekly digest."""
+    from datetime import date
+
+    from app.llm.factory import create_llm_client
+    from app.services.digest import run_digest
+
+    payload = job.payload or {}
+    week_of_str = payload.get("week_of")
+    week_of = date.fromisoformat(week_of_str) if week_of_str else date.today()
+
+    llm = create_llm_client(settings, agent="digest")
+    slack_url = getattr(settings, "slack_webhook_url", None)
+
+    try:
+        await run_digest(db, week_of=week_of, llm=llm, slack_webhook_url=slack_url)
+    finally:
+        if hasattr(llm, "close"):
+            await llm.close()
+
+
+async def handle_gmeet_poll(db: AsyncSession, job: Job, settings: Settings) -> None:
+    """Google Meet/Drive poll handler: check for new transcript docs.
+
+    Self-reschedules for the next configured interval (default 30 minutes).
+    Idempotent: uses run_after to prevent overlapping polls.
+    """
+    from app.services.gmeet import poll_drive_for_transcripts
+
+    await poll_drive_for_transcripts(db, settings)
+
+    # Self-reschedule next poll (idempotent — check no existing queued gmeet_poll)
+    poll_interval_minutes = getattr(settings, "gdrive_poll_interval_minutes", 30)
+    next_run = utcnow() + timedelta(minutes=poll_interval_minutes)
+
+    existing_queued = await db.execute(
+        select(Job.id).where(
+            Job.kind == "gmeet_poll",
+            Job.status == "queued",
+            Job.id != job.id,
+        ).limit(1)
+    )
+    if existing_queued.scalar_one_or_none() is None:
+        reschedule_job = Job(
+            kind="gmeet_poll",
+            payload={},
+            status="queued",
+            run_after=next_run,
+        )
+        db.add(reschedule_job)
+        await db.flush()
+
 
 # Handler registry
 HANDLERS: dict[str, HandlerFunc] = {
@@ -207,6 +364,9 @@ HANDLERS: dict[str, HandlerFunc] = {
     "analyze": handle_analyze,
     "synthesize": handle_synthesize,
     "hypothesis_link": handle_hypothesis_link,
+    "drift_check": handle_drift_check,
+    "digest": handle_digest,
+    "gmeet_poll": handle_gmeet_poll,
 }
 
 
@@ -227,7 +387,7 @@ async def run_worker_once(
     async with session_factory() as db:
         # Find oldest eligible job (FIFO)
         result = await db.execute(
-            select(Job.id)
+            select(Job.id, Job.kind, Job.conversation_id)
             .where(
                 Job.status == "queued",
                 (Job.run_after == None) | (Job.run_after <= now),  # noqa: E711
@@ -235,12 +395,12 @@ async def run_worker_once(
             .order_by(Job.created_at)
             .limit(1)
         )
-        job_row = result.scalar_one_or_none()
+        job_row = result.one_or_none()
 
         if job_row is None:
             return False
 
-        candidate_id = job_row
+        candidate_id, candidate_kind, candidate_conversation_id = job_row
 
         # Atomic CAS claim: UPDATE ... WHERE id = ? AND status = 'queued'
         # This is portable across SQLite/Postgres and prevents double-claiming.
@@ -254,12 +414,29 @@ async def run_worker_once(
             )
             .execution_options(synchronize_session=False)
         )
-        await db.commit()
 
-        # If no rows were updated, another worker claimed this job
+        # If no rows were updated, another worker claimed this job.
         if claim_result.rowcount == 0:
+            await db.rollback()
             return False
 
+        # Publish an observable pipeline stage in the same committed claim transaction.
+        # Long-running LLM work happens in a separate session, so clients can read this
+        # state immediately via SSE-triggered refresh or the 5-second polling fallback.
+        stage_by_kind = {
+            "ingest": "normalizing",
+            "tag": "tagging",
+            "analyze": "analyzing",
+        }
+        stage = stage_by_kind.get(candidate_kind)
+        if candidate_conversation_id and stage:
+            await db.execute(
+                update(Conversation)
+                .where(Conversation.id == candidate_conversation_id)
+                .values(status=stage)
+            )
+
+        await db.commit()
         claimed_job_id = candidate_id
 
     # Execute handler in separate session
@@ -305,7 +482,12 @@ async def run_worker_once(
                         # Determine conversation status on terminal failure
                         if job.conversation_id:
                             convo = await err_db.get(Conversation, job.conversation_id)
-                            if convo and convo.status == "processing":
+                            if convo and convo.status in {
+                                "processing",
+                                "normalizing",
+                                "tagging",
+                                "analyzing",
+                            }:
                                 # Check if any prior step succeeded (has done jobs)
                                 prior_done = await err_db.execute(
                                     select(Job.id)
@@ -322,11 +504,20 @@ async def run_worker_once(
                                 else:
                                     convo.status = "failed"
                     else:
-                        # Retry with backoff
+                        # Retry with backoff. The next claim will publish the specific
+                        # stage again; show a truthful generic pending state meanwhile.
                         job.status = "queued"
                         backoff_seconds = min(2**job.attempts * 5, 60)
                         job.run_after = utcnow() + timedelta(seconds=backoff_seconds)
                         job.error = str(e)[:1000]
+                        if job.conversation_id:
+                            convo = await err_db.get(Conversation, job.conversation_id)
+                            if convo and convo.status in {
+                                "normalizing",
+                                "tagging",
+                                "analyzing",
+                            }:
+                                convo.status = "processing"
 
                     await err_db.commit()
 

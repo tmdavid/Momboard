@@ -38,7 +38,7 @@ describe('Library page', () => {
       expect(screen.getByText('Processing new conversation')).toBeInTheDocument();
     });
 
-    expect(screen.getByText('processing')).toBeInTheDocument();
+    expect(screen.getByText('Processing…')).toBeInTheDocument();
   });
 
   test('filter by tag narrows the table (query param sent to API)', async () => {

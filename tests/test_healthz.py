@@ -15,4 +15,4 @@ async def test_healthz_returns_200_and_version(client: AsyncClient):
 @pytest.mark.asyncio
 async def test_healthz_version_matches_settings(client: AsyncClient):
     r = await client.get("/healthz")
-    assert r.json()["version"] == "0.1.0"
+    assert r.json()["version"] == "0.2.0"

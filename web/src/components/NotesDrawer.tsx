@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
+import { renderSafeMarkdown } from '../utils/markdown';
 
 interface Props {
   conversationId: number;
@@ -77,7 +78,16 @@ export function NotesDrawer({ conversationId }: Props) {
     >
       <div
         className="flex items-center gap-2.5 px-5 h-[42px] cursor-pointer flex-none"
+        role="button"
+        tabIndex={0}
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
+        onKeyDown={(event) => {
+          if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) {
+            event.preventDefault();
+            setIsOpen(!isOpen);
+          }
+        }}
       >
         <b className="text-[13px]">📝 Notes</b>
         <div className="flex gap-0.5 ml-4" onClick={(e) => e.stopPropagation()}>
@@ -114,47 +124,23 @@ export function NotesDrawer({ conversationId }: Props) {
 
       {!preview ? (
         <textarea
-          className="flex-1 border-none outline-none resize-none px-5 py-3.5 font-mono text-[13px] leading-relaxed bg-surface text-ink border-t border-hairline"
+          className="flex-1 border border-hairline rounded-lg outline-none resize-none mx-5 my-3 px-3.5 py-3 font-mono text-[13px] leading-relaxed bg-page text-ink"
           value={body}
           onChange={(e) => handleChange(e.target.value)}
+          placeholder="Write notes… markdown supported"
           spellCheck={false}
         />
       ) : (
         <div
           className="flex-1 overflow-auto px-5 py-3.5 border-t border-hairline text-[13.5px] prose prose-sm"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(body) }}
-        />
+        >
+          {body.trim() ? (
+            <div dangerouslySetInnerHTML={{ __html: renderSafeMarkdown(body, 'notes') }} />
+          ) : (
+            <p className="text-muted italic">Nothing to preview yet</p>
+          )}
+        </div>
       )}
     </div>
   );
-}
-
-function renderMarkdown(md: string): string {
-  let html = md
-    .replace(/^# (.*)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.*)$/gm, '<h4>$1</h4>')
-    .replace(/^- (.*)$/gm, '<li>$1</li>')
-    .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-    .replace(/\*(.*?)\*/g, '<i>$1</i>')
-    .replace(/\n\n/g, '<br>');
-
-  // Sanitize: remove script tags and event handlers
-  html = sanitizeHtml(html);
-  return html;
-}
-
-/**
- * Simple HTML sanitizer that removes script tags, event handlers, and dangerous attributes.
- * Prevents XSS without requiring an external dependency.
- */
-function sanitizeHtml(html: string): string {
-  // Remove <script> tags and their content
-  html = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  // Remove any remaining <script> opening tags
-  html = html.replace(/<script\b[^>]*>/gi, '');
-  // Remove event handler attributes (on*)
-  html = html.replace(/\s+on\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]*)/gi, '');
-  // Remove javascript: protocol in href/src
-  html = html.replace(/(href|src)\s*=\s*["']?\s*javascript:[^"'>]*/gi, '$1=""');
-  return html;
 }

@@ -343,7 +343,7 @@ describe('T20: Robust synthesis completion polling', () => {
 
     // During polling, a progress/loading indicator should be visible
     await waitFor(() => {
-      expect(screen.getByText(/Synthesizing/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/Synthesizing/i).length).toBeGreaterThan(0);
     });
 
     // Advance time to trigger multiple polls
@@ -357,7 +357,7 @@ describe('T20: Robust synthesis completion polling', () => {
     });
 
     // After result is rendered, "Synthesizing..." should be gone
-    expect(screen.queryByText(/Synthesizing/i)).not.toBeInTheDocument();
+    expect(screen.queryAllByText(/Synthesizing/i)).toHaveLength(0);
 
     // Record poll count, then advance more time — no new polls should happen
     const pollCountAfterResult = pollCount;

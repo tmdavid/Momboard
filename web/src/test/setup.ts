@@ -3,6 +3,29 @@ import { cleanup } from '@testing-library/react';
 import { afterEach, beforeAll, afterAll } from 'vitest';
 import { server } from './mocks/server';
 
+// Polyfill URL.createObjectURL / revokeObjectURL for jsdom (needed by ShareCardDialog)
+if (typeof URL.createObjectURL === 'undefined') {
+  let _urlCounter = 0;
+  URL.createObjectURL = (_blob: Blob) => `blob:http://test/${++_urlCounter}`;
+  URL.revokeObjectURL = (_url: string) => {};
+}
+
+// Polyfill ClipboardItem for jsdom
+if (typeof globalThis.ClipboardItem === 'undefined') {
+  (globalThis as unknown as Record<string, unknown>).ClipboardItem = class ClipboardItem {
+    private _items: Record<string, Blob>;
+    constructor(items: Record<string, Blob>) {
+      this._items = items;
+    }
+    get types() {
+      return Object.keys(this._items);
+    }
+    getType(type: string) {
+      return Promise.resolve(this._items[type]);
+    }
+  };
+}
+
 // Polyfill ResizeObserver for Recharts — fires callback immediately with a synthetic size
 global.ResizeObserver = class ResizeObserver {
   private cb: ResizeObserverCallback;

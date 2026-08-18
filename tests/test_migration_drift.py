@@ -70,12 +70,13 @@ def test_metadata_matches_head_migration():
     This ensures that models.py and the migration files stay in sync.
     Any new model column or constraint that is missing from a migration will cause this to fail.
     """
+    from sqlalchemy import create_engine
+
     from alembic.autogenerate import compare_metadata
     from alembic.config import Config
     from alembic.runtime.environment import EnvironmentContext
     from alembic.runtime.migration import MigrationContext
     from alembic.script import ScriptDirectory
-    from sqlalchemy import create_engine
 
     # Run migrations against an in-memory DB
     engine = create_engine("sqlite://")

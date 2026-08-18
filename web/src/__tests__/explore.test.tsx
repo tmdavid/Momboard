@@ -26,6 +26,18 @@ describe('Explore page', () => {
     expect(screen.getAllByText(/Acme Watches/).length).toBeGreaterThan(0);
   });
 
+  test('quote cards render real curly quotation marks instead of unicode escape text', async () => {
+    renderExplore();
+
+    const quote = await screen.findByText(/Every Monday I export all flagged listings/);
+
+    expect(quote.tagName).toBe('BLOCKQUOTE');
+    expect(quote).toHaveTextContent(
+      '“Every Monday I export all flagged listings to Excel”',
+    );
+    expect(quote).not.toHaveTextContent(/u201c|u201d/);
+  });
+
   test('tag filter chips update results; active filters summarized in a bar', async () => {
     const user = userEvent.setup();
     renderExplore();

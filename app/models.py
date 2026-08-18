@@ -334,3 +334,182 @@ class HypothesisLink(Base):
             name="ck_hypothesis_links_stance",
         ),
     )
+
+
+# --- Staging Inbox (T34) ---
+
+
+class StagingInboxItem(Base):
+    __tablename__ = "staging_inbox"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source: Mapped[str] = mapped_column(String(50), nullable=False)  # gmeet|drive|mcp|whisper
+    source_ref: Mapped[str] = mapped_column(String(500), nullable=False)  # dedupe key
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    raw_content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_format: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    meta: Mapped[dict | None] = mapped_column(nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default="pending_import", server_default="pending_import"
+    )  # pending_import|imported|ignored|parse_error
+    parse_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    conversation_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True
+    )
+    imported_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    conversation: Mapped[Optional["Conversation"]] = relationship()
+
+    __table_args__ = (
+        Index("ix_staging_inbox_source_ref", "source_ref", unique=True),
+        Index("ix_staging_inbox_status", "status"),
+    )
+
+
+# --- Drifts (T29) ---
+
+
+class Drift(Base):
+    __tablename__ = "drifts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    contact_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("contacts.id", ondelete="CASCADE"), nullable=False
+    )
+    earlier_highlight_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("highlights.id", ondelete="CASCADE"), nullable=False
+    )
+    later_highlight_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("highlights.id", ondelete="CASCADE"), nullable=False
+    )
+    kind: Mapped[str] = mapped_column(
+        String(20), default="change"
+    )  # contradiction|change
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(20), default="open"
+    )  # open|dismissed|confirmed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    contact: Mapped["Contact"] = relationship()
+    earlier_highlight: Mapped["Highlight"] = relationship(foreign_keys=[earlier_highlight_id])
+    later_highlight: Mapped["Highlight"] = relationship(foreign_keys=[later_highlight_id])
+
+    __table_args__ = (
+        Index("ix_drifts_contact_id", "contact_id"),
+        CheckConstraint(
+            "kind IN ('contradiction', 'change')",
+            name="ck_drifts_kind",
+        ),
+        CheckConstraint(
+            "status IN ('open', 'dismissed', 'confirmed')",
+            name="ck_drifts_status",
+        ),
+    )
+
+
+# --- Chats (T42) ---
+
+
+class Chat(Base):
+    __tablename__ = "chats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    title: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    turns: Mapped[dict] = mapped_column(nullable=False)  # JSON array of turn objects
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    user: Mapped["User"] = relationship()
+
+    __table_args__ = (Index("ix_chats_user_id", "user_id"),)
+
+
+# --- Digest Log (T31) ---
+
+
+class DigestLog(Base):
+    __tablename__ = "digest_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    iso_week: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
+    markdown: Mapped[str] = mapped_column(Text, nullable=False)
+    delivered_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# --- Decisions (T40) ---
+
+
+class Decision(Base):
+    __tablename__ = "decisions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    rationale_md: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), default="proposed", server_default="proposed"
+    )  # proposed|decided|superseded
+    integrity: Mapped[str] = mapped_column(
+        String(20), default="ok", server_default="ok"
+    )  # ok|undermined
+    integrity_reasons: Mapped[dict | None] = mapped_column(nullable=True)  # JSON list of reason objects
+    hypothesis_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hypotheses.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    decided_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    superseded_by: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("decisions.id", ondelete="SET NULL"), nullable=True
+    )
+    created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    evidence: Mapped[list["DecisionEvidence"]] = relationship(
+        back_populates="decision", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('proposed', 'decided', 'superseded')",
+            name="ck_decisions_status",
+        ),
+        CheckConstraint(
+            "integrity IN ('ok', 'undermined')",
+            name="ck_decisions_integrity",
+        ),
+    )
+
+
+class DecisionEvidence(Base):
+    __tablename__ = "decision_evidence"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    decision_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("decisions.id", ondelete="CASCADE"), nullable=False
+    )
+    highlight_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("highlights.id", ondelete="RESTRICT"), nullable=False
+    )
+
+    decision: Mapped["Decision"] = relationship(back_populates="evidence")
+    highlight: Mapped["Highlight"] = relationship()
+
+    __table_args__ = (
+        Index("ix_decision_evidence_decision_id", "decision_id"),
+        Index("ix_decision_evidence_highlight_id", "highlight_id"),
+    )

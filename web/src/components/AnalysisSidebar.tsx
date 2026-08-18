@@ -65,34 +65,54 @@ export function AnalysisSidebar({ analysis, highlights, onJumpToUtterance }: Pro
           <h3 className="text-xs uppercase tracking-wider text-muted font-semibold mb-2">Commitments & advancement</h3>
           {result.commitments.map((c, i) => (
             <div key={i} className="text-[13px] p-2 rounded-lg bg-[#e6f4e6] mb-1.5">
-              <b className="text-good-text">{c.type}</b> — {c.what}
+              <b className="text-good-text">{c.type}</b> — {c.next_step || c.what}
+              {(c.actor || c.cost) && (
+                <span className="block text-xs text-ink-2 mt-0.5">
+                  {[c.actor, c.cost].filter(Boolean).join(' · ')}
+                </span>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* Mom Test critique */}
+      {/* Mom Test critique — #21: explicit labels for Score, Best question, Violations */}
       {result.mom_test_critique && (
         <div className="border border-hairline rounded-xl p-3.5 mb-3.5 bg-page">
           <h3 className="text-xs uppercase tracking-wider text-muted font-semibold mb-2">Mom Test critique</h3>
-          <div className="flex items-center gap-3 mb-2.5">
-            <span className="text-[34px] font-bold tracking-tight">
-              {result.mom_test_critique.score}
-              <small className="text-sm text-muted font-normal">/10</small>
-            </span>
-            <span className="text-xs text-ink-2">
-              {result.mom_test_critique.good_questions?.[0] || 'Score based on interview quality.'}
-            </span>
-          </div>
-          {result.mom_test_critique.violations?.map((v, i) => (
-            <div
-              key={i}
-              className="text-xs text-ink-2 py-1.5 px-2 border-l-[3px] border-warn bg-[#fdf6e0] rounded-r-lg mb-1.5"
-            >
-              {v.type.replace(/_/g, ' ')}
-              <span className="block text-good-text mt-0.5">Better: {v.better}</span>
+          <div className="mb-2.5">
+            <span className="text-[10px] uppercase tracking-wider text-muted font-semibold">Score</span>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[34px] font-bold tracking-tight">
+                {result.mom_test_critique.score}
+                <small className="text-sm text-muted font-normal">/10</small>
+              </span>
             </div>
-          ))}
+          </div>
+          {result.mom_test_critique.good_questions && result.mom_test_critique.good_questions.length > 0 && (
+            <div className="mb-2.5">
+              <span className="text-[10px] uppercase tracking-wider text-muted font-semibold">Best question</span>
+              <p className="text-[13px] text-ink-2 mt-0.5">
+                "{result.mom_test_critique.good_questions[0]}"
+              </p>
+            </div>
+          )}
+          {result.mom_test_critique.violations && result.mom_test_critique.violations.length > 0 && (
+            <div>
+              <span className="text-[10px] uppercase tracking-wider text-muted font-semibold">Violations</span>
+              <div className="mt-1">
+                {result.mom_test_critique.violations.map((v, i) => (
+                  <div
+                    key={i}
+                    className="text-xs text-ink-2 py-1.5 px-2 border-l-[3px] border-warn bg-[#fdf6e0] rounded-r-lg mb-1.5"
+                  >
+                    {v.type.replace(/_/g, ' ')}
+                    <span className="block text-good-text mt-0.5">Better: "{v.better}"</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -241,3 +241,46 @@ async def test_sse_event_data_contains_kind_and_status(
         if e["event"] != "done":
             assert "kind" in e["data"], f"Event {e['event']} missing 'kind' in data"
             assert "status" in e["data"], f"Event {e['event']} missing 'status' in data"
+
+
+@pytest.mark.asyncio
+async def test_worker_publishes_stage_before_handler_work(
+    app, session_factory: async_sessionmaker[AsyncSession]
+):
+    """UX #10: stage state is committed before slow normalization/LLM work."""
+    from app.worker import run_worker_once
+
+    async with session_factory() as session:
+        convo = Conversation(title="Observable stage", status="processing")
+        session.add(convo)
+        await session.flush()
+        conversation_id = convo.id
+        session.add(
+            Job(
+                conversation_id=conversation_id,
+                kind="ingest",
+                status="queued",
+                payload={"conversation_id": conversation_id},
+            )
+        )
+        await session.commit()
+
+    observed_statuses: list[str] = []
+
+    async def observe_stage(db, job, settings):
+        async with session_factory() as observer:
+            observed = await observer.get(Conversation, conversation_id)
+            assert observed is not None
+            observed_statuses.append(observed.status)
+        current = await db.get(Conversation, conversation_id)
+        assert current is not None
+        current.status = "ready"
+
+    processed = await run_worker_once(
+        session_factory,
+        app.state.settings,
+        handlers={"ingest": observe_stage},
+    )
+
+    assert processed is True
+    assert observed_statuses == ["normalizing"]

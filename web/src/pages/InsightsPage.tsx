@@ -133,25 +133,44 @@ export function InsightsPage() {
             <div className="bg-surface border border-hairline rounded-xl p-4 mb-3.5">
               <h2 className="text-[13.5px] font-semibold mb-0.5">Signal volume over time</h2>
               <p className="text-xs text-muted mb-3">Accepted highlights per month, by tag · click legend to toggle</p>
-              <ResponsiveContainer width="100%" height={260}>
-                <LineChart data={tagVolumeData}>
-                  <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  {Object.keys(CHART_COLORS).map((tag) => (
-                    <Line
-                      key={tag}
-                      type="monotone"
-                      dataKey={tag}
-                      stroke={CHART_COLORS[tag]}
-                      strokeWidth={2}
-                      dot={false}
-                      name={`${tagEmoji(tag)} ${tag}`}
-                      hide={hiddenSeries.has(tag)}
-                    />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
+              {tagVolumeData.length >= 2 ? (
+                <ResponsiveContainer width="100%" height={260}>
+                  <LineChart data={tagVolumeData}>
+                    <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+                    <YAxis tick={{ fontSize: 11 }} />
+                    <Tooltip />
+                    {Object.keys(CHART_COLORS).map((tag) => (
+                      <Line
+                        key={tag}
+                        type="monotone"
+                        dataKey={tag}
+                        stroke={CHART_COLORS[tag]}
+                        strokeWidth={2}
+                        dot={false}
+                        name={`${tagEmoji(tag)} ${tag}`}
+                        hide={hiddenSeries.has(tag)}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted mb-2" data-testid="sparse-chart-msg">First month — trends appear next month</p>
+                  {tagVolumeData.length === 1 && (
+                    <div className="flex justify-center gap-2 items-end h-16">
+                      {Object.entries(tagVolumeData[0]).filter(([k]) => k !== 'month').map(([tag, val]) => (
+                        <div key={tag} className="flex flex-col items-center">
+                          <div
+                            className="w-6 rounded-t"
+                            style={{ height: `${Math.max(8, Number(val) * 4)}px`, backgroundColor: CHART_COLORS[tag] || '#888' }}
+                          />
+                          <span className="text-[10px] text-muted mt-1">{tagEmoji(tag)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Custom interactive legend */}
               <ul className="flex flex-wrap gap-3 mt-2 list-none p-0" role="list" aria-label="Chart legend">
                 {Object.entries(CHART_COLORS).map(([tag, color]) => (
@@ -180,27 +199,35 @@ export function InsightsPage() {
               <div className="bg-surface border border-hairline rounded-xl p-4">
                 <h2 className="text-[13.5px] font-semibold mb-0.5">Compliment ratio trend</h2>
                 <p className="text-xs text-muted mb-3">🎈 share of all highlights — are interviews getting less fluffy?</p>
-                <ResponsiveContainer width="100%" height={150}>
-                  <AreaChart data={complimentRatioData}>
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} unit="%" />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="ratio" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.1} strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {complimentRatioData.length >= 2 ? (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <AreaChart data={complimentRatioData}>
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} unit="%" />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="ratio" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.1} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-sm text-muted text-center py-6" data-testid="sparse-chart-ratio">First month — trends appear next month</p>
+                )}
               </div>
 
               <div className="bg-surface border border-hairline rounded-xl p-4">
                 <h2 className="text-[13.5px] font-semibold mb-0.5">Interview quality trend</h2>
                 <p className="text-xs text-muted mb-3">Avg Mom Test critique score per month</p>
-                <ResponsiveContainer width="100%" height={150}>
-                  <AreaChart data={critiqueTrendData}>
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} domain={[0, 10]} />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="score" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.1} strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {critiqueTrendData.length >= 2 ? (
+                  <ResponsiveContainer width="100%" height={150}>
+                    <AreaChart data={critiqueTrendData}>
+                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 11 }} domain={[0, 10]} />
+                      <Tooltip />
+                      <Area type="monotone" dataKey="score" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.1} strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <p className="text-sm text-muted text-center py-6" data-testid="sparse-chart-critique">First month — trends appear next month</p>
+                )}
               </div>
             </div>
           </>
@@ -223,7 +250,7 @@ export function InsightsPage() {
               const isOld = age != null && age > 14;
               return (
                 <div key={fu.id} className="flex gap-2.5 items-baseline py-2 border-b border-hairline last:border-b-0 text-[13px]">
-                  <span>☆ {fu.quote}</span>
+                  <span>☆ {fu.task || fu.quote}</span>
                   <Link to={`/conversations/${fu.conversation_id}`} className="text-accent whitespace-nowrap">
                     {fu.conversation_title} ↗
                   </Link>

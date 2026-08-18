@@ -78,7 +78,14 @@ export interface SynthesisResponse extends Omit<Schemas['SynthesisResponse'], 'r
 export interface AnalysisResult {
   summary?: string;
   top_pains?: Array<{ pain: string; evidence_highlight_ids: number[]; severity: string }>;
-  commitments?: Array<{ what: string; type: string; next_step: string }>;
+  commitments?: Array<{
+    what: string;
+    actor?: string;
+    cost?: string;
+    type: string;
+    next_step: string;
+    evidence_highlight_ids?: number[];
+  }>;
   compliment_ratio?: number;
   mom_test_critique?: {
     score: number;
@@ -112,6 +119,7 @@ export interface StatsResponse {
   compliment_ratio_trend: Array<{ date: string; ratio: number; conversation_id: number }>;
   open_followups: Array<{
     id: number;
+    task: string;
     quote: string;
     conversation_id: number;
     conversation_title: string;
@@ -148,13 +156,13 @@ export interface HypothesisEvidenceLink {
   quote: string;
   conversation_id: number;
   conversation_title: string;
-  utterance_id: number;
-  company_name: string;
-  contact_name: string;
-  confidence: number;
+  utterance_id: number | null;
+  company_name: string | null;
+  contact_name: string | null;
+  confidence: number | null;
   origin: string;
   status: string;
-  rationale: string;
+  rationale: string | null;
 }
 
 export interface HypothesisDetail extends HypothesisListItem {
@@ -363,6 +371,36 @@ export const api = {
     return apiFetch<Company[]>('/api/companies');
   },
 
+  listActiveCompanies() {
+    return apiFetch<Company[]>('/api/companies?active_only=true');
+  },
+
+  // ─── Settings (#22) ───
+
+  getSettingsStatus() {
+    return apiFetch<Record<string, unknown>>('/api/settings/status');
+  },
+
+  // ─── Bulk highlights (#14) ───
+
+  bulkAcceptHighlights(body: {
+    highlight_ids?: number[];
+    min_confidence?: number;
+    tag_key?: string;
+    conversation_id?: number;
+  }) {
+    return apiFetch<{ accepted_count: number; accepted_ids: number[] }>('/api/highlights/bulk-accept', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  // ─── Simulator sessions (#19) ───
+
+  listSimulatorSessions() {
+    return apiFetch<{ items: Array<{ id: number; title: string; status: string; created_at: string | null; score: number | null; has_analysis: boolean }>; total: number }>('/api/simulator/sessions');
+  },
+
   // ─── Hypotheses ───
 
   listHypotheses() {
@@ -374,14 +412,14 @@ export const api = {
   },
 
   createHypothesis(body: { statement: string; segment?: string }) {
-    return apiFetch<HypothesisListItem>('/api/hypotheses', {
+    return apiFetch<Schemas['HypothesisResponse']>('/api/hypotheses', {
       method: 'POST',
       body: JSON.stringify(body),
     });
   },
 
   updateHypothesis(id: number, body: { status?: string; statement?: string; segment?: string }) {
-    return apiFetch<HypothesisListItem>(`/api/hypotheses/${id}`, {
+    return apiFetch<Schemas['HypothesisResponse']>(`/api/hypotheses/${id}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
     });

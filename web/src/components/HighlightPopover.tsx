@@ -21,8 +21,28 @@ export function HighlightPopover({ highlight, position, onAccept, onReject, onRe
         onClose();
       }
     };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+    const handleScroll = () => {
+      onClose();
+    };
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('keydown', handleEscape);
+    // Close on scroll of transcript or sidebar containers
+    const scrollContainers = document.querySelectorAll('[data-scroll-container]');
+    scrollContainers.forEach((el) => el.addEventListener('scroll', handleScroll));
+    // Also close on window scroll
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('keydown', handleEscape);
+      scrollContainers.forEach((el) => el.removeEventListener('scroll', handleScroll));
+      window.removeEventListener('scroll', handleScroll, true);
+    };
   }, [onClose]);
 
   return (
@@ -30,6 +50,8 @@ export function HighlightPopover({ highlight, position, onAccept, onReject, onRe
       ref={ref}
       className="fixed z-20 bg-surface border border-hairline rounded-xl shadow-lg p-3 w-[250px]"
       style={{ top: position.top, left: position.left }}
+      role="dialog"
+      aria-label="Highlight review"
     >
       <b className="text-[13px]">
         {tagEmoji(highlight.tag_key)} {tagName(highlight.tag_key)}{' '}

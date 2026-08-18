@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.models import Job, utcnow
+from app.models import Conversation, Job, utcnow
 from app.worker import run_worker_once
 
 
@@ -103,3 +103,35 @@ async def test_unknown_job_kind_errors(
         job = await session.get(Job, job_id)
         assert job.status == "error"
         assert "Unknown job kind" in (job.error or "")
+
+
+@pytest.mark.asyncio
+async def test_pipeline_retry_resets_visible_stage_to_processing(
+    session_factory: async_sessionmaker[AsyncSession], test_settings: Settings
+):
+    async with session_factory() as session:
+        conversation = Conversation(title="Retry state", status="processing")
+        session.add(conversation)
+        await session.flush()
+        conversation_id = conversation.id
+        session.add(
+            Job(
+                kind="ingest",
+                conversation_id=conversation_id,
+                payload={"conversation_id": conversation_id},
+                status="queued",
+            )
+        )
+        await session.commit()
+
+    async def fail_handler(db, job, settings):
+        raise ValueError("retry me")
+
+    await run_worker_once(
+        session_factory, test_settings, handlers={"ingest": fail_handler}
+    )
+
+    async with session_factory() as session:
+        conversation = await session.get(Conversation, conversation_id)
+        assert conversation is not None
+        assert conversation.status == "processing"

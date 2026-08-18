@@ -387,6 +387,8 @@ def test_ollama_config_settings_fields():
         session_secret="test",
         openai_api_key="",
         env="test",
+        llm_max_context=32768,
+        _env_file=None,
     )
     # Test that new settings fields exist:
     required_fields = [

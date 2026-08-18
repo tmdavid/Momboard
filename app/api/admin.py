@@ -81,9 +81,26 @@ async def list_companies(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    active_only: bool = False,
 ):
-    """List all companies."""
-    result = await db.execute(select(Company).order_by(Company.name))
+    """List companies. If active_only=true, hide zero-conversation companies (#15)."""
+    if active_only:
+        from app.models import Conversation
+
+        # Subquery: company IDs with at least one conversation (avoids N+1)
+        active_ids_subq = (
+            select(Conversation.company_id)
+            .where(Conversation.company_id.is_not(None))
+            .distinct()
+            .subquery()
+        )
+        result = await db.execute(
+            select(Company)
+            .where(Company.id.in_(select(active_ids_subq.c.company_id)))
+            .order_by(Company.name)
+        )
+    else:
+        result = await db.execute(select(Company).order_by(Company.name))
     return [CompanyResponse.model_validate(c) for c in result.scalars().all()]
 
 

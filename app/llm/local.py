@@ -153,6 +153,62 @@ class OllamaClient:
             prompt_version=prompt.version if prompt else "unknown",
         )
 
+    async def generate(
+        self,
+        prompt: str,
+        schema: type[T],
+        model: str = "default",
+    ) -> T:
+        """Free-form prompt → structured output via Ollama /api/chat.
+
+        Same contract as OpenAIResponsesClient.generate / FakeLLMClient.generate.
+        """
+        import json as json_mod
+
+        resolved_model = self.model_map.get(model, self.model)
+        json_schema = schema.model_json_schema()
+        format_schema = self._flatten_schema(json_schema)
+
+        messages = [{"role": "user", "content": prompt}]
+        payload: dict[str, Any] = {
+            "model": resolved_model,
+            "messages": messages,
+            "format": format_schema,
+            "stream": False,
+            "think": False,
+        }
+
+        response = await self._call(payload)
+        content = response.get("message", {}).get("content", "")
+
+        try:
+            return schema.model_validate_json(content)
+        except (ValidationError, json_mod.JSONDecodeError) as e:
+            # Retry once with error feedback
+            repair_messages = messages + [
+                {"role": "assistant", "content": content},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Your response did not match the required JSON schema. "
+                        f"Error: {e}. Please fix and return valid JSON."
+                    ),
+                },
+            ]
+            repair_payload: dict[str, Any] = {
+                "model": resolved_model,
+                "messages": repair_messages,
+                "format": format_schema,
+                "stream": False,
+                "think": False,
+            }
+            response = await self._call(repair_payload)
+            content = response.get("message", {}).get("content", "")
+            try:
+                return schema.model_validate_json(content)
+            except (ValidationError, json_mod.JSONDecodeError) as e2:
+                raise LLMSchemaError(f"generate() schema validation failed after retry: {e2}")
+
     async def close(self) -> None:
         """Close the HTTP client."""
         await self._client.aclose()

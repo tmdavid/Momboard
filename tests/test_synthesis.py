@@ -24,6 +24,8 @@ async def test_post_synthesis_creates_analysis_and_enqueues_job(
     assert r.status_code == 201
     body = r.json()
     assert body["kind"] == "synthesis"
+    assert body["status"] == "queued"
+    assert body["error"] is None
     assert body["input_scope"] == {"tag": "pain", "company_id": 1}
 
     # Verify job was queued
@@ -58,6 +60,7 @@ async def test_get_synthesis_returns_result(auth_client: AsyncClient):
     assert r.status_code == 200
     body = r.json()
     assert body["kind"] == "synthesis"
+    assert body["status"] == "done"
     assert body["result"] is not None
 
 
@@ -246,3 +249,31 @@ async def test_synthesizer_evidence_ids_validated(
         # Only valid ID should remain
         assert valid_id in out.themes[0].evidence_highlight_ids
         assert 99999 not in out.themes[0].evidence_highlight_ids
+
+
+@pytest.mark.asyncio
+async def test_get_synthesis_returns_safe_terminal_failure(auth_client: AsyncClient):
+    """Polling should distinguish a failed worker job from a still-running synthesis."""
+    sf = auth_client._transport.app.state.session_factory  # type: ignore
+    async with sf() as db:
+        analysis = Analysis(kind="synthesis", input_scope={"tag": "pain"})
+        db.add(analysis)
+        await db.flush()
+        db.add(
+            Job(
+                kind="synthesize",
+                payload={"analysis_id": analysis.id, "filters": {"tag": "pain"}},
+                status="error",
+                error="provider secret or implementation detail",
+            )
+        )
+        await db.commit()
+        analysis_id = analysis.id
+
+    response = await auth_client.get(f"/api/syntheses/{analysis_id}")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "error"
+    assert body["error"] == "Synthesis failed. Please retry."
+    assert "provider secret" not in response.text

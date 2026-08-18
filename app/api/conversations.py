@@ -217,6 +217,9 @@ async def list_conversations(
         selectinload(Conversation.contacts),
     )
 
+    # T39: Library list excludes simulated conversations (direct detail still allowed)
+    query = query.where(Conversation.source != "simulator")
+
     # Apply filters
     if company_id:
         query = query.where(Conversation.company_id == company_id)
@@ -468,6 +471,8 @@ async def conversation_events(
         emitted: set[str] = set()  # Track already-sent event keys
 
         while True:
+            if await request.is_disconnected():
+                return
             async with session_factory() as db:
                 result = await db.execute(
                     select(Job)

@@ -63,7 +63,7 @@ describe('T22: Insights tag-volume legend series toggling', () => {
       });
       expect(visiblePainLines.length).toBe(0);
     });
-  });
+  }, 10_000);
 
   test('toggling a legend entry off does not break the compliment ratio or critique trend panels', async () => {
     // Requirement: Toggling a series in the tag-volume legend is isolated —

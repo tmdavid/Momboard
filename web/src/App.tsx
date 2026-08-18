@@ -8,6 +8,13 @@ import { ConversationPage } from './pages/ConversationPage';
 import { ExplorePage } from './pages/ExplorePage';
 import { InsightsPage } from './pages/InsightsPage';
 import { HypothesesPage } from './pages/HypothesesPage';
+import { ContactPage } from './pages/ContactPage';
+import { CompanyPage } from './pages/CompanyPage';
+import { DigestPage } from './pages/DigestPage';
+import { SimulatorPage } from './pages/SimulatorPage';
+import { DecisionsPage } from './pages/DecisionsPage';
+import { MeetingsPage } from './pages/MeetingsPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { Layout } from './components/Layout';
 
 // ─── Auth context ───
@@ -34,18 +41,15 @@ function useGlobal401Handler() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    // Subscribe to query cache — detect 401 errors from any query
     const unsubQuery = queryClient.getQueryCache().subscribe((event) => {
       if (event.type === 'updated' && event.query.state.status === 'error') {
         const err = event.query.state.error;
         if (err instanceof ApiError && err.status === 401) {
-          // Force AuthGate to show login by clearing the user data
           queryClient.setQueryData(['me'], null);
         }
       }
     });
 
-    // Subscribe to mutation cache — detect 401 errors from any mutation
     const unsubMutation = queryClient.getMutationCache().subscribe((event) => {
       if (event.type === 'updated' && event.mutation?.state.status === 'error') {
         const err = event.mutation.state.error;
@@ -55,8 +59,6 @@ function useGlobal401Handler() {
       }
     });
 
-    // Listen for window focus to re-validate session
-    // TanStack Query v5 only listens to visibilitychange, so we also listen on focus
     const handleFocus = () => {
       queryClient.invalidateQueries({ queryKey: ['me'] });
     };
@@ -111,10 +113,32 @@ export function App() {
           }
         />
         <Route
+          path="/inbox"
+          element={
+            <Navigate to="/?tab=inbox" replace />
+          }
+        />
+        <Route
           path="/conversations/:id"
           element={
             <AuthGate>
               <ConversationPage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/contacts/:id"
+          element={
+            <AuthGate>
+              <ContactPage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/companies/:id"
+          element={
+            <AuthGate>
+              <CompanyPage />
             </AuthGate>
           }
         />
@@ -139,6 +163,46 @@ export function App() {
           element={
             <AuthGate>
               <InsightsPage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/digest"
+          element={
+            <AuthGate>
+              <DigestPage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/simulator"
+          element={
+            <AuthGate>
+              <SimulatorPage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/decisions"
+          element={
+            <AuthGate>
+              <DecisionsPage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/meetings"
+          element={
+            <AuthGate>
+              <MeetingsPage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <AuthGate>
+              <SettingsPage />
             </AuthGate>
           }
         />

@@ -19,7 +19,10 @@ from app.api.schemas import (
 )
 from app.auth import get_current_user
 from app.models import (
+    Company,
+    Contact,
     Conversation,
+    ConversationContact,
     Highlight,
     Hypothesis,
     HypothesisLink,
@@ -154,6 +157,12 @@ async def list_hypotheses(
                 db, hyp.id
             )
             verdict_hint = _compute_verdict_hint(supports, contradicts, co_sup, co_con)
+
+            # Freshness (T41)
+            from app.services.staleness import get_hypothesis_freshness
+
+            freshness_data = await get_hypothesis_freshness(db, hyp.id)
+
             items.append({
                 "id": hyp.id,
                 "statement": hyp.statement,
@@ -174,6 +183,8 @@ async def list_hypotheses(
                     companies_supporting=co_sup,
                     companies_contradicting=co_con,
                     last_evidence_at=last_ev,
+                    freshness=freshness_data["freshness"],
+                    newest_evidence_at=freshness_data.get("newest_evidence_at"),
                 ),
                 "verdict_hint": verdict_hint,
             })
@@ -220,11 +231,53 @@ async def get_hypothesis_detail(
         )
         verdict_hint = _compute_verdict_hint(supports, contradicts, co_sup, co_con)
 
-        # Load links for the detail response
-        links_result = await db.execute(
-            select(HypothesisLink).where(HypothesisLink.hypothesis_id == hypothesis_id)
+        # Load each link with the highlight and source context required by the UI.
+        context_result = await db.execute(
+            select(HypothesisLink, Highlight, Conversation, Company)
+            .join(Highlight, HypothesisLink.highlight_id == Highlight.id)
+            .join(Conversation, Highlight.conversation_id == Conversation.id)
+            .outerjoin(Company, Conversation.company_id == Company.id)
+            .where(HypothesisLink.hypothesis_id == hypothesis_id)
+            .order_by(HypothesisLink.created_at, HypothesisLink.id)
         )
-        links = links_result.scalars().all()
+        context_rows = context_result.all()
+        links = [row[0] for row in context_rows]
+
+        conversation_ids = {conversation.id for _, _, conversation, _ in context_rows}
+        contact_names: dict[int, str] = {}
+        if conversation_ids:
+            contacts_result = await db.execute(
+                select(ConversationContact.conversation_id, Contact.name)
+                .join(Contact, ConversationContact.contact_id == Contact.id)
+                .where(ConversationContact.conversation_id.in_(conversation_ids))
+                .order_by(ConversationContact.conversation_id, Contact.id)
+            )
+            for conversation_id, contact_name in contacts_result.all():
+                contact_names.setdefault(conversation_id, contact_name)
+
+        evidence: dict[str, list[dict]] = {
+            "supports": [],
+            "contradicts": [],
+        }
+        for link, highlight, conversation, company in context_rows:
+            # Rejected suggestions are retained in the legacy links field for
+            # auditability, but are not renderable evidence on the board.
+            if link.status == "rejected":
+                continue
+            evidence[link.stance].append({
+                "link_id": link.id,
+                "highlight_id": highlight.id,
+                "quote": highlight.quote,
+                "conversation_id": conversation.id,
+                "conversation_title": conversation.title,
+                "utterance_id": highlight.utterance_id,
+                "company_name": company.name if company else None,
+                "contact_name": contact_names.get(conversation.id),
+                "confidence": link.confidence,
+                "origin": link.origin,
+                "status": link.status,
+                "rationale": link.rationale,
+            })
 
         link_responses = [
             HypothesisLinkResponse(
@@ -241,6 +294,25 @@ async def get_hypothesis_detail(
             for link in links
         ]
 
+        from app.services.staleness import get_hypothesis_freshness
+
+        freshness_data = await get_hypothesis_freshness(db, hypothesis_id)
+        rollup = HypothesisRollup(
+            supports={
+                "confirmed": supports.get("confirmed", 0),
+                "suggested": supports.get("suggested", 0),
+            },
+            contradicts={
+                "confirmed": contradicts.get("confirmed", 0),
+                "suggested": contradicts.get("suggested", 0),
+            },
+            companies_supporting=co_sup,
+            companies_contradicting=co_con,
+            last_evidence_at=last_ev,
+            freshness=freshness_data["freshness"],
+            newest_evidence_at=freshness_data.get("newest_evidence_at"),
+        )
+
         return {
             "id": hyp.id,
             "statement": hyp.statement,
@@ -249,6 +321,8 @@ async def get_hypothesis_detail(
             "created_by": hyp.created_by,
             "decided_at": hyp.decided_at,
             "created_at": hyp.created_at,
+            "rollup": rollup,
+            "evidence": evidence,
             "supports": supports,
             "contradicts": contradicts,
             "companies_supporting": co_sup,

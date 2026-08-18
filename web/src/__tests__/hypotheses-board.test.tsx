@@ -21,6 +21,7 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render';
 import { App } from '../App';
+import type { HypothesisListItem } from '../api';
 
 // ─── Mock data: REST contract for GET /api/hypotheses ───
 
@@ -422,8 +423,8 @@ describe('T28: Hypotheses board — evidence expansion', () => {
     await waitFor(() => {
       // Both stance group headings appear
       const region = screen.getByRole('region', { name: /evidence/i });
-      expect(within(region).getByText(/supports/i)).toBeInTheDocument();
-      expect(within(region).getByText(/contradicts/i)).toBeInTheDocument();
+      expect(within(region).getAllByText(/supports/i).length).toBeGreaterThan(0);
+      expect(within(region).getAllByText(/contradicts/i).length).toBeGreaterThan(0);
     });
   });
 
@@ -856,6 +857,64 @@ describe('T28: Hypotheses board — new hypothesis composer', () => {
     });
   });
 
+  test('keeps a valid card when POST returns the basic hypothesis response', async () => {
+    const statement = 'Operations teams need audit-ready evidence before they will automate enforcement';
+    const basicResponseSpy = vi.fn();
+    let createdListItem: HypothesisListItem | null = null;
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    server.use(
+      http.post('/api/hypotheses', async ({ request }) => {
+        const body = (await request.json()) as { statement: string };
+        basicResponseSpy();
+        const createdAt = new Date().toISOString();
+        createdListItem = {
+          id: 99,
+          statement: body.statement,
+          segment: null,
+          status: 'open',
+          created_by: 1,
+          created_at: createdAt,
+          decided_at: null,
+          rollup: {
+            supports: { confirmed: 0, suggested: 0 },
+            contradicts: { confirmed: 0, suggested: 0 },
+            companies_supporting: 0,
+            companies_contradicting: 0,
+            last_evidence_at: null,
+          },
+          verdict_hint: null,
+        };
+        return HttpResponse.json(
+          {
+            id: 99,
+            statement: body.statement,
+            segment: null,
+            status: 'open',
+            created_by: 1,
+            created_at: createdAt,
+            decided_at: null,
+          },
+          { status: 201 },
+        );
+      }),
+      http.get('/api/hypotheses', () =>
+        HttpResponse.json(createdListItem ? [createdListItem, ...mockHypotheses] : mockHypotheses),
+      ),
+    );
+
+    const input = await screen.findByPlaceholderText(/falsifiable/i);
+    await user.type(input, statement);
+    await user.click(screen.getByRole('button', { name: /add hypothesis/i }));
+
+    await waitFor(() => {
+      expect(basicResponseSpy).toHaveBeenCalledOnce();
+      const card = screen.getByText(statement).closest('[data-testid="hypothesis-card"]');
+      expect(card).toBeInTheDocument();
+      expect(within(card as HTMLElement).getByRole('meter')).toBeInTheDocument();
+    });
+  });
+
   test('after successful submission, the input is cleared', async () => {
     const user = userEvent.setup();
     renderHypothesesPage();
@@ -1045,7 +1104,7 @@ describe('T28: Hypotheses board — keyboard accessibility', () => {
 
     await waitFor(() => {
       // Evidence should expand
-      expect(screen.getByText(/supports/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/supports/i).length).toBeGreaterThan(0);
     });
   });
 

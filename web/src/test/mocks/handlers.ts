@@ -293,4 +293,191 @@ export const handlers = [
   http.get('/api/companies', () => {
     return HttpResponse.json(mockCompanies);
   }),
+
+  // Simulator (T39)
+  http.post('/api/simulator/personas', () => {
+    return HttpResponse.json({
+      id: 1,
+      kind: 'persona',
+      result: {
+        name: 'Marta',
+        role: 'Operations Manager',
+        company_profile: 'Mid-size enterprise, 200 employees',
+        traits: [],
+        sore_points: ['Manual reporting', 'Data silos'],
+        vocabulary_hints: ['spreadsheet', 'weekly sync'],
+      },
+    }, { status: 201 });
+  }),
+
+  http.post('/api/simulator/sessions', () => {
+    return HttpResponse.json({
+      id: 10,
+      title: 'Simulator: Marta',
+      source: 'simulator',
+      meta: { simulated: true, persona_id: 1 },
+    }, { status: 201 });
+  }),
+
+  http.post('/api/simulator/sessions/:id/turns', () => {
+    return HttpResponse.json({ reply: "We use Excel exports every Monday.", turn_idx: 1 });
+  }),
+
+  http.post('/api/simulator/sessions/:id/end', () => {
+    return HttpResponse.json({ id: 10, title: 'Simulator: Marta', status: 'ready', meta: { simulated: true } });
+  }),
+
+  http.get('/api/simulator/sessions/:id/result', () => {
+    return HttpResponse.json({
+      id: 10,
+      title: 'Simulator: Marta',
+      status: 'ready',
+      meta: { simulated: true },
+      analysis: {
+        id: 1,
+        kind: 'conversation',
+        result: {
+          mom_test_critique: {
+            score: 7,
+            good_questions: ['Asked about past events', 'Dug into specifics'],
+            violations: [{ utterance_idx: 2, type: 'pitched_the_idea', better: 'Ask about current workflow first' }],
+          },
+          summary: 'Good practice session.',
+          top_pains: [
+            { pain: 'Manual reporting consumes half a day', evidence_highlight_ids: [1], severity: 'high' },
+          ],
+        },
+        created_at: '2026-08-15T12:00:00Z',
+      },
+    });
+  }),
+
+  // Audio upload (T35)
+  http.post('/api/conversations/upload', () => {
+    return HttpResponse.json(
+      { id: 50, title: 'Uploaded audio', status: 'processing', created_at: new Date().toISOString(), transcript_preview: 'WEBVTT\n\n00:00:00.000...' },
+      { status: 201 },
+    );
+  }),
+
+  // Decisions (T40)
+  http.get('/api/decisions', () => {
+    return HttpResponse.json({
+      items: [
+        { id: 1, title: 'Build auto-reports', status: 'decided', integrity: 'ok', decided_at: '2026-08-10T00:00:00Z', created_at: '2026-08-01T00:00:00Z' },
+        { id: 2, title: 'Prioritize Slack integration', status: 'proposed', integrity: 'undermined', decided_at: null, created_at: '2026-08-05T00:00:00Z' },
+      ],
+      total: 2,
+    });
+  }),
+
+  http.get('/api/decisions/:id', ({ params }) => {
+    return HttpResponse.json({
+      id: Number(params.id),
+      title: 'Build auto-reports',
+      rationale_md: 'Enterprise users report manual export pain weekly.',
+      status: 'decided',
+      integrity: 'ok',
+      integrity_reasons: null,
+      hypothesis_id: null,
+      decided_at: '2026-08-10T00:00:00Z',
+      decided_by: 1,
+      superseded_by: null,
+      evidence: [
+        { highlight_id: 1, quote: 'Every Monday I export to Excel', tag_key: 'pain', conversation_id: 1, conversation_title: 'Discovery call', conversation_happened_at: '2026-08-12T10:00:00Z', status: 'accepted' },
+      ],
+      created_at: '2026-08-01T00:00:00Z',
+    });
+  }),
+
+  http.post('/api/decisions', async ({ request }) => {
+    const body = await request.json() as { title: string; evidence: number[] };
+    if (!body.evidence || body.evidence.length === 0) {
+      return new HttpResponse(JSON.stringify({ detail: 'at least one evidence' }), { status: 422 });
+    }
+    return HttpResponse.json({ id: 99, title: body.title, status: 'proposed', integrity: 'ok', created_at: new Date().toISOString() }, { status: 201 });
+  }),
+
+  http.patch('/api/decisions/:id/status', () => {
+    return HttpResponse.json({ id: 1, status: 'decided', decided_at: new Date().toISOString() });
+  }),
+
+  http.get('/api/decisions/:id/integrity', () => {
+    return HttpResponse.json({ decision_id: 1, integrity: 'ok', reasons: [] });
+  }),
+
+  // Lenses (T43)
+  http.post('/api/lenses', async ({ request }) => {
+    const body = await request.json() as { a: unknown; b: unknown };
+    return HttpResponse.json({
+      id: 1,
+      kind: 'lens',
+      input_scope: body,
+      result: {
+        themes_a: [{ name: 'Enterprise scale', summary: 'Need bulk operations', side: 'a', evidence_highlight_ids: [1] }],
+        themes_b: [{ name: 'SMB simplicity', summary: 'Want quick setup', side: 'b', evidence_highlight_ids: [3] }],
+        themes_shared: [{ name: 'Excel exports', summary: 'Both export to Excel', side: 'both', evidence_highlight_ids: [1, 3] }],
+        contradictions: [{ name: 'Automation vs manual', summary: 'A wants full automation, B prefers manual control', side: 'contradiction', evidence_highlight_ids: [1, 3] }],
+        evidence_context: {
+          '1': { highlight_id: 1, quote: 'Every Monday I export all flagged listings to Excel', tag_key: 'pain', conversation_id: 1, conversation_title: 'Discovery — counterfeit listings', side: 'a' },
+          '3': { highlight_id: 3, quote: 'Key sellers show up on every marketplace', tag_key: 'pain', conversation_id: 2, conversation_title: 'Key-reselling sites', side: 'b' },
+        },
+      },
+    }, { status: 201 });
+  }),
+
+  // Vexa (T36) — official API contract: platform/native_meeting_id addressing
+  http.post('/api/vexa/bots', () => {
+    return HttpResponse.json({ platform: 'google_meet', native_meeting_id: 'abc-defg-hij', status: 'joining' }, { status: 201 });
+  }),
+
+  http.delete('/api/vexa/bots/:platform/:native_meeting_id', () => {
+    return HttpResponse.json({ status: 'stopped' });
+  }),
+
+  http.get('/api/vexa/transcripts/:platform/:native_meeting_id', () => {
+    return HttpResponse.json({ segments: [{ speaker: 'Alice', text: 'Hello world', completed: true }], total: 1 });
+  }),
+
+  http.post('/api/vexa/import', () => {
+    return HttpResponse.json({ status: 'imported', inbox_item_id: 1, source_ref: 'vexa:google_meet:abc-defg-hij', title: 'Meeting' }, { status: 201 });
+  }),
+
+  // Highlight deletion (T40)
+  http.delete('/api/highlights/:id', () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Inbox (nav badge + Library subtab)
+  http.get('/api/inbox', () => {
+    return HttpResponse.json({ items: [], total: 0 });
+  }),
+
+  // Settings status (#22)
+  http.get('/api/settings/status', () => {
+    return HttpResponse.json({
+      llm: { backend: 'openai', model_normalizer: 'gpt-5-mini', model_tagger: 'gpt-5-mini', model_analyst: 'gpt-5-mini', model_synthesizer: 'gpt-5-mini', api_key_configured: true, api_key_hint: 'sk-•••4f2' },
+      vexa: { configured: true, detail: 'connected' },
+      gdrive: { configured: false, detail: 'not configured' },
+      slack: { configured: true, detail: 'configured' },
+      digest: { slack_configured: true, schedule: 'Slack · Mon 08:00' },
+      taxonomy_count: 12,
+      active_company_count: 2,
+    });
+  }),
+
+  // Simulator sessions listing (#19)
+  http.get('/api/simulator/sessions', () => {
+    return HttpResponse.json({
+      items: [
+        { id: 10, title: 'Simulator: Marta', status: 'ready', created_at: '2026-08-15T12:00:00Z', score: 7, has_analysis: true },
+      ],
+      total: 1,
+    });
+  }),
+
+  // Bulk accept (#14)
+  http.post('/api/highlights/bulk-accept', async () => {
+    return HttpResponse.json({ accepted_count: 0, accepted_ids: [] });
+  }),
 ];

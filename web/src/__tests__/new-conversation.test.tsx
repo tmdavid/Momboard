@@ -257,7 +257,7 @@ describe('T16 — Submit and optimistic row insertion', () => {
     // Row should appear optimistically in the library with processing status
     await waitFor(() => {
       // The library should show the new item (either from optimistic cache or refetch)
-      expect(screen.getByText('processing')).toBeInTheDocument();
+      expect(screen.getByText('Processing…')).toBeInTheDocument();
     });
   });
 
@@ -442,6 +442,70 @@ describe('T16 — SSE completion flips row status', () => {
     // Status should flip to ready
     await waitFor(() => {
       expect(screen.getByText(/ready/i)).toBeInTheDocument();
+    });
+  });
+});
+
+
+describe('UX #10 — visible SSE pipeline stages', () => {
+  let originalEventSource: typeof EventSource;
+
+  beforeEach(() => {
+    originalEventSource = global.EventSource;
+    // @ts-expect-error test EventSource implementation
+    global.EventSource = MockEventSource;
+    MockEventSource.instances = [];
+  });
+
+  afterEach(() => {
+    global.EventSource = originalEventSource;
+  });
+
+  test('ingest.running refreshes an already-processing row to Normalizing', async () => {
+    const processingItem = {
+      id: 77,
+      title: 'Live stage conversation',
+      happened_at: '2026-08-17T10:00:00Z',
+      status: 'processing',
+      interviewer: 'David',
+      company: null,
+      contacts: [],
+      meta: null,
+      created_at: '2026-08-17T10:00:00Z',
+      tag_counts: {},
+      critique_score: null,
+    };
+    server.use(
+      http.get('/api/conversations', () =>
+        HttpResponse.json({ items: [processingItem], total: 1, limit: 50, offset: 0 }),
+      ),
+    );
+
+    renderWithProviders(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Live stage conversation')).toBeInTheDocument();
+      expect(MockEventSource.instances.length).toBeGreaterThan(0);
+    });
+
+    server.use(
+      http.get('/api/conversations', () =>
+        HttpResponse.json({
+          items: [{ ...processingItem, status: 'normalizing' }],
+          total: 1,
+          limit: 50,
+          offset: 0,
+        }),
+      ),
+    );
+
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1];
+    await act(async () => {
+      es.emit('ingest.running', JSON.stringify({ kind: 'ingest', status: 'running' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Normalizing…')).toBeInTheDocument();
     });
   });
 });

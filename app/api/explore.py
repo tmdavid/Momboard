@@ -45,6 +45,7 @@ async def list_highlights(
         select(Highlight, Conversation, Company)
         .join(Conversation, Highlight.conversation_id == Conversation.id)
         .outerjoin(Company, Conversation.company_id == Company.id)
+        .where(Conversation.source != "simulator")  # T39: exclude simulated
     )
 
     # Default: exclude rejected
@@ -113,9 +114,13 @@ async def get_stats(
 ):
     """Get aggregated stats: tag counts by month, critique trend, etc."""
     # Tag counts by month — dialect-portable, done in Python
+    # T39: exclude simulated conversations from corpus-level stats
     highlights_result = await db.execute(
-        select(Highlight.tag_key, Highlight.created_at).where(
-            Highlight.status.in_(["suggested", "accepted"])
+        select(Highlight.tag_key, Highlight.created_at)
+        .join(Conversation, Highlight.conversation_id == Conversation.id)
+        .where(
+            Highlight.status.in_(["suggested", "accepted"]),
+            Conversation.source != "simulator",
         )
     )
     highlights_rows = highlights_result.all()
@@ -130,16 +135,21 @@ async def get_stats(
                 tag_counts_by_month[month_key].get(tag_key, 0) + 1
             )
 
-    # Critique score trend
+    # Critique score trend (exclude simulated)
     analyses_result = await db.execute(
         select(Analysis.result, Analysis.created_at, Analysis.conversation_id)
-        .where(Analysis.kind == "conversation")
+        .join(Conversation, Analysis.conversation_id == Conversation.id)
+        .where(
+            Analysis.kind == "conversation",
+            Conversation.source != "simulator",
+        )
         .order_by(Analysis.created_at)
     )
     analyses_rows = analyses_result.all()
 
     critique_trend: list[dict[str, Any]] = []
     compliment_ratio_trend: list[dict[str, Any]] = []
+    followup_tasks: dict[int, str] = {}
     for result_data, created_at, convo_id in analyses_rows:
         if result_data and isinstance(result_data, dict):
             critique = result_data.get("mom_test_critique", {})
@@ -156,20 +166,35 @@ async def get_stats(
                     "ratio": ratio,
                     "conversation_id": convo_id,
                 })
+            commitments = result_data.get("commitments", [])
+            if isinstance(commitments, list):
+                for commitment in commitments:
+                    if not isinstance(commitment, dict):
+                        continue
+                    task = commitment.get("next_step") or commitment.get("what")
+                    evidence_ids = commitment.get("evidence_highlight_ids", [])
+                    if not isinstance(task, str) or not task.strip() or not isinstance(evidence_ids, list):
+                        continue
+                    for highlight_id in evidence_ids:
+                        if isinstance(highlight_id, int):
+                            followup_tasks[highlight_id] = task.strip()
 
-    # Open follow-ups
+    # Open follow-ups (exclude simulated). Keep the verbatim quote as evidence,
+    # but prefer the analyst's evidence-linked actionable task for display.
     followups_result = await db.execute(
         select(Highlight, Conversation)
         .join(Conversation, Highlight.conversation_id == Conversation.id)
         .where(
             Highlight.tag_key == "followup",
             Highlight.status.in_(["suggested", "accepted"]),
+            Conversation.source != "simulator",
         )
         .order_by(Highlight.created_at.desc())
     )
     followups: list[dict[str, Any]] = [
         {
             "id": h.id,
+            "task": followup_tasks.get(h.id, h.quote),
             "quote": h.quote,
             "conversation_id": c.id,
             "conversation_title": c.title,
@@ -184,4 +209,13 @@ async def get_stats(
         critique_trend=critique_trend,
         compliment_ratio_trend=compliment_ratio_trend,
         open_followups=followups,
+        stale_hypotheses=await _count_stale_hypotheses(db),
     )
+
+
+async def _count_stale_hypotheses(db: AsyncSession) -> int:
+    """Count open hypotheses with stale evidence (T41)."""
+    from app.services.staleness import get_stale_hypotheses
+
+    stale = await get_stale_hypotheses(db)
+    return len(stale)

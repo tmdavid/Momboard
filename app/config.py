@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """App settings loaded from environment / .env file."""
 
     app_name: str = "MomBoard"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     env: str = "development"
 
     # Database
@@ -35,6 +35,22 @@ class Settings(BaseSettings):
     # Worker
     worker_poll_interval: float = 2.0
     worker_max_retries: int = 3
+
+    # T31: Digest Slack delivery
+    slack_webhook_url: str = ""
+
+    # T24: Google Drive polling
+    gdrive_folder_id: str = ""
+    gdrive_service_account_json: str = ""
+    gdrive_poll_interval_minutes: int = 30
+
+    # T41: Staleness thresholds (days)
+    staleness_fresh_days: int = 90
+    staleness_aging_days: int = 180
+
+    # T36: Vexa meeting bot integration (disabled by default)
+    vexa_base_url: str = ""
+    vexa_api_key: str = ""
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

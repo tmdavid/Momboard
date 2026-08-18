@@ -266,6 +266,7 @@ class StatsResponse(BaseModel):
     critique_trend: list[dict[str, Any]]
     compliment_ratio_trend: list[dict[str, Any]]
     open_followups: list[dict[str, Any]]
+    stale_hypotheses: int = 0  # T41: count of open hypotheses with stale evidence
 
 
 # --- Syntheses ---
@@ -283,6 +284,8 @@ class SynthesisResponse(BaseModel):
     model: str | None = None
     prompt_version: str | None = None
     created_at: datetime
+    status: str = "pending"
+    error: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -324,6 +327,8 @@ class HypothesisRollup(BaseModel):
     companies_supporting: int = 0
     companies_contradicting: int = 0
     last_evidence_at: datetime | None = None
+    freshness: str = "stale"  # fresh|aging|stale (T41)
+    newest_evidence_at: str | None = None  # ISO date of newest confirmed supporting evidence
 
 
 class HypothesisListItemResponse(BaseModel):
@@ -377,6 +382,28 @@ class HypothesisLinkUpdate(BaseModel):
     status: str  # confirmed|rejected
 
 
+class HypothesisEvidenceItemResponse(BaseModel):
+    """Evidence link enriched with the quote and source context needed by the board."""
+
+    link_id: int
+    highlight_id: int
+    quote: str
+    conversation_id: int
+    conversation_title: str
+    utterance_id: int | None = None
+    company_name: str | None = None
+    contact_name: str | None = None
+    confidence: float | None = None
+    origin: str
+    status: str
+    rationale: str | None = None
+
+
+class HypothesisEvidenceResponse(BaseModel):
+    supports: list[HypothesisEvidenceItemResponse] = Field(default_factory=list)
+    contradicts: list[HypothesisEvidenceItemResponse] = Field(default_factory=list)
+
+
 class HypothesisDetailResponse(BaseModel):
     id: int
     statement: str
@@ -385,6 +412,9 @@ class HypothesisDetailResponse(BaseModel):
     created_by: int | None = None
     decided_at: datetime | None = None
     created_at: datetime
+    rollup: HypothesisRollup = Field(default_factory=HypothesisRollup)
+    evidence: HypothesisEvidenceResponse = Field(default_factory=HypothesisEvidenceResponse)
+    # Legacy flat rollup/link fields retained for API compatibility.
     supports: dict[str, int] = Field(default_factory=dict)
     contradicts: dict[str, int] = Field(default_factory=dict)
     companies_supporting: int = 0

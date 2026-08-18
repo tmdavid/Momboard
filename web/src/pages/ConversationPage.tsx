@@ -1,4 +1,4 @@
-import { useParams, Link, useLocation } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, Highlight } from '../api';
 import { useReviewQueue } from '../hooks/useReviewQueue';
@@ -13,6 +13,7 @@ export function ConversationPage() {
   const conversationId = Number(id);
   const queryClient = useQueryClient();
   const location = useLocation();
+  const navigate = useNavigate();
 
   const { data: convo, isLoading, error } = useQuery({
     queryKey: ['conversation', conversationId],
@@ -78,6 +79,37 @@ export function ConversationPage() {
       queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
     },
   });
+
+  // #14: Bulk accept mutation
+  const bulkAcceptMutation = useMutation({
+    mutationFn: (body: { min_confidence?: number; tag_key?: string; conversation_id?: number }) =>
+      api.bulkAcceptHighlights(body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversation', conversationId] });
+      setOptimisticOverrides({});
+    },
+  });
+
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const deleteConversationMutation = useMutation({
+    mutationFn: () => api.deleteConversation(conversationId),
+    onSuccess: () => {
+      queryClient.removeQueries({ queryKey: ['conversation', conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      navigate('/', { replace: true });
+    },
+  });
+
+  const openDeleteDialog = () => {
+    deleteConversationMutation.reset();
+    setShowDeleteDialog(true);
+  };
+
+  const closeDeleteDialog = () => {
+    if (!deleteConversationMutation.isPending) {
+      setShowDeleteDialog(false);
+    }
+  };
 
   const suggestedHighlights = highlights.filter((h) => h.status === 'suggested');
   const { focusNext, focusPrev, currentHighlight } = useReviewQueue(suggestedHighlights);
@@ -282,10 +314,21 @@ export function ConversationPage() {
           <button
             className="text-xs px-2.5 py-1 rounded-lg border border-hairline bg-page hover:bg-accent-soft hover:border-accent text-ink-2 hover:text-accent transition-colors disabled:opacity-50"
             disabled={reprocessMutation.isPending || convo.status === 'processing'}
-            onClick={() => reprocessMutation.mutate()}
-            title="Re-run AI tagging and analysis"
+            onClick={() => {
+              if (window.confirm('Re-run AI tagging and analysis? Accepted/rejected decisions are preserved.')) {
+                reprocessMutation.mutate();
+              }
+            }}
+            title="Re-runs AI tagging and analysis while accepted/rejected decisions are preserved"
           >
             {reprocessMutation.isPending || convo.status === 'processing' ? '⟳ Processing…' : '🔄 Retag'}
+          </button>
+          <button
+            className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-300 transition-colors"
+            onClick={openDeleteDialog}
+            title="Permanently delete this conversation"
+          >
+            Delete conversation
           </button>
         </div>
       </div>
@@ -293,16 +336,64 @@ export function ConversationPage() {
       <div className="flex-1 flex min-h-0">
         {/* Transcript */}
         <section ref={transcriptRef} className="flex-1 overflow-y-auto px-8 py-6 pb-32" onMouseUp={handleTextSelect}>
-          {/* Review banner */}
+          {/* #24: Review banner — sticky, solid surface/background with border and shadow */}
           {suggestedHighlights.length > 0 && (
-            <div className="sticky top-0 z-10 flex gap-2.5 items-center bg-accent-soft border border-[#bcd7f5] rounded-xl px-3.5 py-2 mb-4 text-[13px]">
-              <b>Review mode</b> — {suggestedHighlights.filter((h) => h.status === 'suggested').length} suggestions left ·
-              <span>
-                <kbd className="bg-surface border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">j</kbd>/
-                <kbd className="bg-surface border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">k</kbd> next/prev ·{' '}
-                <kbd className="bg-surface border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">a</kbd> accept ·{' '}
-                <kbd className="bg-surface border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">x</kbd> reject
-              </span>
+            <div className="sticky top-0 z-10 flex flex-col gap-2 bg-surface border border-[#bcd7f5] rounded-xl px-3.5 py-2.5 mb-5 text-[13px] shadow-sm">
+              <div className="flex gap-2.5 items-center flex-wrap">
+                <b>Review mode</b> — {suggestedHighlights.length} suggestions left ·
+                <span>
+                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">j</kbd>/
+                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">k</kbd> next/prev ·{' '}
+                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">a</kbd> accept ·{' '}
+                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">x</kbd> reject
+                </span>
+              </div>
+              {/* #14: remaining-by-tag counts */}
+              <div className="flex gap-1.5 flex-wrap items-center" data-testid="remaining-by-tag">
+                <span className="text-muted text-xs">Remaining:</span>
+                {Object.entries(
+                  suggestedHighlights.reduce((acc, h) => {
+                    acc[h.tag_key] = (acc[h.tag_key] || 0) + 1;
+                    return acc;
+                  }, {} as Record<string, number>),
+                ).map(([tag, count]) => (
+                  <button
+                    key={tag}
+                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-hairline bg-page text-ink-2 hover:border-accent hover:text-accent"
+                    title={`Accept all ${count} suggested "${TAG_META[tag]?.name || tag}"`}
+                    onClick={() => {
+                      const n = suggestedHighlights.filter((h) => h.tag_key === tag).length;
+                      if (window.confirm(`Accept all ${n} suggested "${TAG_META[tag]?.name || tag}" highlights?`)) {
+                        bulkAcceptMutation.mutate({ tag_key: tag, conversation_id: conversationId });
+                      }
+                    }}
+                  >
+                    {tagEmoji(tag)} <span className="font-semibold">{count}</span>
+                  </button>
+                ))}
+              </div>
+              {/* #14: Accept all >= 0.9 with count preview + confirmation */}
+              <div className="flex gap-2 items-center">
+                {(() => {
+                  const highConf = suggestedHighlights.filter((h) => (h.confidence ?? 0) >= 0.9).length;
+                  return (
+                    <button
+                      className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-accent text-white hover:bg-[#1c5cab] disabled:opacity-40"
+                      disabled={highConf === 0 || bulkAcceptMutation.isPending}
+                      onClick={() => {
+                        if (window.confirm(`Accept all ${highConf} high-confidence (≥ 0.9) suggestions?`)) {
+                          bulkAcceptMutation.mutate({ min_confidence: 0.9, conversation_id: conversationId });
+                        }
+                      }}
+                    >
+                      Bulk ≥ 0.9 ({highConf})
+                    </button>
+                  );
+                })()}
+                {bulkAcceptMutation.isError && (
+                  <span className="text-xs text-crit" role="alert">Bulk accept failed — no changes applied.</span>
+                )}
+              </div>
             </div>
           )}
 
@@ -394,7 +485,8 @@ export function ConversationPage() {
           </p>
         </section>
 
-        {/* Analysis sidebar */}
+        {/* Analysis sidebar — with #24 hairline divider */}
+        <div className="w-px bg-hairline flex-none" />
         <AnalysisSidebar analysis={analysis ?? null} highlights={highlights} onJumpToUtterance={jumpToUtterance} />
       </div>
 
@@ -408,6 +500,47 @@ export function ConversationPage() {
           onRetag={handleRetagFromPopover}
           onClose={() => setPopoverHighlight(null)}
         />
+      )}
+
+      {showDeleteDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-conversation-title"
+            className="w-full max-w-md rounded-2xl border border-hairline bg-surface p-5 shadow-xl"
+          >
+            <h2 id="delete-conversation-title" className="text-lg font-bold text-ink">
+              Delete conversation?
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed text-ink-2">
+              This permanently deletes the transcript, highlights, analysis, notes, and related
+              evidence for <b>{convo.title}</b>. This cannot be undone.
+            </p>
+            {deleteConversationMutation.isError && (
+              <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                Could not delete conversation. Please try again.
+              </p>
+            )}
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                className="rounded-lg border border-hairline bg-surface px-3 py-2 text-sm font-semibold text-ink-2 hover:bg-page disabled:opacity-50"
+                disabled={deleteConversationMutation.isPending}
+                onClick={closeDeleteDialog}
+              >
+                Cancel
+              </button>
+              <button
+                autoFocus
+                className="rounded-lg border border-red-700 bg-red-700 px-3 py-2 text-sm font-semibold text-white hover:bg-red-800 disabled:cursor-wait disabled:opacity-60"
+                disabled={deleteConversationMutation.isPending}
+                onClick={() => deleteConversationMutation.mutate()}
+              >
+                {deleteConversationMutation.isPending ? 'Deleting…' : 'Delete permanently'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Notes drawer */}

@@ -75,13 +75,19 @@ Tag the signals you find. Return a JSON object with a "highlights" array.""",
 
 ANALYST_PROMPT = Prompt(
     name="analyst",
-    version="analyst-v1",
+    version="analyst-v2",
     template="""You are a Mom Test conversation analyst. Analyze this interview transcript and its tagged highlights.
 
 ## Your job:
 1. Write a 3-5 sentence factual summary
 2. Identify top pains with evidence (reference highlight IDs)
-3. List real commitments (time/reputation/money given up)
+3. List real commitments ONLY. A commitment requires:
+   - A SPECIFIC ACTOR (named person or role, not "they")
+   - A CONCRETE COST: time booked, money pledged, reputation risked, intro given
+   - Reject fragments, vague intentions ("we should…"), and non-commitments.
+   - "actor" field = who gives up something; "cost" field = what they give up
+   - "next_step" = synthesized actionable task (prefer this over raw quote in display)
+   - "evidence_highlight_ids" = IDs of the commitment/follow-up highlights that prove it
 4. Calculate the compliment ratio (what fraction of highlights are compliments vs real signals)
 5. Critique the INTERVIEWER's technique:
    - Score 0-10 (10 = perfect Mom Test adherence)
