@@ -57,13 +57,13 @@ export interface paths {
         };
         /**
          * List Companies
-         * @description List companies. If active_only=true, hide zero-conversation companies (#15).
+         * @description List companies with conversation counts, optionally active only.
          */
         get: operations["list_companies_api_companies_get"];
         put?: never;
         /**
          * Create Company
-         * @description Create a company.
+         * @description Create a company for the directory.
          */
         post: operations["create_company_api_companies_post"];
         delete?: never;
@@ -87,7 +87,7 @@ export interface paths {
         put?: never;
         /**
          * Create Contact
-         * @description Create a contact.
+         * @description Create a contact and preserve its selected company association.
          */
         post: operations["create_contact_api_contacts_post"];
         delete?: never;
@@ -822,9 +822,7 @@ export interface paths {
         };
         /**
          * Get Settings Status
-         * @description Return safe, read-only system configuration status.
-         *
-         *     Never returns full secrets — only booleans and masked hints.
+         * @description Return safe system configuration and current-user capabilities.
          */
         get: operations["get_settings_status_api_settings_status_get"];
         put?: never;
@@ -1377,6 +1375,11 @@ export interface components {
         /** CompanyResponse */
         CompanyResponse: {
             /**
+             * Conversation Count
+             * @default 0
+             */
+            conversation_count: number;
+            /**
              * Created At
              * Format: date-time
              */
@@ -1392,6 +1395,8 @@ export interface components {
         };
         /** ContactCreate */
         ContactCreate: {
+            /** Company Id */
+            company_id?: number | null;
             /** Email */
             email?: string | null;
             /** Name */
@@ -2081,6 +2086,8 @@ export interface components {
         SettingsStatusResponse: {
             /** Active Company Count */
             active_company_count: number;
+            /** Can Manage Taxonomy */
+            can_manage_taxonomy: boolean;
             digest: components["schemas"]["DigestStatus"];
             gdrive: components["schemas"]["ServiceStatus"];
             llm: components["schemas"]["LLMStatus"];
@@ -2416,7 +2423,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["CompanyResponse"];
                 };
             };
             /** @description Validation Error */
@@ -2445,7 +2452,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ContactResponse"][];
                 };
             };
         };
@@ -2469,7 +2476,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ContactResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4152,7 +4159,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TagResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4187,7 +4194,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["TagResponse"];
                 };
             };
             /** @description Validation Error */

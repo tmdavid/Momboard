@@ -1,7 +1,7 @@
-"""Admin API: tags, companies, contacts management."""
+"""Admin API: tags, companies, and contacts management."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -14,7 +14,7 @@ from app.api.schemas import (
     TagUpdate,
 )
 from app.auth import get_current_user, require_admin
-from app.models import Company, Contact, Tag, User
+from app.models import Company, Contact, Conversation, Tag, User
 
 router = APIRouter()
 
@@ -30,10 +30,10 @@ async def list_tags(
 ):
     """List all tags."""
     result = await db.execute(select(Tag).order_by(Tag.sort_order))
-    return [TagResponse.model_validate(t) for t in result.scalars().all()]
+    return [TagResponse.model_validate(tag) for tag in result.scalars().all()]
 
 
-@router.post("/tags", status_code=201)
+@router.post("/tags", response_model=TagResponse, status_code=201)
 async def create_tag(
     body: TagResponse,
     request: Request,
@@ -41,6 +41,8 @@ async def create_tag(
     user: User = Depends(require_admin),
 ):
     """Create a new tag (admin only)."""
+    if await db.get(Tag, body.key) is not None:
+        raise HTTPException(status_code=409, detail="Tag key already exists")
     tag = Tag(
         key=body.key,
         emoji=body.emoji,
@@ -55,7 +57,7 @@ async def create_tag(
     return TagResponse.model_validate(tag)
 
 
-@router.patch("/tags/{key}")
+@router.patch("/tags/{key}", response_model=TagResponse)
 async def update_tag(
     key: str,
     body: TagUpdate,
@@ -67,13 +69,19 @@ async def update_tag(
     tag = await db.get(Tag, key)
     if tag is None:
         raise HTTPException(status_code=404, detail="Tag not found")
-    for k, v in body.model_dump(exclude_unset=True).items():
-        setattr(tag, k, v)
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(tag, field, value)
     await db.flush()
     return TagResponse.model_validate(tag)
 
 
 # --- Companies ---
+
+
+def _company_response(company: Company, conversation_count: int = 0) -> CompanyResponse:
+    return CompanyResponse.model_validate(company).model_copy(
+        update={"conversation_count": conversation_count}
+    )
 
 
 @router.get("/companies", response_model=list[CompanyResponse])
@@ -83,45 +91,53 @@ async def list_companies(
     user: User = Depends(get_current_user),
     active_only: bool = False,
 ):
-    """List companies. If active_only=true, hide zero-conversation companies (#15)."""
+    """List companies with conversation counts, optionally active only."""
+    counts = (
+        select(
+            Conversation.company_id.label("company_id"),
+            func.count(Conversation.id).label("conversation_count"),
+        )
+        .where(Conversation.company_id.is_not(None))
+        .group_by(Conversation.company_id)
+        .subquery()
+    )
+    count_value = func.coalesce(counts.c.conversation_count, 0)
+    query = (
+        select(Company, count_value.label("conversation_count"))
+        .outerjoin(counts, counts.c.company_id == Company.id)
+        .order_by(Company.name)
+    )
     if active_only:
-        from app.models import Conversation
+        query = query.where(count_value > 0)
 
-        # Subquery: company IDs with at least one conversation (avoids N+1)
-        active_ids_subq = (
-            select(Conversation.company_id)
-            .where(Conversation.company_id.is_not(None))
-            .distinct()
-            .subquery()
-        )
-        result = await db.execute(
-            select(Company)
-            .where(Company.id.in_(select(active_ids_subq.c.company_id)))
-            .order_by(Company.name)
-        )
-    else:
-        result = await db.execute(select(Company).order_by(Company.name))
-    return [CompanyResponse.model_validate(c) for c in result.scalars().all()]
+    result = await db.execute(query)
+    return [
+        _company_response(company, int(conversation_count))
+        for company, conversation_count in result.all()
+    ]
 
 
-@router.post("/companies", status_code=201)
+@router.post("/companies", response_model=CompanyResponse, status_code=201)
 async def create_company(
     body: CompanyCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Create a company."""
+    """Create a company for the directory."""
+    existing = await db.execute(select(Company.id).where(Company.name == body.name))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="Company name already exists")
     company = Company(name=body.name, domain=body.domain)
     db.add(company)
     await db.flush()
-    return CompanyResponse.model_validate(company)
+    return _company_response(company)
 
 
 # --- Contacts ---
 
 
-@router.get("/contacts")
+@router.get("/contacts", response_model=list[ContactResponse])
 async def list_contacts(
     request: Request,
     db: AsyncSession = Depends(get_db),
@@ -129,18 +145,25 @@ async def list_contacts(
 ):
     """List all contacts."""
     result = await db.execute(select(Contact).order_by(Contact.name))
-    return [ContactResponse.model_validate(c) for c in result.scalars().all()]
+    return [ContactResponse.model_validate(contact) for contact in result.scalars().all()]
 
 
-@router.post("/contacts", status_code=201)
+@router.post("/contacts", response_model=ContactResponse, status_code=201)
 async def create_contact(
     body: ContactCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Create a contact."""
-    contact = Contact(name=body.name, role=body.role, email=body.email)
+    """Create a contact and preserve its selected company association."""
+    if body.company_id is not None and await db.get(Company, body.company_id) is None:
+        raise HTTPException(status_code=404, detail="Company not found")
+    contact = Contact(
+        name=body.name,
+        role=body.role,
+        email=body.email,
+        company_id=body.company_id,
+    )
     db.add(contact)
     await db.flush()
     return ContactResponse.model_validate(contact)

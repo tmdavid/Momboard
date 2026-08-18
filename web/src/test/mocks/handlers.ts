@@ -18,8 +18,12 @@ export const mockTags = [
 ];
 
 export const mockCompanies = [
-  { id: 1, name: 'Acme Watches', domain: 'acme.com', notes: null, created_at: '2026-08-01T00:00:00Z' },
-  { id: 2, name: 'Northwind Apparel', domain: null, notes: null, created_at: '2026-08-02T00:00:00Z' },
+  { id: 1, name: 'Acme Watches', domain: 'acme.com', notes: null, conversation_count: 1, created_at: '2026-08-01T00:00:00Z' },
+  { id: 2, name: 'Northwind Apparel', domain: null, notes: null, conversation_count: 0, created_at: '2026-08-02T00:00:00Z' },
+];
+
+export const mockContacts = [
+  { id: 1, name: 'Jane Doe', role: 'Brand Manager', email: null, company_id: 1, created_at: '2026-08-01T00:00:00Z' },
 ];
 
 export const mockConversations = {
@@ -292,6 +296,10 @@ export const handlers = [
 
   http.get('/api/companies', () => {
     return HttpResponse.json(mockCompanies);
+  }),
+
+  http.get('/api/contacts', () => {
+    return HttpResponse.json(mockContacts);
   }),
 
   // Simulator (T39)

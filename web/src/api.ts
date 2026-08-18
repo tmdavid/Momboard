@@ -361,10 +361,24 @@ export const api = {
     return apiFetch<SynthesisResponse>(`/api/syntheses/${id}`);
   },
 
-  // ─── Admin ───
+  // ─── Admin and directory ───
 
   listTags() {
     return apiFetch<Tag[]>('/api/tags');
+  },
+
+  createTag(body: Tag) {
+    return apiFetch<Tag>('/api/tags', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  updateTag(key: string, body: Partial<Pick<Tag, 'emoji' | 'name' | 'description' | 'signal_strength' | 'sort_order' | 'is_active'>>) {
+    return apiFetch<Tag>(`/api/tags/${encodeURIComponent(key)}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
   },
 
   listCompanies() {
@@ -375,10 +389,33 @@ export const api = {
     return apiFetch<Company[]>('/api/companies?active_only=true');
   },
 
+  createCompany(body: { name: string; domain?: string | null }) {
+    return apiFetch<Company>('/api/companies', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  listContacts() {
+    return apiFetch<Contact[]>('/api/contacts');
+  },
+
+  createContact(body: {
+    name: string;
+    role?: string | null;
+    email?: string | null;
+    company_id?: number | null;
+  }) {
+    return apiFetch<Contact>('/api/contacts', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
   // ─── Settings (#22) ───
 
-  getSettingsStatus() {
-    return apiFetch<Record<string, unknown>>('/api/settings/status');
+  getSettingsStatus<T>() {
+    return apiFetch<T>('/api/settings/status');
   },
 
   // ─── Bulk highlights (#14) ───

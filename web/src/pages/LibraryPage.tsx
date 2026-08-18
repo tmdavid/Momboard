@@ -207,7 +207,7 @@ export function LibraryPage() {
         happened_at: variables.happened_at || new Date().toISOString(),
         status: 'processing',
         interviewer: variables.interviewer || null,
-        company: variables.company ? { id: 0, name: variables.company.name, domain: null, notes: null, created_at: new Date().toISOString() } : null,
+        company: variables.company ? { id: 0, name: variables.company.name, domain: null, notes: null, conversation_count: 0, created_at: new Date().toISOString() } : null,
         contacts: (variables.contacts || []).map((c, i) => ({ id: -(i + 1), name: c.name, role: c.role || null, email: null, company_id: null, created_at: new Date().toISOString() })),
         meta: variables.meta || null,
         created_at: new Date().toISOString(),

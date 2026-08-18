@@ -59,7 +59,7 @@ function SettingsDropdown({ onClose }: { onClose: () => void }) {
           {status?.vexa?.configured ? 'connected' : 'not configured'}
         </span>
       </Link>
-      <Link to="/settings" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
+      <Link to="/settings#sources" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
         📁 Google Drive sync
         <span className={`text-[11.5px] ${stateClass(status?.gdrive?.configured ?? false)}`}>
           {status?.gdrive?.configured ? 'connected' : 'not configured'}
@@ -73,19 +73,19 @@ function SettingsDropdown({ onClose }: { onClose: () => void }) {
         </span>
       </Link>
       <h4 className="text-[11px] uppercase tracking-wider text-muted px-2.5 pt-2 pb-1 font-semibold">System</h4>
-      <Link to="/settings" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
+      <Link to="/settings#llm" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
         🔑 LLM &amp; API keys
-        <span className={`text-[11.5px] ${stateClass(status?.llm?.api_key_configured ?? false)}`}>
+        <span className={`text-[11.5px] ${stateClass(status?.llm?.backend === 'local' || (status?.llm?.api_key_configured ?? false))}`}>
           {status?.llm ? `${status.llm.backend} · ${status.llm.api_key_hint}` : '—'}
         </span>
       </Link>
-      <Link to="/settings" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
+      <Link to="/settings#taxonomy" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
         🏷 Taxonomy
         <span className="text-[11.5px] text-muted">
           {status ? `${status.taxonomy_count} tags` : '—'}
         </span>
       </Link>
-      <Link to="/settings" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
+      <Link to="/settings#directory" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
         🏢 Companies &amp; contacts
         <span className="text-[11.5px] text-muted">
           {status ? `${status.active_company_count} active` : '—'}

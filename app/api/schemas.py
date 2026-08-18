@@ -33,6 +33,7 @@ class CompanyResponse(BaseModel):
     name: str
     domain: str | None = None
     notes: str | None = None
+    conversation_count: int = 0
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -45,6 +46,7 @@ class ContactCreate(BaseModel):
     name: str
     role: str | None = None
     email: str | None = None
+    company_id: int | None = None
 
 
 class ContactResponse(BaseModel):

@@ -1,8 +1,8 @@
-"""Settings status API: read-only, safe configuration status (#22).
+"""Settings status API: safe configuration and capability status (#22).
 
-Exposes masked key states (never full secrets), model names, service
-connection states (booleans), digest schedule, taxonomy count, and
-active company count.
+Exposes masked key states (never full secrets), active model names, service
+connection states, digest schedule, taxonomy/company counts, and whether the
+current user may administer taxonomy.
 """
 
 from fastapi import APIRouter, Depends, Request
@@ -31,12 +31,12 @@ class LLMStatus(BaseModel):
     model_analyst: str
     model_synthesizer: str
     api_key_configured: bool
-    api_key_hint: str  # "configured" or "not set"
+    api_key_hint: str  # "configured", "not set", or "not required"
 
 
 class DigestStatus(BaseModel):
     slack_configured: bool
-    schedule: str  # e.g. "Slack · Mon 08:00" or "not configured"
+    schedule: str
 
 
 class SettingsStatusResponse(BaseModel):
@@ -47,6 +47,7 @@ class SettingsStatusResponse(BaseModel):
     digest: DigestStatus
     taxonomy_count: int
     active_company_count: int
+    can_manage_taxonomy: bool
 
 
 def _mask_key(key: str) -> str:
@@ -60,17 +61,12 @@ async def get_settings_status(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """Return safe, read-only system configuration status.
-
-    Never returns full secrets — only booleans and masked hints.
-    """
+    """Return safe system configuration and current-user capabilities."""
     settings = request.app.state.settings
 
-    # Taxonomy count
     taxonomy_result = await db.execute(select(func.count()).select_from(Tag))
     taxonomy_count = taxonomy_result.scalar_one()
 
-    # Active company count (companies with at least one conversation)
     active_companies_result = await db.execute(
         select(func.count(func.distinct(Company.id))).where(
             Company.id.in_(
@@ -80,37 +76,53 @@ async def get_settings_status(
     )
     active_company_count = active_companies_result.scalar_one()
 
-    # LLM status
+    is_local = settings.llm_backend == "local"
+    if is_local:
+        active_models = {
+            "normalizer": settings.llm_local_model,
+            "tagger": settings.llm_local_model,
+            "analyst": settings.llm_local_model,
+            "synthesizer": settings.llm_local_model,
+        }
+        api_key_hint = "not required"
+    else:
+        active_models = {
+            "normalizer": settings.llm_model_normalizer,
+            "tagger": settings.llm_model_tagger,
+            "analyst": settings.llm_model_analyst,
+            "synthesizer": settings.llm_model_synthesizer,
+        }
+        api_key_hint = _mask_key(settings.openai_api_key)
+
     llm_status = LLMStatus(
         backend=settings.llm_backend,
-        model_normalizer=settings.llm_model_normalizer,
-        model_tagger=settings.llm_model_tagger,
-        model_analyst=settings.llm_model_analyst,
-        model_synthesizer=settings.llm_model_synthesizer,
+        model_normalizer=active_models["normalizer"],
+        model_tagger=active_models["tagger"],
+        model_analyst=active_models["analyst"],
+        model_synthesizer=active_models["synthesizer"],
         api_key_configured=bool(settings.openai_api_key),
-        api_key_hint=_mask_key(settings.openai_api_key),
+        api_key_hint=api_key_hint,
     )
 
-    # Vexa status
+    vexa_configured = bool(settings.vexa_base_url and settings.vexa_api_key)
     vexa_status = ServiceStatus(
-        configured=bool(settings.vexa_base_url and settings.vexa_api_key),
-        detail="connected" if (settings.vexa_base_url and settings.vexa_api_key) else "not configured",
+        configured=vexa_configured,
+        detail="connected" if vexa_configured else "not configured",
     )
 
-    # Google Drive status
+    gdrive_configured = bool(
+        settings.gdrive_folder_id and settings.gdrive_service_account_json
+    )
     gdrive_status = ServiceStatus(
-        configured=bool(settings.gdrive_folder_id and settings.gdrive_service_account_json),
-        detail="connected" if (settings.gdrive_folder_id and settings.gdrive_service_account_json) else "not configured",
+        configured=gdrive_configured,
+        detail="connected" if gdrive_configured else "not configured",
     )
 
-    # Slack status
     slack_configured = bool(settings.slack_webhook_url)
     slack_status = ServiceStatus(
         configured=slack_configured,
         detail="configured" if slack_configured else "not configured",
     )
-
-    # Digest schedule
     digest_status = DigestStatus(
         slack_configured=slack_configured,
         schedule="Slack · Mon 08:00" if slack_configured else "not configured",
@@ -124,4 +136,5 @@ async def get_settings_status(
         digest=digest_status,
         taxonomy_count=taxonomy_count,
         active_company_count=active_company_count,
+        can_manage_taxonomy=user.role == "admin",
     )
