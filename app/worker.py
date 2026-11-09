@@ -524,20 +524,87 @@ async def run_worker_once(
     return True
 
 
+async def reclaim_stale_jobs(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> int:
+    """Reset jobs orphaned in the ``running`` state back to ``queued``.
+
+    The worker is single-process (one asyncio task within the FastAPI lifespan),
+    so at startup no job is legitimately ``running`` — any such job was left
+    orphaned by a crash, kill, or the host being suspended mid-request (which can
+    park an LLM call on a dead socket). Without this, those jobs and their
+    conversations stay stuck forever, because ``run_worker_once`` only ever claims
+    ``queued`` jobs.
+
+    Re-queued jobs keep their ``attempts`` count, so a job that genuinely wedges
+    the worker repeatedly still trips ``WORKER_MAX_RETRIES`` and becomes terminal
+    rather than looping indefinitely.
+
+    Returns the number of jobs reclaimed.
+    """
+    async with session_factory() as db:
+        result = await db.execute(
+            update(Job)
+            .where(Job.status == "running")
+            .values(status="queued", started_at=None)
+            .execution_options(synchronize_session=False)
+        )
+        await db.commit()
+        count: int = result.rowcount or 0
+        if count:
+            logger.warning("Reclaimed %d stale running job(s) on startup", count)
+        return count
+
+
 async def worker_loop(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
+    *,
+    worker_id: int = 0,
 ) -> None:
-    """Main worker loop. Polls every settings.worker_poll_interval seconds."""
-    logger.info("Worker started")
+    """A single worker: repeatedly claim and process one job at a time.
+
+    Multiple instances run concurrently via ``run_worker_pool``. Concurrency is
+    safe because ``run_worker_once`` claims jobs with an atomic CAS
+    (UPDATE ... WHERE status='queued'), so two workers never process the same job.
+    Per-conversation stage ordering is preserved because each stage only enqueues
+    the next after its handler completes.
+    """
+    logger.info("Worker %d started", worker_id)
     while True:
         try:
             processed = await run_worker_once(session_factory, settings)
             if not processed:
                 await asyncio.sleep(settings.worker_poll_interval)
         except asyncio.CancelledError:
-            logger.info("Worker stopped")
+            logger.info("Worker %d stopped", worker_id)
             return
         except Exception:
-            logger.exception("Worker loop error")
+            logger.exception("Worker %d loop error", worker_id)
             await asyncio.sleep(settings.worker_poll_interval)
+
+
+async def run_worker_pool(
+    session_factory: async_sessionmaker[AsyncSession],
+    settings: Settings,
+) -> None:
+    """Run ``settings.worker_concurrency`` workers concurrently.
+
+    Each worker independently claims and processes jobs. Because job handlers are
+    dominated by network-bound LLM calls (which release the event loop while
+    awaiting), running several concurrently multiplies throughput without extra
+    processes. Defaults to 1 (fully sequential, original behaviour).
+    """
+    concurrency = max(1, settings.worker_concurrency)
+    logger.info("Starting worker pool with concurrency=%d", concurrency)
+    tasks = [
+        asyncio.create_task(worker_loop(session_factory, settings, worker_id=i))
+        for i in range(concurrency)
+    ]
+    try:
+        await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise

@@ -58,13 +58,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """App lifespan: start worker + backup scheduler, dispose engine on shutdown."""
     import asyncio
 
-    from app.worker import worker_loop
+    from app.worker import reclaim_stale_jobs, run_worker_pool
 
     settings: Settings = app.state.settings
     engine = app.state.engine
 
-    # Start background worker
-    task = asyncio.create_task(worker_loop(app.state.session_factory, settings))
+    # Recover any jobs left in `running` by a previous crash/kill/suspend so a
+    # worker doesn't stay wedged behind an orphaned job.
+    await reclaim_stale_jobs(app.state.session_factory)
+
+    # Start background worker pool (settings.worker_concurrency workers)
+    task = asyncio.create_task(run_worker_pool(app.state.session_factory, settings))
     app.state.worker_task = task
 
     # Seed initial recurring jobs if not already queued

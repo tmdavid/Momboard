@@ -15,10 +15,17 @@ from app.config import Settings
 
 
 def _set_sqlite_pragmas(dbapi_conn: Any, _connection_record: Any) -> None:
-    """Set SQLite pragmas for WAL mode, foreign keys, and busy timeout."""
+    """Set SQLite pragmas for WAL mode, foreign keys, and busy timeout.
+
+    WAL allows concurrent readers alongside a single writer, and busy_timeout
+    makes a connection wait (rather than immediately erroring) when another holds
+    the write lock. 15s gives the concurrent worker pool (WORKER_CONCURRENCY)
+    ample headroom, since each job's commit is brief (milliseconds) relative to
+    the network-bound LLM call that precedes it.
+    """
     cursor = dbapi_conn.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
-    cursor.execute("PRAGMA busy_timeout=5000")
+    cursor.execute("PRAGMA busy_timeout=15000")
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 

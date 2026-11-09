@@ -92,8 +92,16 @@ class OpenAIResponsesClient:
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
         self.model_map = model_map or {}
+        # Explicit per-category timeouts so a stalled response can't hang a worker
+        # indefinitely (a single float leaves some edge cases un-tripped under load).
+        # read=120s covers slow model generations; connect/write/pool are short.
+        timeout = httpx.Timeout(connect=15.0, read=120.0, write=30.0, pool=30.0)
+        # Bound the connection pool so a burst of concurrent workers doesn't open
+        # unbounded sockets; keepalive reuse keeps this efficient.
+        limits = httpx.Limits(max_connections=40, max_keepalive_connections=20)
         self._client = httpx.AsyncClient(
-            timeout=120.0,
+            timeout=timeout,
+            limits=limits,
             headers={"Authorization": f"Bearer {api_key}"},
         )
 
@@ -139,7 +147,7 @@ class OpenAIResponsesClient:
                         continue
                 response.raise_for_status()
                 break
-            except httpx.HTTPStatusError:
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.TransportError):
                 if attempt == retries - 1:
                     raise
                 import asyncio
@@ -218,7 +226,7 @@ class OpenAIResponsesClient:
                         continue
                 response.raise_for_status()
                 break
-            except httpx.HTTPStatusError:
+            except (httpx.HTTPStatusError, httpx.TimeoutException, httpx.TransportError):
                 if attempt == retries - 1:
                     raise
                 import asyncio
