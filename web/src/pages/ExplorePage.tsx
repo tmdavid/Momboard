@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { api, HighlightWithContext, SynthesisResponse } from '../api';
+import { api, HighlightWithContext } from '../api';
 import { TAG_META, tagEmoji } from '../constants';
 
 const SYNTHESIS_THRESHOLD = 5;
@@ -10,8 +10,6 @@ export function ExplorePage() {
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set(['pain', 'workaround']));
   const [companyId, setCompanyId] = useState<number | undefined>();
   const [statusFilter, setStatusFilter] = useState<string>('');
-  const [synthesisId, setSynthesisId] = useState<number | null>(null);
-  const [expandedThemes, setExpandedThemes] = useState<Set<number>>(new Set());
   const [showLensModal, setShowLensModal] = useState(false);
   const [lensResult, setLensResult] = useState<Record<string, unknown> | null>(null);
 
@@ -40,96 +38,28 @@ export function ExplorePage() {
 
   const companiesInResults = useMemo(() => new Set(filteredItems.map((i) => i.company_name)), [filteredItems]);
 
-  // Synthesis result state (populated by polling)
-  const [synthesis, setSynthesis] = useState<SynthesisResponse | null>(null);
+  // Synthesis is fire-and-forget: POST enqueues a background job, the result
+  // shows up in the Summaries tab. We only track the just-queued confirmation.
+  const [synthQueued, setSynthQueued] = useState(false);
   const [synthError, setSynthError] = useState<string | null>(null);
-  const [synthCancelled, setSynthCancelled] = useState(false);
-  const synthResultRef = useRef<HTMLDivElement>(null);
 
-  // Synthesis creation mutation
+  // Synthesis creation mutation (fire-and-forget)
   const synthesisMutation = useMutation({
     mutationFn: () =>
       api.createSynthesis({
         tags: Array.from(activeTags),
         company_id: companyId,
       }),
-    onSuccess: (result) => {
-      setSynthesisId(result.id);
-      setSynthesis(result);
+    onSuccess: () => {
       setSynthError(null);
-      setSynthCancelled(false);
-      setExpandedThemes(new Set());
+      setSynthQueued(true);
     },
     onError: () => {
       setSynthError('Failed to start synthesis. Please try again.');
     },
   });
 
-  // Robust polling with setInterval + bounded timeout
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const cancelSynthesis = useCallback(() => {
-    if (pollRef.current) clearInterval(pollRef.current);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    pollRef.current = null;
-    timeoutRef.current = null;
-    setSynthCancelled(true);
-    setSynthesisId(null);
-    setSynthesis(null);
-  }, []);
-
-  useEffect(() => {
-    if (synthesisId == null || synthesis?.result || synthCancelled) return;
-
-    const poll = () => {
-      api.getSynthesis(synthesisId).then((updated) => {
-        if (synthCancelled) return;
-        if (updated.status === 'error') {
-          if (pollRef.current) clearInterval(pollRef.current);
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          pollRef.current = null;
-          timeoutRef.current = null;
-          setSynthesis(updated);
-          setSynthError(updated.error || 'Synthesis failed. Please retry.');
-          return;
-        }
-        if (updated.result) {
-          setSynthesis(updated);
-          if (pollRef.current) clearInterval(pollRef.current);
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          pollRef.current = null;
-          timeoutRef.current = null;
-          // Scroll to result on completion
-          setTimeout(() => synthResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-        }
-      }).catch(() => {
-        // On error, stop polling and show error
-        if (pollRef.current) clearInterval(pollRef.current);
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        pollRef.current = null;
-        timeoutRef.current = null;
-        setSynthError('Synthesis failed or timed out. Try again.');
-      });
-    };
-
-    pollRef.current = setInterval(poll, 2000);
-    // Safety timeout: stop after 35s
-    timeoutRef.current = setTimeout(() => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      pollRef.current = null;
-      setSynthError('Synthesis took too long. You can retry.');
-    }, 35000);
-
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      pollRef.current = null;
-      timeoutRef.current = null;
-    };
-  }, [synthesisId, synthesis?.result, synthCancelled]);
-
-  const isSynthesizing = synthesisId != null && !synthesis?.result && !synthError && !synthCancelled;
+  const isSynthesizing = synthesisMutation.isPending;
 
   const toggleTag = (key: string) => {
     setActiveTags((prev) => {
@@ -139,24 +69,6 @@ export function ExplorePage() {
       return next;
     });
   };
-
-  const toggleTheme = (index: number) => {
-    setExpandedThemes((prev) => {
-      const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
-      return next;
-    });
-  };
-
-  // Build a map of highlight id → highlight for evidence lookups
-  const highlightsById = useMemo(() => {
-    const map = new Map<number, HighlightWithContext>();
-    for (const item of filteredItems) {
-      map.set(item.id, item);
-    }
-    return map;
-  }, [filteredItems]);
 
   const filterTags = Object.entries(TAG_META).slice(0, 6);
 
@@ -240,17 +152,17 @@ export function ExplorePage() {
             )}
             <button
               className="btn btn-primary"
-              disabled={belowThreshold || synthesisMutation.isPending || isSynthesizing || !!synthError}
+              disabled={belowThreshold || synthesisMutation.isPending}
               onClick={() => {
                 setSynthError(null);
-                setSynthCancelled(false);
+                setSynthQueued(false);
                 synthesisMutation.mutate();
               }}
             >
-              {isSynthesizing || synthesisMutation.isPending ? (
+              {isSynthesizing ? (
                 <span className="inline-flex items-center gap-2 text-[13px] text-muted" role="status">
                   <span className="w-3 h-3 border-2 border-hairline border-t-accent rounded-full animate-spin-slow" aria-hidden="true" />
-                  Synthesizing…
+                  Queuing…
                 </span>
               ) : (
                 '✨ Synthesize this view'
@@ -266,29 +178,29 @@ export function ExplorePage() {
           </div>
         </div>
 
-        {/* Synthesis progress panel */}
-        {isSynthesizing && (
-          <div className="bg-accent-soft border border-accent rounded-xl p-4 mb-4" role="status" aria-label="Synthesis in progress">
+        {/* Fire-and-forget: synthesis runs in the background and appears in Summaries */}
+        {synthQueued && (
+          <div className="bg-accent-soft border border-accent rounded-xl p-4 mb-4" role="status" aria-label="Synthesis queued">
             <div className="flex items-center gap-3">
-              <span className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" aria-hidden="true" />
+              <span className="text-lg" aria-hidden="true">✨</span>
               <div className="flex-1">
-                <p className="text-sm font-semibold text-accent-deep">Synthesizing…</p>
+                <p className="text-sm font-semibold text-accent-deep">Summary queued</p>
                 <p className="text-xs text-ink-2">
-                  {filteredItems.length} highlights · {companiesInResults.size} companies · ~30 s
+                  It’s being generated in the background — find it in the Summaries tab in a moment.
                 </p>
               </div>
-              <button
-                className="px-3 py-1 text-xs font-medium border border-accent rounded-lg text-accent hover:bg-white"
-                onClick={cancelSynthesis}
+              <Link
+                to="/summaries"
+                className="px-3 py-1.5 text-xs font-semibold bg-accent text-white rounded-lg hover:opacity-90"
               >
-                Cancel
-              </button>
+                View Summaries →
+              </Link>
             </div>
           </div>
         )}
 
         {/* Synthesis error with retry */}
-        {synthError && !isSynthesizing && (
+        {synthError && (
           <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4" role="alert">
             <div className="flex items-center gap-3">
               <span className="text-red-600 text-sm font-medium flex-1">{synthError}</span>
@@ -296,69 +208,13 @@ export function ExplorePage() {
                 className="px-3 py-1.5 text-xs font-semibold bg-red-100 text-red-700 rounded-lg hover:bg-red-200"
                 onClick={() => {
                   setSynthError(null);
-                  setSynthCancelled(false);
+                  setSynthQueued(false);
                   synthesisMutation.mutate();
                 }}
               >
                 Retry
               </button>
             </div>
-          </div>
-        )}
-
-        {/* Synthesis result */}
-        {synthesis?.result && (
-          <div ref={synthResultRef} className="bg-surface border border-hairline rounded-[14px] p-5 mb-5 synth-panel">
-            <h2 className="text-[15px] font-semibold mb-1">
-              Synthesis — {Array.from(activeTags).map((t) => `${tagEmoji(t)} ${t}`).join(' + ')}
-            </h2>
-            <div className="text-xs text-muted mb-3.5">
-              {filteredItems.length} highlights across {companiesInResults.size} conversations
-            </div>
-
-            {synthesis.result.themes?.map((theme, i) => (
-              <div key={i} className="border-l-[3px] border-accent px-3.5 py-2.5 bg-page rounded-r-xl mb-2.5 synth-theme">
-                <b className="block mb-0.5">
-                  {i + 1}. {theme.name}
-                </b>
-                <p className="text-[13px] text-ink-2">{theme.summary}</p>
-                <button
-                  className="text-xs text-accent cursor-pointer mt-1 inline-block bg-transparent border-none p-0"
-                  onClick={() => toggleTheme(i)}
-                  aria-expanded={expandedThemes.has(i)}
-                  aria-controls={`theme-evidence-${i}`}
-                >
-                  {expandedThemes.has(i) ? '▾' : '▸'} {theme.evidence_highlight_ids?.length || 0} supporting quotes
-                </button>
-                {expandedThemes.has(i) && (
-                  <div id={`theme-evidence-${i}`} className="mt-2 pl-2 border-l-2 border-hairline space-y-1.5">
-                    {theme.evidence_highlight_ids?.map((hId) => {
-                      const h = highlightsById.get(hId);
-                      if (!h) return null;
-                      return (
-                        <blockquote key={hId} className="text-[13px] text-ink-2 italic">
-                          “{h.quote}”
-                        </blockquote>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            ))}
-
-            {synthesis.result.contradictions?.map((c, i) => (
-              <div key={i} className="border-l-[3px] border-warn px-3.5 py-2.5 bg-page rounded-r-xl mb-2.5">
-                <b className="block mb-0.5">⚠ Contradiction</b>
-                <p className="text-[13px] text-ink-2">{c.description}</p>
-              </div>
-            ))}
-
-            {synthesis.result.validate_next && synthesis.result.validate_next.length > 0 && (
-              <div className="bg-[#e6f4e6] rounded-xl px-3.5 py-2.5 text-[13px]">
-                <b className="text-good-text">Validate next:</b>{' '}
-                {synthesis.result.validate_next.join(' ')}
-              </div>
-            )}
           </div>
         )}
 
@@ -369,20 +225,18 @@ export function ExplorePage() {
           </div>
         )}
 
-        {/* Quote wall — hidden when synthesis result is displayed */}
-        {!isLoading && filteredItems.length === 0 && !synthesis?.result && (
+        {/* Quote wall */}
+        {!isLoading && filteredItems.length === 0 && (
           <div className="text-center text-muted py-12">
             No highlights match the current filters.
           </div>
         )}
 
-        {!synthesis?.result && (
-          <div className="columns-[300px] gap-3.5">
-            {filteredItems.map((item) => (
-              <QuoteCard key={item.id} item={item} />
-            ))}
-          </div>
-        )}
+        <div className="columns-[300px] gap-3.5">
+          {filteredItems.map((item) => (
+            <QuoteCard key={item.id} item={item} />
+          ))}
+        </div>
 
         {lensResult && (
           <LensResultPanel result={lensResult} onClose={() => setLensResult(null)} />

@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage';
 import { LibraryPage } from './pages/LibraryPage';
 import { ConversationPage } from './pages/ConversationPage';
 import { ExplorePage } from './pages/ExplorePage';
+import { SummariesPage } from './pages/SummariesPage';
 import { InsightsPage } from './pages/InsightsPage';
 import { HypothesesPage } from './pages/HypothesesPage';
 import { ContactPage } from './pages/ContactPage';
@@ -147,6 +148,14 @@ export function App() {
           element={
             <AuthGate>
               <ExplorePage />
+            </AuthGate>
+          }
+        />
+        <Route
+          path="/summaries"
+          element={
+            <AuthGate>
+              <SummariesPage />
             </AuthGate>
           }
         />

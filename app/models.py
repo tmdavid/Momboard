@@ -216,6 +216,8 @@ class Analysis(Base):
     prompt_version: Mapped[str | None] = mapped_column(String(100), nullable=True)
     input_scope: Mapped[dict | None] = mapped_column(nullable=True)
     result: Mapped[dict | None] = mapped_column(nullable=True)
+    # T45: whether a synthesis has been explicitly kept/saved by a user.
+    saved: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     conversation: Mapped[Optional["Conversation"]] = relationship(back_populates="analyses")

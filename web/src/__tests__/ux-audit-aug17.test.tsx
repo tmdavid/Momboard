@@ -2,7 +2,7 @@
  * UX Audit Aug 17 2026 — behavioral tests for findings #1–#12.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -39,15 +39,12 @@ describe('UX #1: Decisions — New Decision always opens modal', () => {
   });
 });
 
-// ─── #2: Explore synthesis progress ───
-describe('UX #2: Explore synthesis progress panel', () => {
-  it('shows progress panel with counts and Cancel during synthesis', async () => {
+// ─── #2: Explore synthesis is fire-and-forget ───
+describe('UX #2: Explore synthesis is fire-and-forget', () => {
+  it('queues a background synthesis and links to Summaries instead of blocking', async () => {
     server.use(
       http.post('/api/syntheses', () =>
-        HttpResponse.json({ id: 1, kind: 'synthesis', input_scope: {}, result: null, model: null, prompt_version: null, created_at: new Date().toISOString() }, { status: 201 })
-      ),
-      http.get('/api/syntheses/1', () =>
-        HttpResponse.json({ id: 1, kind: 'synthesis', input_scope: {}, result: null, model: null, prompt_version: null, created_at: new Date().toISOString() })
+        HttpResponse.json({ id: 1, kind: 'synthesis', input_scope: {}, result: null, model: null, prompt_version: null, saved: false, status: 'queued', error: null, created_at: new Date().toISOString() }, { status: 201 })
       ),
     );
 
@@ -57,19 +54,15 @@ describe('UX #2: Explore synthesis progress panel', () => {
     await waitFor(() => expect(screen.getByText(/Synthesize this view/i)).toBeInTheDocument());
     await userEvent.click(screen.getByText(/Synthesize this view/i));
 
-    await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
-    expect(screen.getByRole('status', { name: /synthesis in progress/i })).toBeInTheDocument();
-    expect(screen.getByText(/~30 s/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/Summary queued/i)).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /View Summaries/i })).toHaveAttribute('href', '/summaries');
+    // No blocking progress panel / Cancel button anymore.
+    expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
   });
 
-  it('cancel stops synthesis progress', async () => {
+  it('shows a retryable error when queuing the synthesis fails', async () => {
     server.use(
-      http.post('/api/syntheses', () =>
-        HttpResponse.json({ id: 1, kind: 'synthesis', input_scope: {}, result: null, model: null, prompt_version: null, created_at: new Date().toISOString() }, { status: 201 })
-      ),
-      http.get('/api/syntheses/1', () =>
-        HttpResponse.json({ id: 1, kind: 'synthesis', input_scope: {}, result: null, model: null, prompt_version: null, created_at: new Date().toISOString() })
-      ),
+      http.post('/api/syntheses', () => HttpResponse.json({ detail: 'boom' }, { status: 500 })),
     );
 
     const { ExplorePage } = await import('../pages/ExplorePage');
@@ -78,41 +71,8 @@ describe('UX #2: Explore synthesis progress panel', () => {
     await waitFor(() => expect(screen.getByText(/Synthesize this view/i)).toBeInTheDocument());
     await userEvent.click(screen.getByText(/Synthesize this view/i));
 
-    await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
-    await userEvent.click(screen.getByText('Cancel'));
-
-    await waitFor(() => expect(screen.queryByText('Cancel')).not.toBeInTheDocument());
-  });
-
-  it('shows a retryable error when the synthesis job fails on the server', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    server.use(
-      http.post('/api/syntheses', () =>
-        HttpResponse.json({ id: 1, kind: 'synthesis', input_scope: {}, result: null, status: 'queued', error: null, model: null, prompt_version: null, created_at: new Date().toISOString() }, { status: 201 })
-      ),
-      http.get('/api/syntheses/1', () =>
-        HttpResponse.json({ id: 1, kind: 'synthesis', input_scope: {}, result: null, status: 'error', error: 'Synthesis failed. Please retry.', model: null, prompt_version: null, created_at: new Date().toISOString() })
-      ),
-    );
-
-    try {
-      const { ExplorePage } = await import('../pages/ExplorePage');
-      render(<ExplorePage />, { wrapper: createWrapper(['/explore']) });
-
-      await waitFor(() => expect(screen.getByText(/Synthesize this view/i)).toBeInTheDocument());
-      await user.click(screen.getByText(/Synthesize this view/i));
-      await waitFor(() => expect(screen.getByText('Cancel')).toBeInTheDocument());
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(2100);
-      });
-
-      await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Synthesis failed. Please retry.'));
-      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
-      expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
-    } finally {
-      vi.useRealTimers();
-    }
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Failed to start synthesis/i));
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });
 

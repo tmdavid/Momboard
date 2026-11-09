@@ -277,3 +277,112 @@ async def test_get_synthesis_returns_safe_terminal_failure(auth_client: AsyncCli
     assert body["status"] == "error"
     assert body["error"] == "Synthesis failed. Please retry."
     assert "provider secret" not in response.text
+
+
+# --- T45: Summaries list + save/discard ---
+
+
+@pytest.mark.asyncio
+async def test_list_syntheses_newest_first_with_status(auth_client: AsyncClient):
+    """GET /api/syntheses lists all syntheses newest-first with derived status."""
+    sf = auth_client._transport.app.state.session_factory  # type: ignore
+    async with sf() as db:
+        done = Analysis(
+            kind="synthesis",
+            input_scope={"tag": "pain"},
+            result={"themes": [], "contradictions": [], "validate_next": []},
+        )
+        pending = Analysis(kind="synthesis", input_scope={"tag": "workaround"})
+        db.add_all([done, pending])
+        await db.flush()
+        db.add(
+            Job(
+                kind="synthesize",
+                payload={"analysis_id": pending.id, "filters": {"tag": "workaround"}},
+                status="queued",
+            )
+        )
+        await db.commit()
+        done_id, pending_id = done.id, pending.id
+
+    r = await auth_client.get("/api/syntheses")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] >= 2
+    ids = [item["id"] for item in body["items"]]
+    # newest-first: pending was created after done
+    assert ids.index(pending_id) < ids.index(done_id)
+
+    by_id = {item["id"]: item for item in body["items"]}
+    assert by_id[done_id]["status"] == "done"
+    assert by_id[pending_id]["status"] == "queued"
+    assert by_id[done_id]["saved"] is False
+
+
+@pytest.mark.asyncio
+async def test_save_and_filter_saved_syntheses(auth_client: AsyncClient):
+    """PATCH toggles saved; GET ?saved=true filters to kept syntheses."""
+    sf = auth_client._transport.app.state.session_factory  # type: ignore
+    async with sf() as db:
+        analysis = Analysis(
+            kind="synthesis",
+            input_scope={"tag": "pain"},
+            result={"themes": [], "contradictions": [], "validate_next": []},
+        )
+        db.add(analysis)
+        await db.commit()
+        analysis_id = analysis.id
+
+    r = await auth_client.patch(f"/api/syntheses/{analysis_id}", json={"saved": True})
+    assert r.status_code == 200
+    assert r.json()["saved"] is True
+
+    r = await auth_client.get("/api/syntheses?saved=true")
+    assert r.status_code == 200
+    ids = [item["id"] for item in r.json()["items"]]
+    assert analysis_id in ids
+
+    # Unsave and confirm it drops out of the saved filter
+    r = await auth_client.patch(f"/api/syntheses/{analysis_id}", json={"saved": False})
+    assert r.status_code == 200
+    assert r.json()["saved"] is False
+    r = await auth_client.get("/api/syntheses?saved=true")
+    assert analysis_id not in [item["id"] for item in r.json()["items"]]
+
+
+@pytest.mark.asyncio
+async def test_delete_synthesis_removes_analysis_and_jobs(auth_client: AsyncClient):
+    """DELETE discards the synthesis and its synthesize jobs."""
+    sf = auth_client._transport.app.state.session_factory  # type: ignore
+    async with sf() as db:
+        analysis = Analysis(kind="synthesis", input_scope={"tag": "pain"})
+        db.add(analysis)
+        await db.flush()
+        db.add(
+            Job(
+                kind="synthesize",
+                payload={"analysis_id": analysis.id, "filters": {"tag": "pain"}},
+                status="queued",
+            )
+        )
+        await db.commit()
+        analysis_id = analysis.id
+
+    r = await auth_client.delete(f"/api/syntheses/{analysis_id}")
+    assert r.status_code == 204
+
+    assert (await auth_client.get(f"/api/syntheses/{analysis_id}")).status_code == 404
+
+    async with sf() as db:
+        remaining = await db.execute(
+            select(Job).where(
+                Job.kind == "synthesize",
+                Job.payload["analysis_id"].as_integer() == analysis_id,
+            )
+        )
+        assert remaining.scalar_one_or_none() is None
+
+
+@pytest.mark.asyncio
+async def test_delete_nonexistent_synthesis_404(auth_client: AsyncClient):
+    assert (await auth_client.delete("/api/syntheses/99999")).status_code == 404

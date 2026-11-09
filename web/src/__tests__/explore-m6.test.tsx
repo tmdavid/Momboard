@@ -7,7 +7,7 @@
  * T20: Expandable synthesis themes with evidence quotes
  */
 import { describe, test, expect, vi } from 'vitest';
-import { screen, waitFor, within, act } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
@@ -268,165 +268,30 @@ describe('T20: Synthesize button threshold and count behavior', () => {
   });
 });
 
-describe('T20: Robust synthesis completion polling', () => {
-  test('synthesis polling shows progress state until result arrives and stops polling after', async () => {
-    // Requirement: After creating a synthesis, the frontend shows a loading/progress
-    // indicator that persists across multiple poll cycles. Once result arrives, the
-    // indicator disappears and the result renders. Polling must stop after result.
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-
-    let pollCount = 0;
-
+describe('T45: Explore synthesize is fire-and-forget', () => {
+  test('clicking Synthesize queues a background job and points to Summaries (no inline result)', async () => {
+    let posted = 0;
     server.use(
       http.get('/api/highlights', () => {
         return HttpResponse.json(highlightsWithUtteranceId);
       }),
       http.post('/api/syntheses', () => {
+        posted++;
         return HttpResponse.json(
           {
             id: 42,
             kind: 'synthesis',
-            input_scope: {},
+            input_scope: { tags: ['pain', 'workaround'] },
             result: null,
             model: null,
             prompt_version: null,
+            saved: false,
+            status: 'queued',
+            error: null,
             created_at: new Date().toISOString(),
           },
           { status: 201 },
         );
-      }),
-      http.get('/api/syntheses/42', () => {
-        pollCount++;
-        if (pollCount < 4) {
-          return HttpResponse.json({
-            id: 42,
-            kind: 'synthesis',
-            input_scope: {},
-            result: null,
-            model: null,
-            prompt_version: null,
-            created_at: new Date().toISOString(),
-          });
-        }
-        return HttpResponse.json({
-          id: 42,
-          kind: 'synthesis',
-          input_scope: {},
-          result: {
-            themes: [
-              {
-                name: 'Manual triage is universal',
-                summary: 'All companies report weekly manual exports.',
-                evidence_highlight_ids: [1, 2],
-                strength: 'strong',
-              },
-            ],
-            contradictions: [],
-            validate_next: ['Ask about automation attempts'],
-          },
-          model: 'gpt-4o',
-          prompt_version: 'synthesizer-v1',
-          created_at: new Date().toISOString(),
-        });
-      }),
-    );
-
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
-    renderExplore();
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Synthesize this view/i })).toBeInTheDocument();
-    });
-
-    const btn = screen.getByRole('button', { name: /Synthesize this view/i });
-    await user.click(btn);
-
-    // During polling, a progress/loading indicator should be visible
-    await waitFor(() => {
-      expect(screen.getAllByText(/Synthesizing/i).length).toBeGreaterThan(0);
-    });
-
-    // Advance time to trigger multiple polls
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
-    });
-
-    // Eventually the result should render
-    await waitFor(() => {
-      expect(screen.getByText(/Manual triage is universal/)).toBeInTheDocument();
-    });
-
-    // After result is rendered, "Synthesizing..." should be gone
-    expect(screen.queryAllByText(/Synthesizing/i)).toHaveLength(0);
-
-    // Record poll count, then advance more time — no new polls should happen
-    const pollCountAfterResult = pollCount;
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(10000);
-    });
-
-    // Polling should have stopped after result was received
-    expect(pollCount).toBe(pollCountAfterResult);
-
-    vi.useRealTimers();
-  });
-});
-
-describe('T20: Expandable synthesis themes with evidence quotes', () => {
-  test('synthesis themes show expandable evidence section that reveals actual highlight quotes', async () => {
-    // Requirement: Each theme in the synthesis result has an expandable
-    // section "▸ N supporting quotes" which when clicked reveals the actual
-    // verbatim quotes from the referenced highlights.
-    server.use(
-      http.get('/api/highlights', () => {
-        return HttpResponse.json(highlightsWithUtteranceId);
-      }),
-      http.post('/api/syntheses', () => {
-        return HttpResponse.json(
-          {
-            id: 1,
-            kind: 'synthesis',
-            input_scope: {},
-            result: {
-              themes: [
-                {
-                  name: 'Manual triage is universal',
-                  summary: 'All companies report weekly manual exports.',
-                  evidence_highlight_ids: [1, 2],
-                  strength: 'strong',
-                },
-              ],
-              contradictions: [],
-              validate_next: ['Ask about automation attempts'],
-            },
-            model: 'gpt-4o',
-            prompt_version: 'synthesizer-v1',
-            created_at: new Date().toISOString(),
-          },
-          { status: 201 },
-        );
-      }),
-      http.get('/api/syntheses/:id', () => {
-        return HttpResponse.json({
-          id: 1,
-          kind: 'synthesis',
-          input_scope: {},
-          result: {
-            themes: [
-              {
-                name: 'Manual triage is universal',
-                summary: 'All companies report weekly manual exports.',
-                evidence_highlight_ids: [1, 2],
-                strength: 'strong',
-              },
-            ],
-            contradictions: [],
-            validate_next: ['Ask about automation attempts'],
-          },
-          model: 'gpt-4o',
-          prompt_version: 'synthesizer-v1',
-          created_at: new Date().toISOString(),
-        });
       }),
     );
 
@@ -439,31 +304,18 @@ describe('T20: Expandable synthesis themes with evidence quotes', () => {
 
     await user.click(screen.getByRole('button', { name: /Synthesize this view/i }));
 
-    // Wait for synthesis result to render
+    // A queued confirmation appears with a link to Summaries.
     await waitFor(() => {
-      expect(screen.getByText(/Manual triage is universal/)).toBeInTheDocument();
+      expect(screen.getByText(/Summary queued/i)).toBeInTheDocument();
     });
+    const link = screen.getByRole('link', { name: /View Summaries/i });
+    expect(link).toHaveAttribute('href', '/summaries');
+    expect(posted).toBe(1);
 
-    // The evidence section should be present but collapsed (quotes NOT visible yet)
-    const evidenceTrigger = screen.getByText(/2 supporting quotes/);
-    expect(evidenceTrigger).toBeInTheDocument();
-
-    // Before clicking, the actual quotes should NOT be visible in the theme block
-    const synthPanel = (screen.getByText(/Manual triage is universal/).closest('[class*="synth"]') || document.body) as HTMLElement;
-    expect(
-      within(synthPanel).queryByText(/Every Monday I export all flagged listings to Excel/),
-    ).toBeNull();
-
-    // Click to expand the evidence quotes
-    await user.click(evidenceTrigger);
-
-    // After expanding, the actual verbatim quotes from highlights 1 and 2 should be visible
-    // within the synthesis theme panel
-    await waitFor(() => {
-      // highlight id=1 quote: "Every Monday I export all flagged listings to Excel"
-      expect(screen.getByText(/Every Monday I export all flagged listings to Excel/)).toBeInTheDocument();
-      // highlight id=2 quote: "I export to Excel and clean them up by hand"
-      expect(screen.getByText(/I export to Excel and clean them up by hand/)).toBeInTheDocument();
-    });
+    // The synthesis result is NOT rendered inline on Explore anymore.
+    expect(screen.queryByText(/Manual triage is universal/)).toBeNull();
+    // And the quote wall stays visible.
+    expect(screen.getAllByTestId('quote-card').length).toBeGreaterThan(0);
   });
 });
+

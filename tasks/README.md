@@ -47,6 +47,10 @@ Extensions (M10, after core is green): T27─T28 (hypotheses) · T29─T30 (cont
 
 T14–T18 can start as soon as T05/T08's OpenAPI contract is merged (develop against MSW mocks); they do not block on T09–T13.
 
+## V0.2 Implementation Spec
+
+- **[M12: T34/T24/T25 Implementation](M12-v0.2-extensions-impl.md)** — Staging inbox, Drive polling, MCP server. Full RED/GREEN acceptance criteria, schemas, routes, fixtures, and auth boundary.
+
 ## Visual prototypes
 
 Static, self-contained HTML mockups in `../prototypes/`. They are the **spec for look, layout, and interaction** of the frontend tasks — sample data included, no build step, just open in a browser:

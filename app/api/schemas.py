@@ -285,11 +285,21 @@ class SynthesisResponse(BaseModel):
     result: dict[str, Any] | None = None
     model: str | None = None
     prompt_version: str | None = None
+    saved: bool = False
     created_at: datetime
     status: str = "pending"
     error: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class SynthesisListResponse(BaseModel):
+    items: list[SynthesisResponse]
+    total: int
+
+
+class SynthesisSaveUpdate(BaseModel):
+    saved: bool
 
 
 # --- Jobs ---

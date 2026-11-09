@@ -69,6 +69,15 @@ export interface SynthesisResponse extends Omit<Schemas['SynthesisResponse'], 'r
   result: AnalysisResult | null;
 }
 
+/**
+ * SynthesisListResponse with items narrowed to the local SynthesisResponse
+ * (which narrows the opaque JSON `result` to AnalysisResult).
+ */
+export interface SynthesisListResponse {
+  items: SynthesisResponse[];
+  total: number;
+}
+
 // ─── Domain result types (no backend schema equivalent) ───
 
 /**
@@ -359,6 +368,22 @@ export const api = {
 
   getSynthesis(id: number) {
     return apiFetch<SynthesisResponse>(`/api/syntheses/${id}`);
+  },
+
+  listSyntheses(params: { saved?: boolean } = {}) {
+    const qs = params.saved !== undefined ? `?saved=${params.saved}` : '';
+    return apiFetch<SynthesisListResponse>(`/api/syntheses${qs}`);
+  },
+
+  setSynthesisSaved(id: number, saved: boolean) {
+    return apiFetch<SynthesisResponse>(`/api/syntheses/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ saved }),
+    });
+  },
+
+  deleteSynthesis(id: number) {
+    return apiFetch<void>(`/api/syntheses/${id}`, { method: 'DELETE' });
   },
 
   // ─── Admin and directory ───

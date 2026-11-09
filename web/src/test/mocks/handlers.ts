@@ -268,9 +268,33 @@ export const handlers = [
   // Syntheses
   http.post('/api/syntheses', () => {
     return HttpResponse.json(
-      { id: 1, kind: 'synthesis', input_scope: {}, result: null, model: null, prompt_version: null, created_at: new Date().toISOString() },
+      { id: 1, kind: 'synthesis', input_scope: {}, result: null, model: null, prompt_version: null, saved: false, status: 'queued', error: null, created_at: new Date().toISOString() },
       { status: 201 },
     );
+  }),
+
+  http.get('/api/syntheses', () => {
+    return HttpResponse.json({
+      items: [
+        {
+          id: 1,
+          kind: 'synthesis',
+          input_scope: { tags: ['pain', 'workaround'] },
+          result: {
+            themes: [{ name: 'Manual triage is universal', summary: 'All companies report weekly manual exports.', evidence_highlight_ids: [1, 2], strength: 'strong' }],
+            contradictions: [{ description: '2 companies file directly, 3 require legal approval', evidence_highlight_ids: [3] }],
+            validate_next: ['Ask next interviewees about their takedown workflow end-to-end.'],
+          },
+          model: 'gpt-4o',
+          prompt_version: 'synthesizer-v1',
+          saved: false,
+          status: 'done',
+          error: null,
+          created_at: new Date().toISOString(),
+        },
+      ],
+      total: 1,
+    });
   }),
 
   http.get('/api/syntheses/:id', () => {
@@ -285,8 +309,31 @@ export const handlers = [
       },
       model: 'gpt-4o',
       prompt_version: 'synthesizer-v1',
+      saved: false,
+      status: 'done',
+      error: null,
       created_at: new Date().toISOString(),
     });
+  }),
+
+  http.patch('/api/syntheses/:id', async ({ request, params }) => {
+    const body = (await request.json()) as { saved: boolean };
+    return HttpResponse.json({
+      id: Number(params.id),
+      kind: 'synthesis',
+      input_scope: {},
+      result: { themes: [], contradictions: [], validate_next: [] },
+      model: 'gpt-4o',
+      prompt_version: 'synthesizer-v1',
+      saved: body.saved,
+      status: 'done',
+      error: null,
+      created_at: new Date().toISOString(),
+    });
+  }),
+
+  http.delete('/api/syntheses/:id', () => {
+    return new HttpResponse(null, { status: 204 });
   }),
 
   // Admin
