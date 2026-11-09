@@ -123,3 +123,62 @@ async def test_company_get_or_create(auth_client: AsyncClient):
     companies = await auth_client.get("/api/companies")
     acme_companies = [c for c in companies.json() if c["name"].lower() == "acme"]
     assert len(acme_companies) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_sort_by_score(
+    auth_client: AsyncClient,
+    session_factory,
+):
+    """score_desc/score_asc order by the conversation's Mom Test critique score."""
+    from app.models import Analysis, Conversation
+
+    # Create three conversations.
+    ids = []
+    for title in ("Low score", "High score", "Mid score"):
+        r = await auth_client.post(
+            "/api/conversations",
+            json={
+                "title": title,
+                "transcript": "A: hi\nB: hey",
+                "transcript_format": "name_colon",
+            },
+        )
+        ids.append(r.json()["id"])
+
+    low_id, high_id, mid_id = ids
+    scores = {low_id: 2, high_id: 9, mid_id: 5}
+
+    # Inject conversation-level critique analyses + mark ready.
+    async with session_factory() as db:
+        for cid, score in scores.items():
+            db.add(
+                Analysis(
+                    conversation_id=cid,
+                    kind="conversation",
+                    result={"mom_test_critique": {"score": score}},
+                )
+            )
+            convo = await db.get(Conversation, cid)
+            convo.status = "ready"
+        await db.commit()
+
+    # score_desc: 9, 5, 2
+    r = await auth_client.get("/api/conversations", params={"sort": "score_desc"})
+    assert r.status_code == 200
+    ordered = [it["id"] for it in r.json()["items"] if it["id"] in scores]
+    assert ordered[:3] == [high_id, mid_id, low_id]
+    # critique_score is surfaced on the item
+    by_id = {it["id"]: it for it in r.json()["items"]}
+    assert by_id[high_id]["critique_score"] == 9
+
+    # score_asc: 2, 5, 9
+    r2 = await auth_client.get("/api/conversations", params={"sort": "score_asc"})
+    ordered_asc = [it["id"] for it in r2.json()["items"] if it["id"] in scores]
+    assert ordered_asc[:3] == [low_id, mid_id, high_id]
+
+
+@pytest.mark.asyncio
+async def test_list_invalid_sort_rejected(auth_client: AsyncClient):
+    r = await auth_client.get("/api/conversations", params={"sort": "bogus"})
+    assert r.status_code == 422

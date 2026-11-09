@@ -970,7 +970,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Syntheses
+         * @description List syntheses, newest first. Optionally filter by saved flag.
+         */
+        get: operations["list_syntheses_api_syntheses_get"];
         put?: never;
         /**
          * Create Synthesis
@@ -997,10 +1001,18 @@ export interface paths {
         get: operations["get_synthesis_api_syntheses__synthesis_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete Synthesis
+         * @description Discard a synthesis and its associated synthesize jobs.
+         */
+        delete: operations["delete_synthesis_api_syntheses__synthesis_id__delete"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update Synthesis
+         * @description Save or unsave a synthesis (keep the ones you like).
+         */
+        patch: operations["update_synthesis_api_syntheses__synthesis_id__patch"];
         trace?: never;
     };
     "/api/tags": {
@@ -2160,6 +2172,13 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        /** SynthesisListResponse */
+        SynthesisListResponse: {
+            /** Items */
+            items: components["schemas"]["SynthesisResponse"][];
+            /** Total */
+            total: number;
+        };
         /** SynthesisResponse */
         SynthesisResponse: {
             /**
@@ -2186,10 +2205,20 @@ export interface components {
                 [key: string]: unknown;
             } | null;
             /**
+             * Saved
+             * @default false
+             */
+            saved: boolean;
+            /**
              * Status
              * @default pending
              */
             status: string;
+        };
+        /** SynthesisSaveUpdate */
+        SynthesisSaveUpdate: {
+            /** Saved */
+            saved: boolean;
         };
         /** TagResponse */
         TagResponse: {
@@ -2701,6 +2730,8 @@ export interface operations {
                 date_from?: string | null;
                 date_to?: string | null;
                 deal_stage?: string | null;
+                /** @description Sort order: date_desc (default), date_asc, score_desc, score_asc. Score sorts by the conversation's Mom Test critique score; conversations without a score sort last. */
+                sort?: string;
             };
             header?: never;
             path?: never;
@@ -4062,6 +4093,37 @@ export interface operations {
             };
         };
     };
+    list_syntheses_api_syntheses_get: {
+        parameters: {
+            query?: {
+                saved?: boolean | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SynthesisListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_synthesis_api_syntheses_post: {
         parameters: {
             query?: never;
@@ -4105,6 +4167,70 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SynthesisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_synthesis_api_syntheses__synthesis_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                synthesis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_synthesis_api_syntheses__synthesis_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                synthesis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SynthesisSaveUpdate"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

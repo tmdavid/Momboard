@@ -206,6 +206,15 @@ async def list_conversations(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     deal_stage: str | None = None,
+    sort: str = Query(
+        default="date_desc",
+        description=(
+            "Sort order: date_desc (default), date_asc, score_desc, score_asc. "
+            "Score sorts by the conversation's Mom Test critique score; "
+            "conversations without a score sort last."
+        ),
+        pattern="^(date_desc|date_asc|score_desc|score_asc)$",
+    ),
 ):
     """List conversations with filtering.
 
@@ -257,8 +266,38 @@ async def list_conversations(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_query)).scalar_one()
 
-    # Paginate and order
-    query = query.order_by(Conversation.happened_at.desc().nullslast()).offset(offset).limit(limit)
+    # Ordering
+    if sort in ("score_desc", "score_asc"):
+        # Latest conversation-level critique score per conversation, extracted from
+        # Analysis.result JSON (portable JSON path across SQLite/Postgres).
+        score_subq = (
+            select(
+                Analysis.result["mom_test_critique"]["score"].as_integer().label("score")
+            )
+            .where(
+                Analysis.conversation_id == Conversation.id,
+                Analysis.kind == "conversation",
+            )
+            .order_by(Analysis.created_at.desc())
+            .limit(1)
+            .correlate(Conversation)
+            .scalar_subquery()
+        )
+        if sort == "score_desc":
+            # Highest score first; conversations without a score sort last.
+            query = query.order_by(
+                score_subq.desc().nullslast(), Conversation.happened_at.desc().nullslast()
+            )
+        else:
+            query = query.order_by(
+                score_subq.asc().nullslast(), Conversation.happened_at.desc().nullslast()
+            )
+    elif sort == "date_asc":
+        query = query.order_by(Conversation.happened_at.asc().nullslast())
+    else:  # date_desc (default)
+        query = query.order_by(Conversation.happened_at.desc().nullslast())
+
+    query = query.offset(offset).limit(limit)
     result = await db.execute(query)
     conversations = result.scalars().all()
 

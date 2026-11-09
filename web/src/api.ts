@@ -237,6 +237,7 @@ export const api = {
     q?: string;
     date_from?: string;
     date_to?: string;
+    sort?: string;
   } = {}) {
     const searchParams = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {

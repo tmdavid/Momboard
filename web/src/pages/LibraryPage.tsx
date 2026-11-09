@@ -26,11 +26,12 @@ export function LibraryPage() {
   const q = searchParams.get('q') || undefined;
   const dateFrom = searchParams.get('date_from') || undefined;
   const dateTo = searchParams.get('date_to') || undefined;
+  const sort = searchParams.get('sort') || 'date_desc';
   const offset = parseInt(searchParams.get('offset') || '0', 10);
   const limit = 50;
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['conversations', { tag: activeTags, company_id: companyId, q, date_from: dateFrom, date_to: dateTo, offset }],
+    queryKey: ['conversations', { tag: activeTags, company_id: companyId, q, date_from: dateFrom, date_to: dateTo, sort, offset }],
     queryFn: () =>
       api.listConversations({
         tag: activeTags,
@@ -38,6 +39,7 @@ export function LibraryPage() {
         q,
         date_from: dateFrom,
         date_to: dateTo,
+        sort,
         offset,
         limit,
       }),
@@ -198,7 +200,7 @@ export function LibraryPage() {
       api.createConversation(variables),
     onMutate: async (variables) => {
       await queryClient.cancelQueries({ queryKey: ['conversations'] });
-      const queryKey = ['conversations', { tag: activeTags, company_id: companyId, q, date_from: dateFrom, date_to: dateTo, offset }];
+      const queryKey = ['conversations', { tag: activeTags, company_id: companyId, q, date_from: dateFrom, date_to: dateTo, sort, offset }];
       const previous = queryClient.getQueryData(queryKey);
       const tempId = -(Date.now());
       const optimisticItem: ConversationListItem = {
@@ -359,6 +361,27 @@ export function LibraryPage() {
               value={dateTo || ''}
               onChange={(e) => handleDateTo(e.target.value)}
             />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <label htmlFor="filter-sort" className="text-xs text-muted">Sort</label>
+            <select
+              id="filter-sort"
+              className="px-2 py-1.5 border border-hairline rounded-lg bg-page text-ink-2 text-sm"
+              value={sort}
+              onChange={(e) => {
+                setSearchParams((prev) => {
+                  if (e.target.value && e.target.value !== 'date_desc') prev.set('sort', e.target.value);
+                  else prev.delete('sort');
+                  prev.delete('offset');
+                  return prev;
+                });
+              }}
+            >
+              <option value="date_desc">Newest first</option>
+              <option value="date_asc">Oldest first</option>
+              <option value="score_desc">Score: high → low</option>
+              <option value="score_asc">Score: low → high</option>
+            </select>
           </div>
           {/* #16: Clear all button */}
           {hasActiveFilters && (
