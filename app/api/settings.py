@@ -32,6 +32,10 @@ class LLMStatus(BaseModel):
     model_synthesizer: str
     api_key_configured: bool
     api_key_hint: str  # "configured", "not set", or "not required"
+    # Backend-agnostic fields so the UI doesn't hardcode OpenAI framing.
+    credential_ready: bool  # Whether the active backend has what it needs to run.
+    credential_label: str  # Human-readable credential status for the active backend.
+    single_model: bool  # True when all stages share one model (local/bedrock default view).
 
 
 class DigestStatus(BaseModel):
@@ -76,8 +80,8 @@ async def get_settings_status(
     )
     active_company_count = active_companies_result.scalar_one()
 
-    is_local = settings.llm_backend == "local"
-    if is_local:
+    backend = settings.llm_backend
+    if backend == "local":
         active_models = {
             "normalizer": settings.llm_local_model,
             "tagger": settings.llm_local_model,
@@ -85,7 +89,30 @@ async def get_settings_status(
             "synthesizer": settings.llm_local_model,
         }
         api_key_hint = "not required"
-    else:
+        credential_ready = True
+        credential_label = "Local model — no API key required"
+        single_model = True
+    elif backend == "bedrock":
+        from app.llm.factory import _build_bedrock_model_map, _has_aws_credentials
+
+        model_map = _build_bedrock_model_map(settings)
+        active_models = {
+            "normalizer": model_map["normalizer"],
+            "tagger": model_map["tagger"],
+            "analyst": model_map["analyst"],
+            "synthesizer": model_map["synthesizer"],
+        }
+        # OpenAI key is irrelevant to Bedrock; credentials come from the AWS chain.
+        api_key_hint = "not required"
+        credential_ready = _has_aws_credentials()
+        credential_label = (
+            "AWS credentials resolved"
+            if credential_ready
+            else "AWS credentials not found — using keyless fallback"
+        )
+        # Per-stage models are shown individually so per-agent overrides are visible.
+        single_model = len({*active_models.values()}) == 1
+    else:  # openai
         active_models = {
             "normalizer": settings.llm_model_normalizer,
             "tagger": settings.llm_model_tagger,
@@ -93,6 +120,9 @@ async def get_settings_status(
             "synthesizer": settings.llm_model_synthesizer,
         }
         api_key_hint = _mask_key(settings.openai_api_key)
+        credential_ready = bool(settings.openai_api_key)
+        credential_label = api_key_hint
+        single_model = False
 
     llm_status = LLMStatus(
         backend=settings.llm_backend,
@@ -102,6 +132,9 @@ async def get_settings_status(
         model_synthesizer=active_models["synthesizer"],
         api_key_configured=bool(settings.openai_api_key),
         api_key_hint=api_key_hint,
+        credential_ready=credential_ready,
+        credential_label=credential_label,
+        single_model=single_model,
     )
 
     vexa_configured = bool(settings.vexa_base_url and settings.vexa_api_key)

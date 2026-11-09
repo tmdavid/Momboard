@@ -49,6 +49,7 @@
 - Migrations run automatically in the production container entrypoint; taxonomy seed and admin creation do not.
 - Docker Compose requires `.env` and expects `PORT=8000`. The standalone Docker/Fly image defaults to port 8080.
 - For local Ollama, use `LLM_BASE_URL=http://127.0.0.1:11434` from a host process and `http://ollama:11434` from Compose.
+- For `LLM_BACKEND=bedrock`, credentials resolve from the standard AWS provider chain (instance role, SSO, `AWS_*`); never store AWS access keys in `.env` or config. For EU data residency use an EU `AWS_REGION` plus an `eu.` inference profile (the default `eu.anthropic.claude-haiku-5-5`) and a Bedrock VPC endpoint. Per-agent models are config-only via `BEDROCK_MODEL_<AGENT>`; no credentials → keyless `FakeLLMClient`, like the OpenAI no-key path.
 - Never print or commit session secrets, API keys, or admin passwords. Create an admin only when credentials are supplied out of band.
 - Production deploys, secret changes, scaling, restores, rollbacks, and volume deletion require explicit approval before execution.
 - A deployment is complete only after health, OpenAPI, SPA, unauthenticated-auth-boundary, migration, tests, and build checks pass. Report Docker-dependent skips and do not relabel them as passes.

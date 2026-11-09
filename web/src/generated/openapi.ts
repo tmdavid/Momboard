@@ -1987,6 +1987,10 @@ export interface components {
             api_key_hint: string;
             /** Backend */
             backend: string;
+            /** Credential Label */
+            credential_label: string;
+            /** Credential Ready */
+            credential_ready: boolean;
             /** Model Analyst */
             model_analyst: string;
             /** Model Normalizer */
@@ -1995,6 +1999,8 @@ export interface components {
             model_synthesizer: string;
             /** Model Tagger */
             model_tagger: string;
+            /** Single Model */
+            single_model: boolean;
         };
         /** LensCreateRequest */
         LensCreateRequest: {

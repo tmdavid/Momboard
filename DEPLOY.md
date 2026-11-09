@@ -70,7 +70,7 @@ fly secrets set LLM_BACKEND=openai OPENAI_API_KEY="sk-your-key-here"
 fly secrets set LLM_MODEL_TAGGER="gpt-5-mini"
 ```
 
-MomBoard can start without `OPENAI_API_KEY`, but it then uses deterministic development fallbacks: no AI highlights, placeholder analysis, and empty synthesis. For production customer interviews, configure a key and verify that the selected models support the Responses API and strict structured outputs. A local Ollama sidecar is not included in `fly.toml`; do not select `LLM_BACKEND=local` on Fly until a separately provisioned, reachable Ollama service has been approved and secured.
+MomBoard can start without `OPENAI_API_KEY`, but it then uses deterministic development fallbacks: no AI highlights, placeholder analysis, and empty synthesis. For production customer interviews, configure a key and verify that the selected models support the Responses API and strict structured outputs. A local Ollama sidecar is not included in `fly.toml`; do not select `LLM_BACKEND=local` on Fly until a separately provisioned, reachable Ollama service has been approved and secured. For data-residency-constrained deployments, set `LLM_BACKEND=bedrock` with an EU `AWS_REGION` and the default `eu.anthropic.claude-haiku-5-5` inference profile; credentials come from the host's AWS role/SSO (never `.env`), and no transcript content is sent to OpenAI. With no resolvable AWS credentials, Bedrock degrades to the same keyless fallbacks as OpenAI.
 
 ---
 
@@ -311,7 +311,7 @@ fly ssh console -C "ls -lh /data/momboard.db"
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `SESSION_SECRET` | Yes | — | Random 32+ char string for session signing |
-| `LLM_BACKEND` | No | `openai` | Selects `openai` or `local` |
+| `LLM_BACKEND` | No | `openai` | Selects `openai`, `local`, or `bedrock` |
 | `OPENAI_API_KEY` | For real OpenAI output | empty | Empty uses no-highlight/placeholder fallbacks |
 | `DATABASE_URL` | No | `sqlite+aiosqlite:///data/momboard.db` | Async SQLAlchemy connection string |
 | `ENV` | No | `production` in image | Environment name |

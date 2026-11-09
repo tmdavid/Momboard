@@ -7,7 +7,7 @@ import { TAG_META } from '../constants';
 // ─── Settings Dropdown (#22) ───
 
 interface SettingsStatus {
-  llm: { backend: string; model_normalizer: string; api_key_configured: boolean; api_key_hint: string };
+  llm: { backend: string; model_normalizer: string; api_key_configured: boolean; api_key_hint: string; credential_ready: boolean; credential_label: string };
   vexa: { configured: boolean; detail: string };
   gdrive: { configured: boolean; detail: string };
   slack: { configured: boolean; detail: string };
@@ -75,8 +75,8 @@ function SettingsDropdown({ onClose }: { onClose: () => void }) {
       <h4 className="text-[11px] uppercase tracking-wider text-muted px-2.5 pt-2 pb-1 font-semibold">System</h4>
       <Link to="/settings#llm" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
         🔑 LLM &amp; API keys
-        <span className={`text-[11.5px] ${stateClass(status?.llm?.backend === 'local' || (status?.llm?.api_key_configured ?? false))}`}>
-          {status?.llm ? `${status.llm.backend} · ${status.llm.api_key_hint}` : '—'}
+        <span className={`text-[11.5px] ${stateClass(status?.llm?.credential_ready ?? false)}`}>
+          {status?.llm ? `${status.llm.backend} · ${status.llm.credential_label}` : '—'}
         </span>
       </Link>
       <Link to="/settings#taxonomy" className="flex justify-between items-center px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page" onClick={onClose}>
@@ -175,6 +175,7 @@ export function Layout() {
   const navLinks = [
     { to: '/', label: 'Library', end: true },
     { to: '/explore', label: 'Explore' },
+    { to: '/summaries', label: 'Summaries' },
     { to: '/hypotheses', label: 'Hypotheses' },
     { to: '/decisions', label: 'Decisions' },
     { to: '/insights', label: 'Insights' },

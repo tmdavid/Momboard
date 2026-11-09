@@ -12,6 +12,9 @@ interface SettingsStatus {
     model_synthesizer: string;
     api_key_configured: boolean;
     api_key_hint: string;
+    credential_ready: boolean;
+    credential_label: string;
+    single_model: boolean;
   };
   vexa: { configured: boolean; detail: string };
   gdrive: { configured: boolean; detail: string };
@@ -412,8 +415,8 @@ export function SettingsPage() {
     );
   }
 
-  const localBackend = status.llm.backend === 'local';
-  const keyReady = localBackend || status.llm.api_key_configured;
+  const singleModel = status.llm.single_model;
+  const keyReady = status.llm.credential_ready;
 
   return (
     <main className="flex-1 overflow-auto">
@@ -434,12 +437,10 @@ export function SettingsPage() {
               <span className="text-muted">Credential status</span>
               <div className="font-medium">
                 <StatusDot ok={keyReady} />
-                {localBackend
-                  ? 'OpenAI key not required for the local backend'
-                  : status.llm.api_key_hint}
+                {status.llm.credential_label}
               </div>
             </div>
-            {localBackend ? (
+            {singleModel ? (
               <div className="col-span-2">
                 <span className="text-muted">Model for all stages</span>
                 <div className="font-medium">{status.llm.model_tagger}</div>

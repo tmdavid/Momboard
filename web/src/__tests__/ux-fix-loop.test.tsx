@@ -483,7 +483,7 @@ describe('UX #23: Token alignment', () => {
     server.use(
       http.get('/api/settings/status', () =>
         HttpResponse.json({
-          llm: { backend: 'openai', model_normalizer: 'gpt-4o', model_tagger: 'gpt-4o', model_analyst: 'gpt-4o', model_synthesizer: 'gpt-4o', api_key_configured: false, api_key_hint: 'not set' },
+          llm: { backend: 'openai', model_normalizer: 'gpt-4o', model_tagger: 'gpt-4o', model_analyst: 'gpt-4o', model_synthesizer: 'gpt-4o', api_key_configured: false, api_key_hint: 'not set', credential_ready: false, credential_label: 'not set', single_model: false },
           vexa: { configured: false, detail: 'not set' },
           gdrive: { configured: false, detail: 'not set' },
           slack: { configured: false, detail: 'not set' },

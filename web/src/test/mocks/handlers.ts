@@ -464,7 +464,7 @@ export const handlers = [
   // Settings status (#22)
   http.get('/api/settings/status', () => {
     return HttpResponse.json({
-      llm: { backend: 'openai', model_normalizer: 'gpt-5-mini', model_tagger: 'gpt-5-mini', model_analyst: 'gpt-5-mini', model_synthesizer: 'gpt-5-mini', api_key_configured: true, api_key_hint: 'sk-•••4f2' },
+      llm: { backend: 'openai', model_normalizer: 'gpt-5-mini', model_tagger: 'gpt-5-mini', model_analyst: 'gpt-5-mini', model_synthesizer: 'gpt-5-mini', api_key_configured: true, api_key_hint: 'sk-•••4f2', credential_ready: true, credential_label: 'sk-•••4f2', single_model: false },
       vexa: { configured: true, detail: 'connected' },
       gdrive: { configured: false, detail: 'not configured' },
       slack: { configured: true, detail: 'configured' },

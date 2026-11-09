@@ -137,6 +137,30 @@ Use `LLM_BASE_URL=http://ollama:11434` only when the MomBoard application itself
 
 See [`local-llm.md`](local-llm.md) for configuration, model overrides, resource requirements, and backend switching.
 
+### AWS Bedrock (compliant in-cloud inference)
+
+For teams that require customer data to stay inside their own cloud, MomBoard supports a global Bedrock backend. When `LLM_BACKEND=bedrock`, **every** LLM feature — the normalize/tag/analyze/synthesize pipeline and all the v0.2 advisor features (briefs, digest, corpus chat, simulator, lenses, contact drift, hypothesis linking) — is routed through Amazon Bedrock. No transcript content is sent to OpenAI.
+
+```dotenv
+LLM_BACKEND=bedrock
+AWS_REGION=eu-central-1
+BEDROCK_MODEL_DEFAULT=eu.anthropic.claude-haiku-5-5
+```
+
+Credentials are resolved from the standard AWS provider chain (instance role, SSO, or `AWS_*` environment variables); MomBoard never reads or stores access keys. When no credentials resolve, the backend degrades to the same keyless `FakeLLMClient` behavior as OpenAI, so dev and tests still run.
+
+**EU data residency.** The default model ID is the `eu.` cross-Region inference profile for Claude Haiku 5.5, which keeps inference within AWS's EU regions. Pair it with an EU `AWS_REGION` and a [Bedrock VPC (interface) endpoint](https://docs.aws.amazon.com/bedrock/latest/userguide/vpc-interface-endpoints.html) so that inference traffic never leaves your account's EU footprint. Do **not** use the `global.` profile if residency matters — it may route outside the EU.
+
+**Per-agent models.** Every agent defaults to `BEDROCK_MODEL_DEFAULT` but can be repointed independently with no code change. For example, keep the high-volume pipeline on cheap Haiku while running the reasoning-heavier agents on Sonnet:
+
+```dotenv
+BEDROCK_MODEL_ANALYST=eu.anthropic.claude-sonnet-5-5
+BEDROCK_MODEL_SYNTHESIZER=eu.anthropic.claude-sonnet-5-5
+BEDROCK_MODEL_BRIEF=eu.anthropic.claude-sonnet-5-5
+```
+
+The full set of overridable agent keys is: `normalizer`, `tagger`, `analyst`, `synthesizer`, `hypothesis_linker`, `chat`, `corpus_chat`, `brief`, `digest`, `persona`, `simulator`, `lens`, `drift_checker` (each via `BEDROCK_MODEL_<AGENT>`). Model IDs are config, not code, so you can also swap the default as Anthropic's lineup evolves. As with OpenAI, tests never make real Bedrock calls.
+
 ### Security and customer data
 
 - Never commit `.env` or API keys; `.gitignore` excludes them.
@@ -157,7 +181,7 @@ Copy `.env.example` to `.env`. Important variables:
 |---|---|
 | `DATABASE_URL` | Async SQLAlchemy URL; defaults to local SQLite under `data/` |
 | `SESSION_SECRET` | Signs login sessions; must be random in production |
-| `LLM_BACKEND` | Selects `openai` or `local` |
+| `LLM_BACKEND` | Selects `openai`, `local`, or `bedrock` |
 | `OPENAI_API_KEY` | Enables real OpenAI tagging, analysis, and synthesis |
 | `OPENAI_BASE_URL` | Optional OpenAI Responses API endpoint |
 | `LLM_BASE_URL` | Ollama URL when `LLM_BACKEND=local`; host and Compose values differ |

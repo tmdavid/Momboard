@@ -34,7 +34,7 @@ async def create_lens(
     from app.services.lenses import build_lens as _build_lens
 
     settings = request.app.state.settings
-    llm = create_llm_client(settings)
+    llm = create_llm_client(settings, agent="lens")
 
     try:
         analysis = await _build_lens(

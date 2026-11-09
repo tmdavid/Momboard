@@ -24,7 +24,7 @@ class Settings(BaseSettings):
     llm_model_analyst: str = "gpt-5-mini"
     llm_model_synthesizer: str = "gpt-5-mini"
 
-    # LLM backend selection: "openai" or "local" (Ollama)
+    # LLM backend selection: "openai", "local" (Ollama), or "bedrock"
     llm_backend: str = "openai"
     llm_base_url: str = ""  # Required when llm_backend=local (e.g. http://ollama:11434)
     llm_local_flavor: str = "ollama"  # Local backend flavor
@@ -32,9 +32,36 @@ class Settings(BaseSettings):
     llm_local_timeout: float = 300.0  # Per-request timeout for slower local inference
     llm_max_context: int = 32768  # Context window budget (tokens) — drives chunking
 
+    # Bedrock (LLM_BACKEND=bedrock)
+    # Credentials come from the standard AWS provider chain (instance role, SSO, env);
+    # no access keys are stored here by design. For strict data residency, use an EU
+    # region plus the "eu." cross-Region inference profile (default below) and a Bedrock
+    # VPC endpoint so inference never leaves the account's EU footprint.
+    aws_region: str = "eu-central-1"
+    # Cheapest current-generation Anthropic model, EU-resident inference profile.
+    bedrock_model_default: str = "eu.anthropic.claude-haiku-5-5"
+    bedrock_timeout: float = 120.0  # Per-request timeout for Bedrock Converse calls
+    # Per-agent overrides. Empty => fall back to bedrock_model_default.
+    # Pipeline agents:
+    bedrock_model_normalizer: str = ""
+    bedrock_model_tagger: str = ""
+    bedrock_model_analyst: str = ""
+    bedrock_model_synthesizer: str = ""
+    bedrock_model_hypothesis_linker: str = ""
+    # Free-form (generate()) features:
+    bedrock_model_chat: str = ""
+    bedrock_model_corpus_chat: str = ""
+    bedrock_model_brief: str = ""
+    bedrock_model_digest: str = ""
+    bedrock_model_persona: str = ""
+    bedrock_model_simulator: str = ""
+    bedrock_model_lens: str = ""
+    bedrock_model_drift_checker: str = ""
+
     # Worker
     worker_poll_interval: float = 2.0
     worker_max_retries: int = 3
+    worker_concurrency: int = 1  # Number of jobs processed concurrently (asyncio)
 
     # T31: Digest Slack delivery
     slack_webhook_url: str = ""

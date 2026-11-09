@@ -24,6 +24,30 @@ async def test_local_backend_reports_active_model_and_no_key_requirement(app, au
 
 
 @pytest.mark.asyncio
+async def test_bedrock_backend_reports_models_and_aws_credential_status(app, auth_client):
+    settings = app.state.settings
+    settings.llm_backend = "bedrock"
+    settings.openai_api_key = ""
+    settings.bedrock_model_default = "eu.anthropic.claude-haiku-5-5"
+    settings.bedrock_model_analyst = "eu.anthropic.claude-sonnet-5-5"
+
+    response = await auth_client.get("/api/settings/status")
+
+    assert response.status_code == 200
+    llm = response.json()["llm"]
+    assert llm["backend"] == "bedrock"
+    # Per-agent override surfaces; others fall back to the default.
+    assert llm["model_tagger"] == "eu.anthropic.claude-haiku-5-5"
+    assert llm["model_analyst"] == "eu.anthropic.claude-sonnet-5-5"
+    # OpenAI key is irrelevant to Bedrock.
+    assert llm["api_key_hint"] == "not required"
+    assert llm["api_key_configured"] is False
+    # credential_ready reflects the AWS chain (keyless fallback in test env).
+    assert "credential_ready" in llm
+    assert "credential_label" in llm
+
+
+@pytest.mark.asyncio
 async def test_settings_status_reports_taxonomy_permission(auth_client, member_client):
     admin_response = await auth_client.get("/api/settings/status")
     member_response = await member_client.get("/api/settings/status")

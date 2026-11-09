@@ -101,12 +101,11 @@ def test_local_factory_defaults_to_qwen3_8b():
     client = create_llm_client(settings, agent="tagger")
     assert isinstance(client, OllamaClient)
     assert client.model == "qwen3:8b"
-    assert client.model_map == {
-        "normalizer": "qwen3:8b",
-        "tagger": "qwen3:8b",
-        "analyst": "qwen3:8b",
-        "synthesizer": "qwen3:8b",
-    }
+    # The local map now covers every agent key (so per-agent routing is uniform);
+    # all of them must point at the local model, never an OpenAI model name.
+    for agent in ("normalizer", "tagger", "analyst", "synthesizer"):
+        assert client.model_map[agent] == "qwen3:8b"
+    assert all(m == "qwen3:8b" for m in client.model_map.values())
 
 
 def test_local_factory_custom_model_override():

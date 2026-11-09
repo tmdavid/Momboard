@@ -26,6 +26,9 @@ const localStatus = {
     model_synthesizer: 'qwen3:8b',
     api_key_configured: false,
     api_key_hint: 'not required',
+    credential_ready: true,
+    credential_label: 'Local model — no API key required',
+    single_model: true,
   },
   vexa: { configured: false, detail: 'not configured' },
   gdrive: { configured: false, detail: 'not configured' },
@@ -87,11 +90,45 @@ describe('Settings management', () => {
     render(<SettingsPage />, { wrapper: createWrapper() });
 
     expect(await screen.findByText('qwen3:8b')).toBeInTheDocument();
-    expect(screen.getByText('OpenAI key not required for the local backend')).toBeInTheDocument();
+    expect(screen.getByText('Local model — no API key required')).toBeInTheDocument();
     expect(await screen.findByText('Pain / problem')).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'Acme Corp' })).toBeInTheDocument();
     expect(await screen.findByText('Jane Doe')).toBeInTheDocument();
     expect(screen.getByText('2 conversations')).toBeInTheDocument();
+  });
+
+  it('renders the bedrock backend with per-stage models and AWS credential status', async () => {
+    const bedrockStatus = {
+      ...localStatus,
+      llm: {
+        backend: 'bedrock',
+        model_normalizer: 'eu.anthropic.claude-haiku-5-5',
+        model_tagger: 'eu.anthropic.claude-haiku-5-5',
+        model_analyst: 'eu.anthropic.claude-sonnet-5-5',
+        model_synthesizer: 'eu.anthropic.claude-haiku-5-5',
+        api_key_configured: false,
+        api_key_hint: 'not required',
+        credential_ready: true,
+        credential_label: 'AWS credentials resolved',
+        single_model: false,
+      },
+    };
+    server.use(
+      http.get('/api/settings/status', () => HttpResponse.json(bedrockStatus)),
+      http.get('/api/tags', () => HttpResponse.json(tags)),
+      http.get('/api/companies', () => HttpResponse.json(companies)),
+      http.get('/api/contacts', () => HttpResponse.json(contacts)),
+    );
+    const { SettingsPage } = await import('../pages/SettingsPage');
+
+    render(<SettingsPage />, { wrapper: createWrapper() });
+
+    // Backend shown, AWS credential label (not OpenAI framing), per-stage models visible.
+    expect(await screen.findByText('bedrock')).toBeInTheDocument();
+    expect(screen.getByText('AWS credentials resolved')).toBeInTheDocument();
+    expect(screen.getByText('eu.anthropic.claude-sonnet-5-5')).toBeInTheDocument();
+    // Per-stage labels render (not the single "Model for all stages" view).
+    expect(screen.getByText('Analyst model')).toBeInTheDocument();
   });
 
   it('lets an admin deactivate a taxonomy tag', async () => {

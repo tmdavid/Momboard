@@ -35,7 +35,7 @@ async def build_persona(
     from app.services.simulator import build_persona as _build_persona
 
     settings = request.app.state.settings
-    llm = create_llm_client(settings)
+    llm = create_llm_client(settings, agent="persona")
 
     try:
         analysis = await _build_persona(db, filters=body.filters, llm=llm)
@@ -84,7 +84,7 @@ async def add_turn(
     from app.services.simulator import add_simulator_turn
 
     settings = request.app.state.settings
-    llm = create_llm_client(settings)
+    llm = create_llm_client(settings, agent="simulator")
 
     try:
         result = await add_simulator_turn(db, session_id, body.text, llm=llm)

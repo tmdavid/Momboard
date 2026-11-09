@@ -52,7 +52,7 @@ Container DNS name `ollama` is not resolvable from a host process. Conversely, `
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_BACKEND` | `openai` | LLM provider: `openai` or `local` |
+| `LLM_BACKEND` | `openai` | LLM provider: `openai`, `local`, or `bedrock` (see the AWS Bedrock section of the README). |
 | `LLM_BASE_URL` | _(empty)_ | Required when `LLM_BACKEND=local`. Ollama API URL. |
 | `LLM_LOCAL_MODEL` | `qwen3:8b` | Default model for **all** agents when `LLM_BACKEND=local`. |
 | `LLM_LOCAL_FLAVOR` | `ollama` | Local backend type (currently only `ollama`). |

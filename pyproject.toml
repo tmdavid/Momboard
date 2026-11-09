@@ -20,6 +20,8 @@ dependencies = [
     "mcp==1.9.2",
     "PyJWT==2.9.0",
     "cryptography==43.0.1",
+    # Bedrock backend: async AWS SDK for in-cloud/EU-resident LLM inference (LLM_BACKEND=bedrock)
+    "aioboto3==13.2.0",
 ]
 
 [project.optional-dependencies]
@@ -68,5 +70,5 @@ warn_unused_configs = true
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-module = ["aiosqlite.*", "asyncpg.*", "mcp.*", "jwt.*", "cairosvg.*"]
+module = ["aiosqlite.*", "asyncpg.*", "mcp.*", "jwt.*", "cairosvg.*", "aioboto3.*", "botocore.*", "boto3.*"]
 ignore_missing_imports = true
