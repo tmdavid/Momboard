@@ -9,11 +9,12 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 The core application (T01–T23, T27–T28) plus v0.2 features are implemented:
 
 - Transcript ingestion for pasted text, `Name: text`, and WebVTT
-- Database-backed normalize → tag → analyze → hypothesis-link worker pipeline
+- Database-backed normalize → tag → analyze → hypothesis-link pipeline, run by a concurrent worker pool with startup recovery of stale jobs
 - Human review of suggested highlights and manual highlights
 - Conversation notes with optimistic concurrency
 - Library, conversation, explore, synthesis, insights, and hypotheses UI
 - Session authentication, live Settings status, admin-managed taxonomy, and companies/contacts directory
+- Pluggable LLM backend — OpenAI, local Ollama, or AWS Bedrock (global, EU-resident by default) — with per-agent model selection
 - SQLite/PostgreSQL-compatible schema and Alembic migrations
 - Production Docker/Fly configuration and rotating SQLite backups
 - **T34 Staging inbox:** pending_import/ignored/imported/parse_error lifecycle, source_ref dedupe
@@ -30,6 +31,9 @@ The core application (T01–T23, T27–T28) plus v0.2 features are implemented:
 - **T39 Interview simulator:** persona builder from segment filters, chat loop with Mom Test behaviors, critique via standard worker chain, corpus isolation (simulated excluded from all corpus features)
 - **T40 Decision log:** CRUD with evidence receipts, proposed→decided→superseded lifecycle, integrity checks (undermined on contradictions/drifts), automatic refresh in worker jobs, highlight deletion blocked (409) when cited, successor linkage
 - **T43 Segment lenses:** compare two filter sets, per-side attribution validated in code, "Compare as lens" flow from Explore page
+- **T45 Saved syntheses + Summaries:** fire-and-forget synthesis jobs from Explore, a Summaries page to browse/keep/delete reports, and a `saved` flag with live job status
+- **Conversation sorting:** list conversations by date or Mom Test critique score (`date_desc`/`date_asc`/`score_desc`/`score_asc`), unscored last
+- **Clari Copilot import:** on-demand `scripts/clari_ingest.py` that pulls recorded calls into conversations, idempotent via `source_ref` dedupe (user-run, not a webhook)
 
 ## Requirements
 
