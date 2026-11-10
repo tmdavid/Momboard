@@ -105,13 +105,19 @@ TAXONOMY = [
 
 
 async def seed_tags(session: AsyncSession) -> None:
-    """Upsert all taxonomy tags. Idempotent."""
+    """Upsert all taxonomy tags. Idempotent.
+
+    All shipped taxonomy tags are marked origin="core" (they have no category).
+    This both stamps new installs and re-stamps any pre-007 rows back to core on
+    the next seed run, so the core/custom split is self-healing.
+    """
     for tag_data in TAXONOMY:
-        existing = await session.get(Tag, tag_data["key"])
+        data = {**tag_data, "origin": "core", "category": None}
+        existing = await session.get(Tag, data["key"])
         if existing is None:
-            session.add(Tag(**tag_data))
+            session.add(Tag(**data))
         else:
-            for k, v in tag_data.items():
+            for k, v in data.items():
                 if k != "key":
                     setattr(existing, k, v)
     await session.flush()

@@ -71,6 +71,11 @@ class TagResponse(BaseModel):
     signal_strength: str | None = None
     sort_order: int
     is_active: bool
+    # "core" (shipped seed taxonomy) or "custom" (user-created). Defaults to
+    # custom so create callers that omit it produce a user tag.
+    origin: str = "custom"
+    # Free-text grouping label for custom tags (e.g. "channel"); None = ungrouped.
+    category: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -82,6 +87,7 @@ class TagUpdate(BaseModel):
     signal_strength: str | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    category: str | None = None
 
 
 # --- Conversations ---

@@ -66,10 +66,14 @@ export function HighlightPopover({ highlight, position, onAccept, onReject, onRe
         value={selectedTag}
         onChange={(e) => setSelectedTag(e.target.value)}
       >
-        {tax.tags.map((t) => (
-          <option key={t.key} value={t.key}>
-            {t.emoji} {t.name}
-          </option>
+        {tax.groups.map((group) => (
+          <optgroup key={group.label} label={group.label}>
+            {group.tags.map((t) => (
+              <option key={t.key} value={t.key}>
+                {t.emoji} {t.name}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </select>
       <div className="flex gap-1.5">

@@ -2357,6 +2357,8 @@ export interface components {
         };
         /** TagResponse */
         TagResponse: {
+            /** Category */
+            category?: string | null;
             /** Description */
             description?: string | null;
             /** Emoji */
@@ -2367,6 +2369,11 @@ export interface components {
             key: string;
             /** Name */
             name: string;
+            /**
+             * Origin
+             * @default custom
+             */
+            origin: string;
             /** Signal Strength */
             signal_strength?: string | null;
             /** Sort Order */
@@ -2374,6 +2381,8 @@ export interface components {
         };
         /** TagUpdate */
         TagUpdate: {
+            /** Category */
+            category?: string | null;
             /** Description */
             description?: string | null;
             /** Emoji */

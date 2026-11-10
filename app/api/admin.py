@@ -51,6 +51,8 @@ async def create_tag(
         signal_strength=body.signal_strength,
         sort_order=body.sort_order,
         is_active=body.is_active,
+        origin=body.origin,
+        category=body.category,
     )
     db.add(tag)
     await db.flush()

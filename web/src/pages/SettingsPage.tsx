@@ -45,6 +45,7 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
   const [emoji, setEmoji] = useState('');
   const [name, setName] = useState('');
   const [signalStrength, setSignalStrength] = useState('medium');
+  const [category, setCategory] = useState('');
 
   const { data: tags = [], isLoading, error } = useQuery({
     queryKey: ['tags'],
@@ -70,6 +71,8 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
       signal_strength: signalStrength,
       sort_order: Math.max(0, ...tags.map((tag) => tag.sort_order)) + 1,
       is_active: true,
+      origin: 'custom',
+      category: category.trim() || null,
     }),
     onSuccess: (created) => {
       queryClient.setQueryData<Tag[]>(['tags'], (current = []) =>
@@ -79,6 +82,7 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
       setEmoji('');
       setName('');
       setSignalStrength('medium');
+      setCategory('');
     },
   });
 
@@ -86,6 +90,12 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
     event.preventDefault();
     if (key.trim() && emoji.trim() && name.trim()) createTag.mutate();
   };
+
+  // Existing categories to suggest in the create-form (dynamic — no new code to
+  // add a category; it appears here as soon as one tag uses it).
+  const existingCategories = Array.from(
+    new Set(tags.map((tag) => tag.category).filter((c): c is string => !!c)),
+  ).sort((a, b) => a.localeCompare(b));
 
   return (
     <section id="taxonomy" className="scroll-mt-20 bg-surface border border-hairline rounded-xl p-5 mb-4">
@@ -133,7 +143,7 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
       {canManage && (
         <form onSubmit={handleCreate} className="mt-4 border-t border-hairline pt-4">
           <h3 className="text-sm font-medium mb-2">Add taxonomy tag</h3>
-          <div className="grid grid-cols-[1fr_72px_1.5fr_130px_auto] gap-2">
+          <div className="grid grid-cols-[1fr_72px_1.5fr_130px_130px_auto] gap-2">
             <input
               aria-label="New tag key"
               value={key}
@@ -168,6 +178,19 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
               <option value="anti-signal">anti-signal</option>
               <option value="n/a">n/a</option>
             </select>
+            <input
+              aria-label="New tag category"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              placeholder="category"
+              list="tag-category-suggestions"
+              className="border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
+            />
+            <datalist id="tag-category-suggestions">
+              {existingCategories.map((cat) => (
+                <option key={cat} value={cat} />
+              ))}
+            </datalist>
             <button
               type="submit"
               className="btn btn-primary whitespace-nowrap"

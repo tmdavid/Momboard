@@ -477,15 +477,22 @@ export function ConversationPage() {
               ) : (
                 <div className="flex flex-col gap-1" role="listbox" aria-label="Select tag">
                   <span className="text-xs text-muted px-1 mb-1">Select tag:</span>
-                  {tax.tags.map((t) => (
-                    <button
-                      key={t.key}
-                      role="option"
-                      className="text-xs text-left px-2 py-1 rounded hover:bg-page cursor-pointer bg-transparent border-none"
-                      onClick={() => handleTagSelect(t.key)}
-                    >
-                      {t.emoji} {t.name}
-                    </button>
+                  {tax.groups.map((group) => (
+                    <div key={group.label} className="flex flex-col gap-0.5">
+                      <span className="text-[10px] uppercase tracking-wide text-muted px-1 mt-1">
+                        {group.label}
+                      </span>
+                      {group.tags.map((t) => (
+                        <button
+                          key={t.key}
+                          role="option"
+                          className="text-xs text-left px-2 py-1 rounded hover:bg-page cursor-pointer bg-transparent border-none"
+                          onClick={() => handleTagSelect(t.key)}
+                        >
+                          {t.emoji} {t.name}
+                        </button>
+                      ))}
+                    </div>
                   ))}
                 </div>
               )}

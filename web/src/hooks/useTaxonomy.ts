@@ -20,9 +20,28 @@ export function useTaxonomy() {
   });
 
   const byKey = new Map<string, Tag>((tags ?? []).map((t) => [t.key, t]));
+  const all = tags ?? [];
+
+  // Data-driven grouping for tag menus: "Core" first, then one group per custom
+  // category (alphabetical), then "Other" for uncategorized custom tags. Adding a
+  // new category requires no code change — it appears here as soon as a tag uses it.
+  const groups: { label: string; tags: Tag[] }[] = [];
+  const core = all.filter((t) => t.origin === 'core');
+  if (core.length) groups.push({ label: 'Core', tags: core });
+
+  const custom = all.filter((t) => t.origin !== 'core');
+  const categories = Array.from(
+    new Set(custom.map((t) => t.category).filter((c): c is string => !!c)),
+  ).sort((a, b) => a.localeCompare(b));
+  for (const cat of categories) {
+    groups.push({ label: cat, tags: custom.filter((t) => t.category === cat) });
+  }
+  const uncategorized = custom.filter((t) => !t.category);
+  if (uncategorized.length) groups.push({ label: 'Other', tags: uncategorized });
 
   return {
-    tags: tags ?? [],
+    tags: all,
+    groups,
     emoji: (key: string): string => byKey.get(key)?.emoji ?? fallbackEmoji(key),
     name: (key: string): string => byKey.get(key)?.name ?? fallbackName(key),
   };

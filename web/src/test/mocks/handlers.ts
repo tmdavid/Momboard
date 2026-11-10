@@ -9,12 +9,12 @@ export const mockUser = {
 };
 
 export const mockTags = [
-  { key: 'pain', emoji: '⚡', name: 'Pain', description: null, signal_strength: 'strong', sort_order: 1, is_active: true },
-  { key: 'workaround', emoji: '➡️', name: 'Workaround', description: null, signal_strength: 'very strong', sort_order: 2, is_active: true },
-  { key: 'money', emoji: '💰', name: 'Money', description: null, signal_strength: 'strong', sort_order: 3, is_active: true },
-  { key: 'commitment', emoji: '🤝', name: 'Commitment', description: null, signal_strength: 'very strong', sort_order: 4, is_active: true },
-  { key: 'compliment', emoji: '🎈', name: 'Compliment', description: null, signal_strength: 'anti-signal', sort_order: 5, is_active: true },
-  { key: 'followup', emoji: '☆', name: 'Follow-up', description: null, signal_strength: null, sort_order: 6, is_active: true },
+  { key: 'pain', emoji: '⚡', name: 'Pain', description: null, signal_strength: 'strong', sort_order: 1, is_active: true , origin: 'core', category: null },
+  { key: 'workaround', emoji: '➡️', name: 'Workaround', description: null, signal_strength: 'very strong', sort_order: 2, is_active: true , origin: 'core', category: null },
+  { key: 'money', emoji: '💰', name: 'Money', description: null, signal_strength: 'strong', sort_order: 3, is_active: true , origin: 'core', category: null },
+  { key: 'commitment', emoji: '🤝', name: 'Commitment', description: null, signal_strength: 'very strong', sort_order: 4, is_active: true , origin: 'core', category: null },
+  { key: 'compliment', emoji: '🎈', name: 'Compliment', description: null, signal_strength: 'anti-signal', sort_order: 5, is_active: true , origin: 'core', category: null },
+  { key: 'followup', emoji: '☆', name: 'Follow-up', description: null, signal_strength: null, sort_order: 6, is_active: true , origin: 'core', category: null },
 ];
 
 export const mockCompanies = [

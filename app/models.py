@@ -162,6 +162,12 @@ class Tag(Base):
     signal_strength: Mapped[str | None] = mapped_column(String(50), nullable=True)
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # "core" = shipped seed taxonomy; "custom" = user-created. Default custom so
+    # any tag created without an explicit origin is treated as user taxonomy.
+    origin: Mapped[str] = mapped_column(String(20), default="custom", server_default="custom")
+    # Free-text grouping label for custom tags (e.g. "channel", "product").
+    # Nullable: core tags and ungrouped custom tags have no category.
+    category: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
 
 # --- Highlights ---
