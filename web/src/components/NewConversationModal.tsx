@@ -294,17 +294,17 @@ export function NewConversationModal({ onClose, onCreated, onSubmit, isSubmittin
         <div className="flex flex-col gap-1">
           <label htmlFor="modal-contact-0" className="text-xs font-semibold text-ink-2">Contact(s)</label>
           {contacts.map((contact, idx) => (
-            <div key={idx} className="flex gap-1.5 items-center">
+            <div key={idx} className="flex flex-wrap gap-1.5 items-center">
               <input
                 id={`modal-contact-${idx}`}
-                className="flex-1 px-2.5 py-2 border border-hairline rounded-lg bg-page text-ink text-sm"
+                className="flex-1 min-w-[120px] px-2.5 py-2 border border-hairline rounded-lg bg-page text-ink text-sm"
                 placeholder="Name"
                 value={contact.name}
                 onChange={(e) => updateContact(idx, 'name', e.target.value)}
                 aria-label={idx === 0 ? 'Contact' : `Contact ${idx + 1}`}
               />
               <input
-                className="flex-1 px-2.5 py-2 border border-hairline rounded-lg bg-page text-ink text-sm"
+                className="flex-1 min-w-[120px] px-2.5 py-2 border border-hairline rounded-lg bg-page text-ink text-sm"
                 placeholder="Role"
                 value={contact.role}
                 onChange={(e) => updateContact(idx, 'role', e.target.value)}

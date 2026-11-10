@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, SynthesisResponse } from '../api';
-import { tagEmoji } from '../constants';
+import { tagEmoji, tagName } from '../constants';
+import { friendlyModelName } from '../utils/modelName';
 
 type SavedFilter = 'all' | 'saved';
 
@@ -10,9 +11,9 @@ function scopeLabel(scope: Record<string, unknown> | null | undefined): string {
   const tags = scope.tags;
   const parts: string[] = [];
   if (Array.isArray(tags) && tags.length > 0) {
-    parts.push(tags.map((t) => `${tagEmoji(String(t))} ${t}`).join(' + '));
+    parts.push(tags.map((t) => `${tagEmoji(String(t))} ${tagName(String(t))}`).join(' + '));
   } else if (typeof scope.tag === 'string' && scope.tag) {
-    parts.push(`${tagEmoji(scope.tag)} ${scope.tag}`);
+    parts.push(`${tagEmoji(scope.tag)} ${tagName(scope.tag)}`);
   }
   if (scope.company_id) parts.push(`company #${scope.company_id}`);
   return parts.length > 0 ? parts.join(' · ') : 'All highlights';
@@ -148,7 +149,7 @@ function SummaryCard({
           <h2 className="text-[15px] font-semibold">{scopeLabel(s.input_scope)}</h2>
           <div className="text-xs text-muted mt-0.5">
             {formatDate(s.created_at)}
-            {s.model ? ` · ${s.model}` : ''}
+            {s.model ? ` · ${friendlyModelName(s.model)}` : ''}
           </div>
         </div>
 

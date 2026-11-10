@@ -621,7 +621,7 @@ function HypothesisComposer() {
 
   return (
     <div className="mb-5">
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form onSubmit={handleSubmit} className="flex flex-wrap gap-2">
         <input
           ref={inputRef}
           type="text"
@@ -633,7 +633,7 @@ function HypothesisComposer() {
           }}
           onKeyDown={handleKeyDown}
           placeholder={'State a falsifiable belief\u2026 e.g. \u201CMid-market brands won\u2019t pay >€10k without SLA\u201D'}
-          className="flex-1 px-3 py-2.5 border border-hairline rounded-xl bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
+          className="flex-1 min-w-[260px] px-3 py-2.5 border border-hairline rounded-xl bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
           aria-invalid={!!validationError}
           aria-describedby={validationError ? 'composer-error' : 'composer-help'}
         />

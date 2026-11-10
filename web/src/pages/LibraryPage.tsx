@@ -290,7 +290,17 @@ export function LibraryPage() {
             <div className="flex items-center mb-4">
               <h1 className="text-xl font-bold tracking-tight">
                 Library{' '}
-                <span className="text-muted font-normal ml-2">({total})</span>
+                <span className="text-muted font-normal ml-2">
+                  {isLoading ? (
+                    <span
+                      role="status"
+                      aria-label="Loading conversations"
+                      className="inline-block w-3 h-3 align-middle border-2 border-hairline border-t-accent rounded-full animate-spin"
+                    />
+                  ) : (
+                    `(${total})`
+                  )}
+                </span>
               </h1>
               <div className="flex-1" />
               <button className="btn btn-primary" onClick={() => setModalOpen(true)}>

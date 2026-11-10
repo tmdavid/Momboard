@@ -12,7 +12,7 @@ import {
   Area,
 } from 'recharts';
 import { api } from '../api';
-import { tagEmoji } from '../constants';
+import { tagEmoji, tagName } from '../constants';
 
 const CHART_COLORS: Record<string, string> = {
   pain: '#2a78d6',
@@ -152,7 +152,7 @@ export function InsightsPage() {
                           stroke={CHART_COLORS[tag]}
                           strokeWidth={2}
                           dot={false}
-                          name={`${tagEmoji(tag)} ${tag}`}
+                          name={`${tagEmoji(tag)} ${tagName(tag)}`}
                           hide={hiddenSeries.has(tag)}
                         />
                       ))}
@@ -165,7 +165,7 @@ export function InsightsPage() {
                           className="inline-flex items-center gap-1 text-xs cursor-pointer border-none bg-transparent p-0"
                           onClick={() => toggleSeries(tag)}
                           aria-pressed={!hiddenSeries.has(tag)}
-                          aria-label={`Toggle ${tagEmoji(tag)} ${tag} series`}
+                          aria-label={`Toggle ${tagEmoji(tag)} ${tagName(tag)} series`}
                           style={{ opacity: hiddenSeries.has(tag) ? 0.4 : 1 }}
                         >
                           <span
@@ -173,7 +173,7 @@ export function InsightsPage() {
                             style={{ backgroundColor: color }}
                             aria-hidden="true"
                           />
-                          {tagEmoji(tag)} {tag}
+                          {tagEmoji(tag)} {tagName(tag)}
                         </button>
                       </li>
                     ))}
@@ -219,7 +219,7 @@ export function InsightsPage() {
                               <div className="mt-1 text-center">
                                 <div className="text-xs font-medium tabular-nums">{count}</div>
                                 <div className="text-[10px] leading-tight text-muted break-words">
-                                  {tagEmoji(tag)} {tag.replace(/_/g, ' ')}
+                                  {tagEmoji(tag)} {tagName(tag)}
                                 </div>
                               </div>
                             </div>
