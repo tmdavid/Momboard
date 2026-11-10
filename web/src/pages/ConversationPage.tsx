@@ -311,6 +311,16 @@ export function ConversationPage() {
               {String(convo.meta.segment)}
             </span>
           )}
+          {convo.meta && typeof convo.meta.clari_review_url === 'string' && (
+            <a
+              href={convo.meta.clari_review_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs px-2 py-0.5 rounded-full bg-page border border-hairline text-ink-2 hover:text-accent hover:border-accent transition-colors"
+            >
+              ▶ View in Clari
+            </a>
+          )}
           <button
             className="text-xs px-2.5 py-1 rounded-lg border border-hairline bg-page hover:bg-accent-soft hover:border-accent text-ink-2 hover:text-accent transition-colors disabled:opacity-50"
             disabled={reprocessMutation.isPending || convo.status === 'processing'}

@@ -15,6 +15,18 @@ function renderConversation() {
 }
 
 describe('Conversation page', () => {
+  test('shows a "View in Clari" link when the conversation came from Clari', async () => {
+    renderConversation();
+
+    await waitFor(() => {
+      expect(screen.getByText('David')).toBeInTheDocument();
+    });
+
+    const link = screen.getByRole('link', { name: /view in clari/i });
+    expect(link).toHaveAttribute('href', 'https://copilot.clari.com/call/427ef1b9');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
   test('utterances render in order, our-side vs their-side visually distinct', async () => {
     renderConversation();
 

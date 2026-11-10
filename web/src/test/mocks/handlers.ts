@@ -82,7 +82,7 @@ export const mockConversationDetail = {
   interviewer: 'David',
   company: mockCompanies[0],
   contacts: [{ id: 1, name: 'Jane Doe', role: 'Brand Manager', email: null, company_id: 1, created_at: '2026-08-01T00:00:00Z' }],
-  meta: { deal_stage: 'discovery', segment: 'enterprise' },
+  meta: { deal_stage: 'discovery', segment: 'enterprise', source_ref: 'clari:427ef1b9', clari_review_url: 'https://copilot.clari.com/call/427ef1b9' },
   created_at: '2026-08-12T10:00:00Z',
   utterances: [
     { id: 1, idx: 0, speaker_label: 'David', speaker_side: 'us', text: 'How do you handle infringing listings today?', start_ms: null },
