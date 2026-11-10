@@ -66,4 +66,34 @@ describe('Auth flow', () => {
       http.get('/api/conversations', () => new HttpResponse(null, { status: 401 })),
     );
   });
+
+  test('top-bar avatar shows the user initial (not "?") when authenticated', async () => {
+    renderWithProviders(<App />);
+    await waitFor(() => {
+      expect(screen.getByText('Conversations')).toBeInTheDocument();
+    });
+    // mockUser is "David" -> initial "D", not the unauthenticated "?" fallback.
+    const menuButton = screen.getByRole('button', { name: /user menu/i });
+    expect(menuButton).toHaveTextContent('D');
+    expect(menuButton).not.toHaveTextContent('?');
+  });
+
+  test('user menu opens and logout returns to login', async () => {
+    renderWithProviders(<App />);
+    await waitFor(() => {
+      expect(screen.getByText('Conversations')).toBeInTheDocument();
+    });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /user menu/i }));
+
+    // Menu shows the user and a Log out action.
+    expect(screen.getByText('david@example.com')).toBeInTheDocument();
+
+    // After logout, ['me'] clears -> login screen.
+    server.use(http.get('/api/me', () => new HttpResponse(null, { status: 401 })));
+    await user.click(screen.getByRole('menuitem', { name: /log out/i }));
+    await waitFor(() => {
+      expect(screen.getByText('Sign in to continue')).toBeInTheDocument();
+    });
+  });
 });

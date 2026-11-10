@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthOptional } from '../App';
+import { api } from '../api';
 import { TAG_META } from '../constants';
 
 // ─── Settings Dropdown (#22) ───
@@ -158,6 +159,21 @@ export function Layout() {
   const initial = auth ? (auth.user.name || auth.user.email)[0].toUpperCase() : '?';
   const [helpOpen, setHelpOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } finally {
+      // Clearing ['me'] flips AuthGate back to the login screen (same signal the
+      // global 401 handler uses).
+      queryClient.setQueryData(['me'], null);
+      setUserMenuOpen(false);
+      navigate('/');
+    }
+  };
   const location = useLocation();
 
   // Pending inbox count for nav badge
@@ -254,9 +270,38 @@ export function Layout() {
           {helpOpen && <HelpPopover onClose={() => setHelpOpen(false)} />}
         </div>
 
-        {/* User avatar */}
-        <div className="w-7 h-7 rounded-full bg-accent text-white grid place-items-center text-xs font-semibold">
-          {initial}
+        {/* User avatar + menu */}
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="User menu"
+            aria-expanded={userMenuOpen}
+            onClick={() => { setUserMenuOpen(!userMenuOpen); setSettingsOpen(false); setHelpOpen(false); }}
+            className="w-7 h-7 rounded-full bg-accent text-white grid place-items-center text-xs font-semibold cursor-pointer hover:opacity-90"
+          >
+            {initial}
+          </button>
+          {userMenuOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 mt-2 w-56 bg-surface border border-hairline rounded-xl shadow-lg p-1.5 z-50"
+            >
+              {auth && (
+                <div className="px-2.5 py-2 border-b border-hairline mb-1">
+                  <div className="text-sm font-semibold truncate">{auth.user.name || auth.user.email}</div>
+                  {auth.user.name && <div className="text-xs text-muted truncate">{auth.user.email}</div>}
+                </div>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={handleLogout}
+                className="w-full text-left px-2.5 py-2 rounded-lg text-[13.5px] text-ink-2 hover:bg-page"
+              >
+                Log out
+              </button>
+            </div>
+          )}
         </div>
       </nav>
       <Outlet />

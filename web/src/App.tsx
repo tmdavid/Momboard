@@ -104,117 +104,29 @@ export function App() {
 
   return (
     <Routes>
-      <Route element={<Layout />}>
-        <Route
-          path="/"
-          element={
-            <AuthGate>
-              <LibraryPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/inbox"
-          element={
-            <Navigate to="/?tab=inbox" replace />
-          }
-        />
-        <Route
-          path="/conversations/:id"
-          element={
-            <AuthGate>
-              <ConversationPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/contacts/:id"
-          element={
-            <AuthGate>
-              <ContactPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/companies/:id"
-          element={
-            <AuthGate>
-              <CompanyPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/explore"
-          element={
-            <AuthGate>
-              <ExplorePage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/summaries"
-          element={
-            <AuthGate>
-              <SummariesPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/hypotheses"
-          element={
-            <AuthGate>
-              <HypothesesPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/insights"
-          element={
-            <AuthGate>
-              <InsightsPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/digest"
-          element={
-            <AuthGate>
-              <DigestPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/simulator"
-          element={
-            <AuthGate>
-              <SimulatorPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/decisions"
-          element={
-            <AuthGate>
-              <DecisionsPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/meetings"
-          element={
-            <AuthGate>
-              <MeetingsPage />
-            </AuthGate>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <AuthGate>
-              <SettingsPage />
-            </AuthGate>
-          }
-        />
+      {/* AuthGate wraps Layout so the whole shell (incl. the top-bar avatar/menu)
+          is inside AuthContext. The gate runs once; pages render via <Outlet/>. */}
+      <Route
+        element={
+          <AuthGate>
+            <Layout />
+          </AuthGate>
+        }
+      >
+        <Route path="/" element={<LibraryPage />} />
+        <Route path="/inbox" element={<Navigate to="/?tab=inbox" replace />} />
+        <Route path="/conversations/:id" element={<ConversationPage />} />
+        <Route path="/contacts/:id" element={<ContactPage />} />
+        <Route path="/companies/:id" element={<CompanyPage />} />
+        <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/summaries" element={<SummariesPage />} />
+        <Route path="/hypotheses" element={<HypothesesPage />} />
+        <Route path="/insights" element={<InsightsPage />} />
+        <Route path="/digest" element={<DigestPage />} />
+        <Route path="/simulator" element={<SimulatorPage />} />
+        <Route path="/decisions" element={<DecisionsPage />} />
+        <Route path="/meetings" element={<MeetingsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

@@ -296,7 +296,7 @@ describe('T28: Hypotheses board — navigation and route', () => {
     server.use(...hypothesesHandlers);
     renderWithProviders(<App />, { route: '/' });
 
-    const nav = screen.getByRole('navigation');
+    const nav = await screen.findByRole('navigation');
     const link = within(nav).getByRole('link', { name: /hypotheses/i });
     expect(link).toBeInTheDocument();
     expect(link).toHaveAttribute('href', '/hypotheses');
