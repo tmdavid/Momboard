@@ -53,7 +53,7 @@ def test_parse_meet_doc_simple_name_text():
 
 
 def test_mcp_tools_defined():
-    """MCP server defines the required 7 tools."""
+    """MCP server defines the core conversation/corpus tools (plus T46 insight tools)."""
     tools = TOOLS
     names = {t.name for t in tools}
     expected = {
@@ -65,7 +65,8 @@ def test_mcp_tools_defined():
         "create_conversation",
         "ask_corpus",
     }
-    assert expected == names
+    # Core tools must remain; T46 adds read-only insight tools on top.
+    assert expected <= names
 
 
 def test_mcp_tools_have_schemas():

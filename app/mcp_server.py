@@ -111,6 +111,66 @@ TOOLS = [
             "required": ["question"],
         },
     ),
+    Tool(
+        name="list_hypotheses",
+        description=(
+            "List hypotheses (beliefs) with their grounding band and evidence strength "
+            "counts. Read-only. grounding is one of grounded|contested|refuted|candidate|"
+            "hunch — treat 'hunch'/'candidate' as unproven, 'contested' as customers "
+            "disagreeing. Optionally filter by grounding."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "grounding": {
+                    "type": "string",
+                    "description": "Optional filter: grounded|contested|refuted|candidate|hunch",
+                },
+                "limit": {"type": "integer", "default": 50},
+            },
+        },
+    ),
+    Tool(
+        name="get_hypothesis",
+        description=(
+            "Get one hypothesis with its grounding band, strength counts, and the "
+            "confirmed evidence links (both supporting and contradicting), each with "
+            "quote and conversation id. Read-only."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {"id": {"type": "integer", "description": "Hypothesis ID"}},
+            "required": ["id"],
+        },
+    ),
+    Tool(
+        name="list_decisions",
+        description=(
+            "List decisions with status (proposed|decided|superseded) and integrity "
+            "(ok|undermined). Read-only. Do not build on an 'undermined' decision without "
+            "checking why."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "description": "Optional status filter"},
+                "integrity": {"type": "string", "description": "Optional integrity filter"},
+                "limit": {"type": "integer", "default": 50},
+            },
+        },
+    ),
+    Tool(
+        name="get_decision",
+        description=(
+            "Get one decision with its rationale, status, integrity (+ reasons), the "
+            "hypothesis it rests on, and the cited evidence quotes. Read-only."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {"id": {"type": "integer", "description": "Decision ID"}},
+            "required": ["id"],
+        },
+    ),
 ]
 
 
@@ -293,6 +353,123 @@ async def handle_tool_call(
         finally:
             await llm.close()
         return result_data
+
+    elif tool_name == "list_hypotheses":
+        from app.api.hypotheses import _build_rollup, _compute_grounding
+        from app.models import Hypothesis
+
+        grounding_filter = arguments.get("grounding")
+        limit = arguments.get("limit", 50)
+        hyps_result = await db.execute(
+            select(Hypothesis).order_by(Hypothesis.created_at.desc())
+        )
+        items = []
+        for hyp in hyps_result.scalars().all():
+            supports, contradicts, _co_sup, _co_con, _last = await _build_rollup(db, hyp.id)
+            grounding = _compute_grounding(supports, contradicts)
+            if grounding_filter and grounding != grounding_filter:
+                continue
+            items.append({
+                "id": hyp.id,
+                "statement": hyp.statement,
+                "segment": hyp.segment,
+                "status": hyp.status,
+                "origin": hyp.origin,
+                "grounding": grounding,
+                "supporting": supports.get("confirmed", 0),
+                "contradicting": contradicts.get("confirmed", 0),
+                "suggested": supports.get("suggested", 0) + contradicts.get("suggested", 0),
+            })
+            if len(items) >= limit:
+                break
+        return {"hypotheses": items}
+
+    elif tool_name == "get_hypothesis":
+        from app.api.hypotheses import _build_rollup, _compute_grounding
+        from app.models import Hypothesis, HypothesisLink
+
+        hyp_row = await db.get(Hypothesis, arguments["id"])
+        if hyp_row is None:
+            return {"error": "Hypothesis not found"}
+        supports, contradicts, _co_sup, _co_con, _last = await _build_rollup(db, hyp_row.id)
+        # Confirmed evidence links with quote + conversation ref (citations).
+        links_result = await db.execute(
+            select(HypothesisLink, Highlight)
+            .join(Highlight, HypothesisLink.highlight_id == Highlight.id)
+            .where(
+                HypothesisLink.hypothesis_id == hyp_row.id,
+                HypothesisLink.status == "confirmed",
+            )
+        )
+        evidence = [
+            {
+                "stance": link.stance,
+                "quote": hl.quote,
+                "highlight_id": hl.id,
+                "conversation_id": hl.conversation_id,
+            }
+            for link, hl in links_result.all()
+        ]
+        return {
+            "id": hyp_row.id,
+            "statement": hyp_row.statement,
+            "segment": hyp_row.segment,
+            "status": hyp_row.status,
+            "origin": hyp_row.origin,
+            "grounding": _compute_grounding(supports, contradicts),
+            "supporting": supports.get("confirmed", 0),
+            "contradicting": contradicts.get("confirmed", 0),
+            "evidence": evidence,
+        }
+
+    elif tool_name == "list_decisions":
+        from app.models import Decision
+
+        d_query = select(Decision).order_by(Decision.created_at.desc())
+        if arguments.get("status"):
+            d_query = d_query.where(Decision.status == arguments["status"])
+        if arguments.get("integrity"):
+            d_query = d_query.where(Decision.integrity == arguments["integrity"])
+        d_query = d_query.limit(arguments.get("limit", 50))
+        d_result = await db.execute(d_query)
+        return {
+            "decisions": [
+                {
+                    "id": d.id,
+                    "title": d.title,
+                    "status": d.status,
+                    "integrity": d.integrity,
+                    "hypothesis_id": d.hypothesis_id,
+                }
+                for d in d_result.scalars().all()
+            ]
+        }
+
+    elif tool_name == "get_decision":
+        from app.models import Decision, DecisionEvidence
+
+        decision = await db.get(Decision, arguments["id"])
+        if decision is None:
+            return {"error": "Decision not found"}
+        ev_result = await db.execute(
+            select(DecisionEvidence, Highlight)
+            .join(Highlight, DecisionEvidence.highlight_id == Highlight.id)
+            .where(DecisionEvidence.decision_id == decision.id)
+        )
+        evidence = [
+            {"highlight_id": hl.id, "quote": hl.quote, "conversation_id": hl.conversation_id}
+            for _de, hl in ev_result.all()
+        ]
+        return {
+            "id": decision.id,
+            "title": decision.title,
+            "rationale_md": decision.rationale_md,
+            "status": decision.status,
+            "integrity": decision.integrity,
+            "integrity_reasons": decision.integrity_reasons,
+            "hypothesis_id": decision.hypothesis_id,
+            "evidence": evidence,
+        }
 
     else:
         return {"error": f"Unknown tool: {tool_name}"}

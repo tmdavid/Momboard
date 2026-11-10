@@ -31,7 +31,7 @@ class TestMCPToolSchemas:
     """Verify all 7 tools are registered with correct schemas."""
 
     def test_seven_tools_registered(self):
-        assert len(TOOLS) == 7
+        assert len(TOOLS) == 11
 
     def test_tool_names(self):
         names = {t.name for t in TOOLS}
@@ -43,6 +43,10 @@ class TestMCPToolSchemas:
             "run_synthesis",
             "create_conversation",
             "ask_corpus",
+            "list_hypotheses",
+            "get_hypothesis",
+            "list_decisions",
+            "get_decision",
         }
         assert names == expected
 
@@ -246,10 +250,11 @@ class TestStreamableHTTPMount:
             body = r.json()
             assert body["id"] == 2
             tools = body["result"]["tools"]
-            assert len(tools) == 7
+            assert len(tools) == 11
             names = {t["name"] for t in tools}
             assert "search_conversations" in names
             assert "ask_corpus" in names
+            assert "list_hypotheses" in names
 
     @pytest.mark.asyncio
     async def test_authenticated_call_tool_returns_content(self, app, user_david):
@@ -515,3 +520,93 @@ class TestMCPStdioTransport:
             timeout=5,
         )
         assert result.returncode == 0, f"Import failed: {result.stderr}"
+
+
+class TestMCPInsightTools:
+    """T46: read-only grounding-aware hypothesis/decision tools."""
+
+    async def _make_grounded_hypothesis(self, db):
+        from app.models import (
+            Conversation,
+            Highlight,
+            Hypothesis,
+            HypothesisLink,
+        )
+
+        convo = Conversation(
+            title="C", status="ready", raw_transcript="x", transcript_format="name_colon",
+        )
+        db.add(convo)
+        await db.flush()
+        hl = Highlight(
+            conversation_id=convo.id, tag_key="pain", quote="manual export every monday",
+            confidence=0.9, origin="ai", status="accepted",
+        )
+        hyp = Hypothesis(statement="Customers do manual exports weekly", status="open", origin="human")
+        db.add_all([hl, hyp])
+        await db.flush()
+        db.add(HypothesisLink(
+            hypothesis_id=hyp.id, highlight_id=hl.id, stance="supports",
+            origin="human", status="confirmed",
+        ))
+        await db.commit()
+        return hyp.id, hl.id
+
+    @pytest.mark.asyncio
+    async def test_list_hypotheses_exposes_grounding_and_counts(self, seeded_db):
+        hyp_id, _ = await self._make_grounded_hypothesis(seeded_db)
+        result = await handle_tool_call("list_hypotheses", {}, db_session=seeded_db)
+        assert "hypotheses" in result
+        row = next(h for h in result["hypotheses"] if h["id"] == hyp_id)
+        assert row["grounding"] == "grounded"
+        assert row["supporting"] == 1
+        assert row["origin"] == "human"
+
+    @pytest.mark.asyncio
+    async def test_list_hypotheses_grounding_filter(self, seeded_db):
+        await self._make_grounded_hypothesis(seeded_db)
+        result = await handle_tool_call(
+            "list_hypotheses", {"grounding": "hunch"}, db_session=seeded_db
+        )
+        # The only hypothesis is grounded, so a hunch filter yields none.
+        assert result["hypotheses"] == []
+
+    @pytest.mark.asyncio
+    async def test_get_hypothesis_returns_evidence_citations(self, seeded_db):
+        hyp_id, hl_id = await self._make_grounded_hypothesis(seeded_db)
+        result = await handle_tool_call("get_hypothesis", {"id": hyp_id}, db_session=seeded_db)
+        assert result["grounding"] == "grounded"
+        assert result["evidence"][0]["highlight_id"] == hl_id
+        assert result["evidence"][0]["stance"] == "supports"
+        assert "manual export" in result["evidence"][0]["quote"]
+
+    @pytest.mark.asyncio
+    async def test_get_hypothesis_not_found(self, seeded_db):
+        result = await handle_tool_call("get_hypothesis", {"id": 99999}, db_session=seeded_db)
+        assert result.get("error") == "Hypothesis not found"
+
+    @pytest.mark.asyncio
+    async def test_list_and_get_decision(self, seeded_db):
+        from app.models import Conversation, Decision, DecisionEvidence, Highlight
+
+        convo = Conversation(
+            title="C", status="ready", raw_transcript="x", transcript_format="name_colon",
+        )
+        seeded_db.add(convo)
+        await seeded_db.flush()
+        hl = Highlight(
+            conversation_id=convo.id, tag_key="pain", quote="we chose option two",
+            confidence=0.9, origin="ai", status="accepted",
+        )
+        dec = Decision(title="Build export", rationale_md="because evidence", status="decided", integrity="ok")
+        seeded_db.add_all([hl, dec])
+        await seeded_db.flush()
+        seeded_db.add(DecisionEvidence(decision_id=dec.id, highlight_id=hl.id))
+        await seeded_db.commit()
+
+        lst = await handle_tool_call("list_decisions", {}, db_session=seeded_db)
+        assert any(d["id"] == dec.id and d["integrity"] == "ok" for d in lst["decisions"])
+
+        got = await handle_tool_call("get_decision", {"id": dec.id}, db_session=seeded_db)
+        assert got["title"] == "Build export"
+        assert got["evidence"][0]["highlight_id"] == hl.id
