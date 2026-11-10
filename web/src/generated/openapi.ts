@@ -1927,6 +1927,11 @@ export interface components {
              * @default stale
              */
             freshness: string;
+            /**
+             * Grounding
+             * @default hunch
+             */
+            grounding: string;
             /** Last Evidence At */
             last_evidence_at?: string | null;
             /** Newest Evidence At */

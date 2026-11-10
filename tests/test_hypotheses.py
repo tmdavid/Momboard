@@ -36,6 +36,27 @@ from app.models import (
 )
 from app.seed import seed_tags
 
+# --- T48: grounding band (pure function) -----------------------------------
+
+
+def test_compute_grounding_states():
+    """The 2D grounding band is derived from confirmed support/contradict counts."""
+    from app.api.hypotheses import _compute_grounding
+
+    def g(sup_c, con_c, sup_s=0, con_s=0):
+        return _compute_grounding(
+            {"confirmed": sup_c, "suggested": sup_s},
+            {"confirmed": con_c, "suggested": con_s},
+        )
+
+    assert g(2, 0) == "grounded"           # confirmed support, no contradiction
+    assert g(3, 2) == "contested"          # support AND contradiction (the valuable one)
+    assert g(0, 2) == "refuted"            # confirmed contradiction, no support
+    assert g(0, 0, sup_s=2) == "candidate" # only suggested (unconfirmed) matches
+    assert g(0, 0, con_s=1) == "candidate"
+    assert g(0, 0) == "hunch"              # nothing at all
+    assert g(1, 0, sup_s=5, con_s=5) == "grounded"  # confirmed beats suggested
+
 # ---------------------------------------------------------------------------
 # Helpers / fixtures local to this test module
 # ---------------------------------------------------------------------------

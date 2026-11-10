@@ -133,6 +133,42 @@ def _compute_verdict_hint(
     return None
 
 
+def _compute_grounding(
+    supports: dict[str, int],
+    contradicts: dict[str, int],
+) -> str:
+    """Derive the 2D grounding band from confirmed/suggested link counts (T48).
+
+    Support and contradiction are independent axes — the same belief can be both
+    supported and contradicted by different customers — so grounding is a 2x2, not a
+    single gradient:
+
+        has confirmed support?  has confirmed contradiction?  -> band
+        yes                     no                            -> grounded
+        yes                     yes                           -> contested
+        no                      yes                           -> refuted
+        no                      no  (some suggested links)    -> candidate
+        no                      no  (no links at all)         -> hunch
+
+    Confirmed evidence always beats suggested: a confirmed support makes the band
+    `grounded`/`contested` regardless of how many suggested links exist. Pure and
+    computed at read time — never stored (mirrors T41 freshness).
+    """
+    has_support = supports.get("confirmed", 0) > 0
+    has_contradiction = contradicts.get("confirmed", 0) > 0
+
+    if has_support and has_contradiction:
+        return "contested"
+    if has_support:
+        return "grounded"
+    if has_contradiction:
+        return "refuted"
+    # No confirmed evidence either way.
+    if supports.get("suggested", 0) > 0 or contradicts.get("suggested", 0) > 0:
+        return "candidate"
+    return "hunch"
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -185,6 +221,7 @@ async def list_hypotheses(
                     last_evidence_at=last_ev,
                     freshness=freshness_data["freshness"],
                     newest_evidence_at=freshness_data.get("newest_evidence_at"),
+                    grounding=_compute_grounding(supports, contradicts),
                 ),
                 "verdict_hint": verdict_hint,
             })
@@ -311,6 +348,7 @@ async def get_hypothesis_detail(
             last_evidence_at=last_ev,
             freshness=freshness_data["freshness"],
             newest_evidence_at=freshness_data.get("newest_evidence_at"),
+            grounding=_compute_grounding(supports, contradicts),
         )
 
         return {

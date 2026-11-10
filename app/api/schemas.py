@@ -341,6 +341,7 @@ class HypothesisRollup(BaseModel):
     last_evidence_at: datetime | None = None
     freshness: str = "stale"  # fresh|aging|stale (T41)
     newest_evidence_at: str | None = None  # ISO date of newest confirmed supporting evidence
+    grounding: str = "hunch"  # grounded|contested|refuted|candidate|hunch (T48)
 
 
 class HypothesisListItemResponse(BaseModel):

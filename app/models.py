@@ -293,6 +293,7 @@ class Hypothesis(Base):
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     segment: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")  # open|supported|refuted|parked
+    origin: Mapped[str] = mapped_column(String(20), default="ai", server_default="ai")  # ai|human|import (T48)
     created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
