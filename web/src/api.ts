@@ -124,9 +124,10 @@ export interface Analysis extends Omit<Schemas['AnalysisResponse'], 'result'> {
  * Backend uses dict[str, Any] for nested structures.
  */
 export interface StatsResponse {
+  total_conversations: number;
   tag_counts_by_month: Record<string, Record<string, number>>;
-  critique_trend: Array<{ date: string; score: number; conversation_id: number }>;
-  compliment_ratio_trend: Array<{ date: string; ratio: number; conversation_id: number }>;
+  critique_trend: Array<{ date: string; score: number }>;
+  compliment_ratio_trend: Array<{ date: string; ratio: number }>;
   open_followups: Array<{
     id: number;
     task: string;

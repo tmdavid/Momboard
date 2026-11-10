@@ -207,13 +207,27 @@ async def test_stats_tag_counts_by_month(
 
 @pytest.mark.asyncio
 async def test_stats_critique_trend(auth_client: AsyncClient, seeded_explore_data):
-    """critique_trend should include score and conversation_id."""
+    """critique_trend is aggregated per month (avg score), one point per month."""
     r = await auth_client.get("/api/stats")
     body = r.json()
     trend = body["critique_trend"]
     assert len(trend) >= 1
-    assert "score" in trend[0]
-    assert "conversation_id" in trend[0]
+    point = trend[0]
+    assert "score" in point
+    # Month-bucketed: date is YYYY-MM and there's no per-conversation id anymore.
+    assert "date" in point and len(point["date"]) == 7  # "YYYY-MM"
+    assert "conversation_id" not in point
+    # One point per distinct month (not per conversation).
+    months = [p["date"] for p in trend]
+    assert len(months) == len(set(months))
+
+
+@pytest.mark.asyncio
+async def test_stats_total_conversations(auth_client: AsyncClient, seeded_explore_data):
+    """total_conversations counts real (non-simulated) conversations, not months."""
+    r = await auth_client.get("/api/stats")
+    body = r.json()
+    assert body["total_conversations"] == 2  # the two seeded conversations
 
 
 @pytest.mark.asyncio

@@ -2277,6 +2277,11 @@ export interface components {
             tag_counts_by_month: {
                 [key: string]: unknown;
             };
+            /**
+             * Total Conversations
+             * @default 0
+             */
+            total_conversations: number;
         };
         /** SubmitRequest */
         SubmitRequest: {

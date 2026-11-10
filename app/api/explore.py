@@ -150,22 +150,20 @@ async def get_stats(
     critique_trend: list[dict[str, Any]] = []
     compliment_ratio_trend: list[dict[str, Any]] = []
     followup_tasks: dict[int, str] = {}
+    # #2: aggregate trends by month (avg per month) instead of one point per
+    # conversation — otherwise N conversations in the same month render as N
+    # points all labelled the same month.
+    _critique_by_month: dict[str, list[float]] = {}
+    _compliment_by_month: dict[str, list[float]] = {}
     for result_data, created_at, convo_id in analyses_rows:
         if result_data and isinstance(result_data, dict):
+            month_key = created_at.strftime("%Y-%m") if created_at else None
             critique = result_data.get("mom_test_critique", {})
-            if isinstance(critique, dict) and "score" in critique:
-                critique_trend.append({
-                    "date": created_at.isoformat() if created_at else None,
-                    "score": critique["score"],
-                    "conversation_id": convo_id,
-                })
+            if isinstance(critique, dict) and "score" in critique and month_key:
+                _critique_by_month.setdefault(month_key, []).append(float(critique["score"]))
             ratio = result_data.get("compliment_ratio")
-            if ratio is not None:
-                compliment_ratio_trend.append({
-                    "date": created_at.isoformat() if created_at else None,
-                    "ratio": ratio,
-                    "conversation_id": convo_id,
-                })
+            if ratio is not None and month_key:
+                _compliment_by_month.setdefault(month_key, []).append(float(ratio))
             commitments = result_data.get("commitments", [])
             if isinstance(commitments, list):
                 for commitment in commitments:
@@ -204,7 +202,33 @@ async def get_stats(
         for h, c in followups_result.all()
     ]
 
+    # Materialize month-averaged trends, chronologically ordered. `date` is
+    # "YYYY-MM"; the frontend slices to the month for the axis label.
+    for month in sorted(_critique_by_month):
+        scores = _critique_by_month[month]
+        critique_trend.append({
+            "date": month,
+            "score": round(sum(scores) / len(scores), 1),
+        })
+    for month in sorted(_compliment_by_month):
+        ratios = _compliment_by_month[month]
+        compliment_ratio_trend.append({
+            "date": month,
+            "ratio": sum(ratios) / len(ratios),
+        })
+
+    # #1: a real conversation count (non-simulated). The frontend previously
+    # derived this from the number of *months*, which read as "1".
+    total_conversations = (
+        await db.execute(
+            select(func.count())
+            .select_from(Conversation)
+            .where(Conversation.source != "simulator")
+        )
+    ).scalar_one()
+
     return StatsResponse(
+        total_conversations=total_conversations,
         tag_counts_by_month=tag_counts_by_month,
         critique_trend=critique_trend,
         compliment_ratio_trend=compliment_ratio_trend,

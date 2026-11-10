@@ -70,7 +70,7 @@ export function InsightsPage() {
   }, [stats]);
 
   // KPIs
-  const totalConversations = tagVolumeData.length;
+  const totalConversations = stats?.total_conversations ?? 0;
   const openFollowups = stats?.open_followups ?? [];
   const latestScore = stats?.critique_trend?.at(-1)?.score ?? null;
   const latestRatio = stats?.compliment_ratio_trend?.at(-1)?.ratio ?? null;

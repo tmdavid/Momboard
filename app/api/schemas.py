@@ -264,6 +264,7 @@ class NoteUpdate(BaseModel):
 
 
 class StatsResponse(BaseModel):
+    total_conversations: int = 0  # #1: real non-simulated conversation count
     tag_counts_by_month: dict[str, Any]
     critique_trend: list[dict[str, Any]]
     compliment_ratio_trend: list[dict[str, Any]]
