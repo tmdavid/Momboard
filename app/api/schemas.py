@@ -353,6 +353,22 @@ class HypothesisIntakeResponse(BaseModel):
     suggested_questions: list[str] = Field(default_factory=list)
 
 
+class IntakeConfirmedLink(BaseModel):
+    highlight_id: int
+    stance: Literal["supports", "contradicts"]
+
+
+class HypothesisIntakeCommit(BaseModel):
+    """T48: save a belief from intake with human-confirmed evidence links."""
+
+    statement: str = Field(min_length=15)
+    segment: str | None = None
+    # Links the human actively confirmed as evidence (saved origin=human, confirmed).
+    confirmed: list[IntakeConfirmedLink] = Field(default_factory=list)
+    # Validation questions retained for a thin/hunch belief.
+    validation_questions: list[str] = Field(default_factory=list, max_length=3)
+
+
 class HypothesisUpdate(BaseModel):
     statement: str | None = Field(default=None, min_length=15)
     status: str | None = None

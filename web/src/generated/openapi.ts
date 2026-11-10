@@ -646,6 +646,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hypotheses/intake/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commit Hypothesis Intake
+         * @description T48: save a belief from intake with human-confirmed evidence links.
+         *
+         *     Creates a Hypothesis (origin='human') and, for each confirmed match, a
+         *     HypothesisLink (origin='human', status='confirmed') — the human actively
+         *     asserted these quotes are evidence. Grounding then derives from the confirmed
+         *     links on read (fetch the hypothesis detail to see it). ``validation_questions``
+         *     are accepted for a thin belief but not persisted in this iteration (no store
+         *     column yet; a follow-up may add one).
+         */
+        post: operations["commit_hypothesis_intake_api_hypotheses_intake_commit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hypotheses/{hypothesis_id}": {
         parameters: {
             query?: never;
@@ -1845,6 +1872,20 @@ export interface components {
             supports?: components["schemas"]["HypothesisEvidenceItemResponse"][];
         };
         /**
+         * HypothesisIntakeCommit
+         * @description T48: save a belief from intake with human-confirmed evidence links.
+         */
+        HypothesisIntakeCommit: {
+            /** Confirmed */
+            confirmed?: components["schemas"]["IntakeConfirmedLink"][];
+            /** Segment */
+            segment?: string | null;
+            /** Statement */
+            statement: string;
+            /** Validation Questions */
+            validation_questions?: string[];
+        };
+        /**
          * HypothesisIntakeRequest
          * @description T48: preview evidence for a typed belief (read-only, saves nothing).
          */
@@ -2044,6 +2085,16 @@ export interface components {
             items: components["schemas"]["InboxItemResponse"][];
             /** Total */
             total: number;
+        };
+        /** IntakeConfirmedLink */
+        IntakeConfirmedLink: {
+            /** Highlight Id */
+            highlight_id: number;
+            /**
+             * Stance
+             * @enum {string}
+             */
+            stance: "supports" | "contradicts";
         };
         /** IntakeMatchResponse */
         IntakeMatchResponse: {
@@ -3616,6 +3667,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HypothesisIntakeResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    commit_hypothesis_intake_api_hypotheses_intake_commit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HypothesisIntakeCommit"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisResponse"];
                 };
             };
             /** @description Validation Error */

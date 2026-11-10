@@ -247,6 +247,37 @@ const hypothesesHandlers = [
     const link = allLinks.find((l) => l.link_id === Number(params.id));
     return HttpResponse.json({ ...link, status: body.status });
   }),
+
+  // T48: evidence-gated intake
+  http.post('/api/hypotheses/intake', async ({ request }) => {
+    const body = (await request.json()) as { statement: string };
+    return HttpResponse.json({
+      statement: body.statement,
+      segment: null,
+      matches: [
+        {
+          highlight_id: 501,
+          quote: 'Every Monday I export it to Excel and clean it by hand',
+          tag_key: 'workaround',
+          conversation_id: 1,
+          relation: 'supports',
+          confidence: 0.9,
+          rationale: 'Describes the recurring manual workaround.',
+          strong: true,
+        },
+      ],
+      grounding_preview: 'grounded',
+      suggested_questions: [],
+    });
+  }),
+
+  http.post('/api/hypotheses/intake/commit', async ({ request }) => {
+    const body = (await request.json()) as { statement: string };
+    return HttpResponse.json(
+      { id: 999, statement: body.statement, segment: null, status: 'open', created_at: new Date().toISOString() },
+      { status: 201 },
+    );
+  }),
 ];
 
 // ─── Helper: render the full app at /hypotheses route ───
@@ -1206,5 +1237,36 @@ describe('T28: Hypotheses board — keyboard accessibility', () => {
       const expandedRegion = screen.getByRole('region') || screen.getByLabelText(/evidence/i);
       expect(expandedRegion).toBeInTheDocument();
     });
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// T48: evidence-gated intake
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('T48: evidence-gated hypothesis intake', () => {
+  test('Check evidence first shows matched quotes, opt-in confirm, then saves', async () => {
+    const user = userEvent.setup();
+    renderHypothesesPage();
+
+    const input = await screen.findByPlaceholderText(/state a falsifiable belief/i);
+    await user.type(input, 'Customers rely on manual Excel exports to clean listings');
+    await user.click(screen.getByRole('button', { name: /check evidence first/i }));
+
+    // The matched quote appears in a confirm panel.
+    const panel = await screen.findByTestId('intake-panel');
+    expect(within(panel).getByText(/export it to Excel/i)).toBeInTheDocument();
+
+    // Nothing confirmed by default -> button reads "Save as hunch" (heavy judgment).
+    expect(within(panel).getByRole('button', { name: /save as hunch/i })).toBeInTheDocument();
+
+    // Confirm the quote -> button reflects the confirmation.
+    await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence 501/i }));
+    expect(within(panel).getByRole('button', { name: /save with 1 confirmed/i })).toBeInTheDocument();
+
+    // Saving closes the panel.
+    await user.click(within(panel).getByRole('button', { name: /save with 1 confirmed/i }));
+    await waitFor(() => expect(screen.queryByTestId('intake-panel')).not.toBeInTheDocument());
   });
 });

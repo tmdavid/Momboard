@@ -1552,3 +1552,42 @@ async def test_intake_endpoint_requires_auth_and_returns_shape(
     body = r.json()
     assert set(body) >= {"statement", "matches", "grounding_preview", "suggested_questions"}
     assert body["grounding_preview"] in {"grounded", "contested", "refuted", "candidate", "hunch"}
+
+
+@pytest.mark.asyncio
+async def test_intake_commit_saves_human_hypothesis_with_confirmed_links(
+    auth_client: AsyncClient, hyp_seeded: dict
+):
+    hl = hyp_seeded["highlight1"]
+    r = await auth_client.post(
+        "/api/hypotheses/intake/commit",
+        json={
+            "statement": "Customers rely on manual Excel exports to clean listings",
+            "confirmed": [{"highlight_id": hl.id, "stance": "supports"}],
+        },
+    )
+    assert r.status_code == 201
+    hyp_id = r.json()["id"]
+
+    # The committed hypothesis is human-origin and reads as grounded (confirmed support).
+    detail = await auth_client.get(f"/api/hypotheses/{hyp_id}")
+    assert detail.status_code == 200
+    body = detail.json()
+    assert body["rollup"]["grounding"] == "grounded"
+    assert body["rollup"]["supports"]["confirmed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_intake_commit_hunch_has_no_links(auth_client: AsyncClient, hyp_seeded: dict):
+    r = await auth_client.post(
+        "/api/hypotheses/intake/commit",
+        json={
+            "statement": "Customers will want a quantum onboarding dashboard someday",
+            "confirmed": [],
+            "validation_questions": ["How did you onboard the last vendor you adopted?"],
+        },
+    )
+    assert r.status_code == 201
+    hyp_id = r.json()["id"]
+    detail = await auth_client.get(f"/api/hypotheses/{hyp_id}")
+    assert detail.json()["rollup"]["grounding"] == "hunch"

@@ -15,6 +15,7 @@ export type Contact = Schemas['ContactResponse'];
 export type Tag = Schemas['TagResponse'];
 export type Utterance = Schemas['UtteranceResponse'];
 export type Highlight = Schemas['HighlightResponse'];
+export type HypothesisIntakeResponse = Schemas['HypothesisIntakeResponse'];
 
 /**
  * ConversationListItem with arrays guaranteed non-optional.
@@ -476,6 +477,25 @@ export const api = {
 
   createHypothesis(body: { statement: string; segment?: string }) {
     return apiFetch<Schemas['HypothesisResponse']>('/api/hypotheses', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  intakePreview(body: { statement: string; segment?: string }) {
+    return apiFetch<Schemas['HypothesisIntakeResponse']>('/api/hypotheses/intake', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  intakeCommit(body: {
+    statement: string;
+    segment?: string;
+    confirmed: { highlight_id: number; stance: 'supports' | 'contradicts' }[];
+    validation_questions?: string[];
+  }) {
+    return apiFetch<Schemas['HypothesisResponse']>('/api/hypotheses/intake/commit', {
       method: 'POST',
       body: JSON.stringify(body),
     });

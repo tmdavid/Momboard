@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas import (
     HypothesisCreate,
     HypothesisDetailResponse,
+    HypothesisIntakeCommit,
     HypothesisIntakeRequest,
     HypothesisIntakeResponse,
     HypothesisLinkCreate,
@@ -276,6 +277,54 @@ async def preview_hypothesis_intake(
             )
     finally:
         await llm.close()
+
+
+@router.post("/intake/commit", response_model=HypothesisResponse, status_code=201)
+async def commit_hypothesis_intake(
+    body: HypothesisIntakeCommit,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> Hypothesis:
+    """T48: save a belief from intake with human-confirmed evidence links.
+
+    Creates a Hypothesis (origin='human') and, for each confirmed match, a
+    HypothesisLink (origin='human', status='confirmed') — the human actively
+    asserted these quotes are evidence. Grounding then derives from the confirmed
+    links on read (fetch the hypothesis detail to see it). ``validation_questions``
+    are accepted for a thin belief but not persisted in this iteration (no store
+    column yet; a follow-up may add one).
+    """
+    session_factory = request.app.state.session_factory
+    async with session_factory() as db:
+        hyp = Hypothesis(
+            statement=body.statement,
+            segment=body.segment,
+            status="open",
+            origin="human",
+            created_by=user.id,
+        )
+        db.add(hyp)
+        await db.flush()
+
+        for item in body.confirmed:
+            highlight = await db.get(Highlight, item.highlight_id)
+            if highlight is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Highlight {item.highlight_id} not found",
+                )
+            db.add(
+                HypothesisLink(
+                    hypothesis_id=hyp.id,
+                    highlight_id=item.highlight_id,
+                    stance=item.stance,
+                    origin="human",
+                    status="confirmed",
+                )
+            )
+        await db.commit()
+        await db.refresh(hyp)
+        return hyp
 
 
 @router.get("/{hypothesis_id}", response_model=HypothesisDetailResponse)
