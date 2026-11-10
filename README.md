@@ -4,38 +4,25 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 
 ## Status
 
-**v0.2** — "From archive to advisor"
+**v0.3** — "From advisor to collaborator" — *in progress.* The corpus becomes a grounded boundary: it **feeds other tools** (insights exposed over MCP) and **gates what enters it** (hand-entered beliefs must cite call evidence or be flagged as hunches). See [`V0.3.md`](V0.3.md) and the design docs under [`docs/design/`](docs/design/).
 
-> **Next:** v0.3 — "From advisor to collaborator" — is designed and in progress. It makes the corpus a grounded boundary: it **feeds other tools** (insights and syntheses exposed over MCP) and **gates what enters it** (hand-entered beliefs must cite call evidence or be flagged as hunches). See [`V0.3.md`](V0.3.md) and the design docs under [`docs/design/`](docs/design/).
+### Latest additions (v0.3)
 
-The core application (T01–T23, T27–T28) plus v0.2 features are implemented:
+- **Evidence-gated hypothesis intake (T48)** — add a belief and the corpus either backs it with evidence, shows weak matches, or prompts Mom Test questions; a read-time grounding band (`grounded`/`contested`/`refuted`/`candidate`/`hunch`) keeps hunches honestly labelled.
+- **Read-only insight MCP tools (T46)** — hypotheses (with grounding + cited evidence) and decisions exposed over MCP for external agents to build on.
+- **Clari source-call link** — imported conversations link back to the original recording.
 
-- Transcript ingestion for pasted text, `Name: text`, and WebVTT
-- Database-backed normalize → tag → analyze → hypothesis-link pipeline, run by a concurrent worker pool with startup recovery of stale jobs
-- Human review of suggested highlights and manual highlights
-- Conversation notes with optimistic concurrency
-- Library, conversation, explore, synthesis, insights, and hypotheses UI
-- Session authentication, live Settings status, admin-managed taxonomy, and companies/contacts directory
+### Core capabilities
+
+- Transcript ingestion (pasted text, `Name: text`, WebVTT, audio/Whisper, Google Meet/Drive, Vexa, Clari) through a staging inbox with dedupe
+- Database-backed normalize → tag → analyze → hypothesis-link pipeline on a concurrent worker pool with stale-job recovery
+- Human review of highlights, conversation notes, and the Library / conversation / explore / synthesis / insights / hypotheses / summaries UI
+- Advisor features: pre-call briefs, contact memory + drift, evidence staleness, weekly digest, corpus chat, interview simulator, decision log, segment lenses, quote cards
+- Session auth, live Settings status, admin-managed taxonomy, companies/contacts directory
 - Pluggable LLM backend — OpenAI, local Ollama, or AWS Bedrock (global, EU-resident by default) — with per-agent model selection
-- SQLite/PostgreSQL-compatible schema and Alembic migrations
-- Production Docker/Fly configuration and rotating SQLite backups
-- **T34 Staging inbox:** pending_import/ignored/imported/parse_error lifecycle, source_ref dedupe
-- **T29/T30 Contact memory + drift:** timelines, drift detection, contact/company detail API
-- **T38 Pre-call briefs:** compile history + suggest past-behavior questions, 1h cache
-- **T24 Google Meet/Drive polling:** Drive Doc parser, fixture-pinned, parse_error retention
-- **T41 Evidence staleness:** freshness bands computed read-time, integrated into hypotheses
-- **T31 Weekly digest:** pure builder, Slack delivery, idempotent self-rescheduling
-- **T42 Corpus chat:** SQL-first retrieval, validated citations, per-user chat storage
-- **T25 MCP tools:** 7 tools (search, get, highlights, commitments, synthesis, create, ask_corpus) over stdio; an HTTP helper exists but is not mounted by default
-- **T44 Quote cards:** 1600×900 PNG/SVG export with themes, anonymization, rejected guard
-- **T35 Audio upload:** Whisper transcription with format/size validation, VTT-formatted output
-- **T36 Vexa meeting bot:** configurable integration (VEXA_BASE_URL/VEXA_API_KEY), send/stop/preview/import with speaker-attributed transcript, deterministic dedupe
-- **T39 Interview simulator:** persona builder from segment filters, chat loop with Mom Test behaviors, critique via standard worker chain, corpus isolation (simulated excluded from all corpus features)
-- **T40 Decision log:** CRUD with evidence receipts, proposed→decided→superseded lifecycle, integrity checks (undermined on contradictions/drifts), automatic refresh in worker jobs, highlight deletion blocked (409) when cited, successor linkage
-- **T43 Segment lenses:** compare two filter sets, per-side attribution validated in code, "Compare as lens" flow from Explore page
-- **T45 Saved syntheses + Summaries:** fire-and-forget synthesis jobs from Explore, a Summaries page to browse/keep/delete reports, and a `saved` flag with live job status
-- **Conversation sorting:** list conversations by date or Mom Test critique score (`date_desc`/`date_asc`/`score_desc`/`score_asc`), unscored last
-- **Clari Copilot import:** on-demand `scripts/clari_ingest.py` that pulls recorded calls into conversations, idempotent via `source_ref` dedupe (user-run, not a webhook)
+- SQLite/PostgreSQL-compatible schema, Alembic migrations, production Docker/Fly config, rotating backups
+
+For the full per-release feature history, see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Requirements
 
