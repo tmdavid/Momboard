@@ -623,6 +623,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hypotheses/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Hypothesis Intake
+         * @description T48: preview corpus evidence for a typed belief. Read-only — saves nothing.
+         *
+         *     Returns matched highlights (scored supports/contradicts), a grounding preview,
+         *     and past-behavior validation questions when evidence is thin.
+         */
+        post: operations["preview_hypothesis_intake_api_hypotheses_intake_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hypotheses/{hypothesis_id}": {
         parameters: {
             query?: never;
@@ -1821,6 +1844,32 @@ export interface components {
             /** Supports */
             supports?: components["schemas"]["HypothesisEvidenceItemResponse"][];
         };
+        /**
+         * HypothesisIntakeRequest
+         * @description T48: preview evidence for a typed belief (read-only, saves nothing).
+         */
+        HypothesisIntakeRequest: {
+            /** Segment */
+            segment?: string | null;
+            /** Statement */
+            statement: string;
+        };
+        /** HypothesisIntakeResponse */
+        HypothesisIntakeResponse: {
+            /**
+             * Grounding Preview
+             * @default hunch
+             */
+            grounding_preview: string;
+            /** Matches */
+            matches?: components["schemas"]["IntakeMatchResponse"][];
+            /** Segment */
+            segment?: string | null;
+            /** Statement */
+            statement: string;
+            /** Suggested Questions */
+            suggested_questions?: string[];
+        };
         /** HypothesisLinkCreate */
         HypothesisLinkCreate: {
             /** Highlight Id */
@@ -1995,6 +2044,31 @@ export interface components {
             items: components["schemas"]["InboxItemResponse"][];
             /** Total */
             total: number;
+        };
+        /** IntakeMatchResponse */
+        IntakeMatchResponse: {
+            /** Confidence */
+            confidence: number;
+            /** Conversation Id */
+            conversation_id: number;
+            /** Highlight Id */
+            highlight_id: number;
+            /** Quote */
+            quote: string;
+            /**
+             * Rationale
+             * @default
+             */
+            rationale: string;
+            /** Relation */
+            relation: string;
+            /**
+             * Strong
+             * @default false
+             */
+            strong: boolean;
+            /** Tag Key */
+            tag_key: string;
         };
         /** LLMStatus */
         LLMStatus: {
@@ -3509,6 +3583,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HypothesisResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_hypothesis_intake_api_hypotheses_intake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HypothesisIntakeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisIntakeResponse"];
                 };
             };
             /** @description Validation Error */

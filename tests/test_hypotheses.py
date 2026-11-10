@@ -1454,3 +1454,101 @@ class TestRefutationRegression:
         hyp_item = next(i for i in items if i["id"] == hyp_id)
         assert hyp_item["rollup"]["companies_contradicting"] == 1
         assert hyp_item["verdict_hint"] != "leaning-refuted"
+
+
+# --- T48: intake preview service -------------------------------------------
+
+
+class _StubIntakeLLM:
+    """Minimal LLM stub: generate() returns a prepared IntakeMatchOutput."""
+
+    def __init__(self, output):
+        self._output = output
+
+    async def generate(self, *, prompt, schema, model="default"):  # noqa: ARG002
+        return self._output
+
+    async def close(self):
+        return None
+
+
+@pytest.mark.asyncio
+async def test_intake_preview_scores_candidates_and_previews_grounding(
+    session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+):
+    from app.llm.schemas import IntakeMatch, IntakeMatchOutput
+    from app.services.hypothesis_intake import preview_intake
+
+    hl = hyp_seeded["highlight1"]  # "Every Monday I export it to Excel..."
+    stub = _StubIntakeLLM(
+        IntakeMatchOutput(
+            matches=[
+                IntakeMatch(
+                    highlight_id=hl.id, relation="supports", confidence=0.9,
+                    rationale="Describes the manual export workaround.",
+                ),
+                # invalid id must be dropped
+                IntakeMatch(highlight_id=999999, relation="supports", confidence=0.9),
+            ],
+            suggested_questions=[],
+        )
+    )
+    async with session_factory() as db:
+        out = await preview_intake(
+            db, "Customers rely on manual Excel exports to clean listings", llm=stub
+        )
+
+    # Only the valid, related match survives; grounding previews as grounded.
+    assert [m["highlight_id"] for m in out["matches"]] == [hl.id]
+    assert out["matches"][0]["relation"] == "supports"
+    assert out["matches"][0]["strong"] is True
+    assert out["grounding_preview"] == "grounded"
+
+
+@pytest.mark.asyncio
+async def test_intake_preview_no_evidence_returns_hunch_with_questions(
+    session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+):
+    from app.llm.schemas import IntakeMatchOutput
+    from app.services.hypothesis_intake import preview_intake
+
+    # Candidates exist in the corpus, but the LLM judges none relevant to this
+    # belief → no supports/contradicts → hunch + validation questions.
+    stub = _StubIntakeLLM(
+        IntakeMatchOutput(
+            matches=[],
+            suggested_questions=[
+                "How did you handle onboarding the last time you switched vendors?",
+                "Would you use a dashboard for this?",  # must be rejected (hypothetical)
+            ],
+        )
+    )
+    async with session_factory() as db:
+        out = await preview_intake(
+            db, "Customers desperately want zzzqwx quantum blockchain onboarding", llm=stub
+        )
+
+    assert out["matches"] == []
+    assert out["grounding_preview"] == "hunch"
+    # Past-behavior question kept; 'Would you...' rejected by the validator.
+    assert any("last time" in q for q in out["suggested_questions"])
+    assert all("would you" not in q.lower() for q in out["suggested_questions"])
+
+
+@pytest.mark.asyncio
+async def test_intake_endpoint_requires_auth_and_returns_shape(
+    client: AsyncClient, auth_client: AsyncClient, hyp_seeded: dict
+):
+    # Unauthenticated → 401
+    r = await client.post("/api/hypotheses/intake", json={"statement": "x" * 20})
+    assert r.status_code == 401
+
+    # Authenticated → 200 with the preview shape (no-key env → FakeLLM → hunch path)
+    r = await auth_client.post(
+        "/api/hypotheses/intake",
+        json={"statement": "Customers rely on manual Excel exports to clean listings"},
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert set(body) >= {"statement", "matches", "grounding_preview", "suggested_questions"}
+    assert body["grounding_preview"] in {"grounded", "contested", "refuted", "candidate", "hunch"}

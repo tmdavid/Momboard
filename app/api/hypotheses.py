@@ -10,6 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.schemas import (
     HypothesisCreate,
     HypothesisDetailResponse,
+    HypothesisIntakeRequest,
+    HypothesisIntakeResponse,
     HypothesisLinkCreate,
     HypothesisLinkResponse,
     HypothesisListItemResponse,
@@ -248,6 +250,32 @@ async def create_hypothesis(
         await db.commit()
         await db.refresh(hyp)
         return hyp
+
+
+@router.post("/intake", response_model=HypothesisIntakeResponse)
+async def preview_hypothesis_intake(
+    body: HypothesisIntakeRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> dict:
+    """T48: preview corpus evidence for a typed belief. Read-only — saves nothing.
+
+    Returns matched highlights (scored supports/contradicts), a grounding preview,
+    and past-behavior validation questions when evidence is thin.
+    """
+    from app.llm.factory import create_llm_client
+    from app.services.hypothesis_intake import preview_intake
+
+    settings = request.app.state.settings
+    session_factory = request.app.state.session_factory
+    llm = create_llm_client(settings, agent="corpus_chat")
+    try:
+        async with session_factory() as db:
+            return await preview_intake(
+                db, body.statement, llm=llm, segment=body.segment
+            )
+    finally:
+        await llm.close()
 
 
 @router.get("/{hypothesis_id}", response_model=HypothesisDetailResponse)

@@ -222,3 +222,19 @@ class LensOutput(BaseModel):
     themes_b: list[LensTheme] = Field(default_factory=list)
     themes_shared: list[LensTheme] = Field(default_factory=list)
     contradictions: list[LensTheme] = Field(default_factory=list)
+
+
+# --- T48: Evidence-gated hypothesis intake ---
+
+
+class IntakeMatch(BaseModel):
+    highlight_id: int
+    relation: Literal["supports", "contradicts", "unrelated"]
+    confidence: float = Field(ge=0.0, le=1.0)
+    rationale: str = ""
+
+
+class IntakeMatchOutput(BaseModel):
+    matches: list[IntakeMatch] = Field(default_factory=list)
+    # Past-behavior questions to validate the belief when evidence is thin.
+    suggested_questions: list[str] = Field(default_factory=list, max_length=3)

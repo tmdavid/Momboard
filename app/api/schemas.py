@@ -327,6 +327,32 @@ class HypothesisCreate(BaseModel):
     segment: str | None = None
 
 
+class HypothesisIntakeRequest(BaseModel):
+    """T48: preview evidence for a typed belief (read-only, saves nothing)."""
+
+    statement: str = Field(min_length=15)
+    segment: str | None = None
+
+
+class IntakeMatchResponse(BaseModel):
+    highlight_id: int
+    quote: str
+    tag_key: str
+    conversation_id: int
+    relation: str  # supports|contradicts
+    confidence: float
+    rationale: str = ""
+    strong: bool = False
+
+
+class HypothesisIntakeResponse(BaseModel):
+    statement: str
+    segment: str | None = None
+    matches: list[IntakeMatchResponse] = Field(default_factory=list)
+    grounding_preview: str = "hunch"  # grounded|contested|refuted|candidate|hunch
+    suggested_questions: list[str] = Field(default_factory=list)
+
+
 class HypothesisUpdate(BaseModel):
     statement: str | None = Field(default=None, min_length=15)
     status: str | None = None
