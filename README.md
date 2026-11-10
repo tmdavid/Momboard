@@ -6,6 +6,8 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 
 **v0.2** — "From archive to advisor"
 
+> **Next:** v0.3 — "From advisor to collaborator" — is designed and in progress. It makes the corpus a grounded boundary: it **feeds other tools** (insights and syntheses exposed over MCP) and **gates what enters it** (hand-entered beliefs must cite call evidence or be flagged as hunches). See [`V0.3.md`](V0.3.md) and the design docs under [`docs/design/`](docs/design/).
+
 The core application (T01–T23, T27–T28) plus v0.2 features are implemented:
 
 - Transcript ingestion for pasted text, `Name: text`, and WebVTT
