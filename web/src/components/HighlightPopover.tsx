@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Highlight } from '../api';
-import { TAG_META, tagEmoji, tagName } from '../constants';
+import { useTaxonomy } from '../hooks/useTaxonomy';
 
 interface Props {
   highlight: Highlight;
@@ -14,6 +14,7 @@ interface Props {
 export function HighlightPopover({ highlight, position, onAccept, onReject, onRetag, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [selectedTag, setSelectedTag] = useState(highlight.tag_key);
+  const tax = useTaxonomy();
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -54,7 +55,7 @@ export function HighlightPopover({ highlight, position, onAccept, onReject, onRe
       aria-label="Highlight review"
     >
       <b className="text-[13px]">
-        {tagEmoji(highlight.tag_key)} {tagName(highlight.tag_key)}{' '}
+        {tax.emoji(highlight.tag_key)} {tax.name(highlight.tag_key)}{' '}
         {highlight.status === 'suggested' && (
           <span className="text-muted font-normal">· suggested {highlight.confidence?.toFixed(2)}</span>
         )}
@@ -65,9 +66,9 @@ export function HighlightPopover({ highlight, position, onAccept, onReject, onRe
         value={selectedTag}
         onChange={(e) => setSelectedTag(e.target.value)}
       >
-        {Object.entries(TAG_META).map(([key, meta]) => (
-          <option key={key} value={key}>
-            {meta.emoji} {meta.name}
+        {tax.tags.map((t) => (
+          <option key={t.key} value={t.key}>
+            {t.emoji} {t.name}
           </option>
         ))}
       </select>

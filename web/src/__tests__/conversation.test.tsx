@@ -44,11 +44,11 @@ describe('Conversation page', () => {
     renderConversation();
 
     await waitFor(() => {
-      expect(screen.getByText(/workaround/)).toBeInTheDocument();
+      expect(screen.getByText(/workaround/i)).toBeInTheDocument();
     });
 
     // Accepted chips should be present
-    expect(screen.getByText(/workaround/)).toBeInTheDocument();
+    expect(screen.getByText(/workaround/i)).toBeInTheDocument();
     // Suggested chips should show confidence
     expect(screen.getByText('0.91')).toBeInTheDocument();
   });

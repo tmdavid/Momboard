@@ -5,7 +5,7 @@ import { useReviewQueue } from '../hooks/useReviewQueue';
 import { NotesDrawer } from '../components/NotesDrawer';
 import { AnalysisSidebar } from '../components/AnalysisSidebar';
 import { HighlightPopover } from '../components/HighlightPopover';
-import { TAG_META, tagEmoji } from '../constants';
+import { useTaxonomy } from '../hooks/useTaxonomy';
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 export function ConversationPage() {
@@ -20,6 +20,8 @@ export function ConversationPage() {
     queryFn: () => api.getConversation(conversationId),
     enabled: !!conversationId,
   });
+
+  const tax = useTaxonomy();
 
   // Local optimistic overrides for highlights
   const [optimisticOverrides, setOptimisticOverrides] = useState<Record<number, { status?: string; tag_key?: string }>>({});
@@ -370,15 +372,15 @@ export function ConversationPage() {
                   <button
                     key={tag}
                     className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-hairline bg-page text-ink-2 hover:border-accent hover:text-accent"
-                    title={`Accept all ${count} suggested "${TAG_META[tag]?.name || tag}"`}
+                    title={`Accept all ${count} suggested "${tax.name(tag)}"`}
                     onClick={() => {
                       const n = suggestedHighlights.filter((h) => h.tag_key === tag).length;
-                      if (window.confirm(`Accept all ${n} suggested "${TAG_META[tag]?.name || tag}" highlights?`)) {
+                      if (window.confirm(`Accept all ${n} suggested "${tax.name(tag)}" highlights?`)) {
                         bulkAcceptMutation.mutate({ tag_key: tag, conversation_id: conversationId });
                       }
                     }}
                   >
-                    {tagEmoji(tag)} <span className="font-semibold">{count}</span>
+                    {tax.emoji(tag)} <span className="font-semibold">{count}</span>
                   </button>
                 ))}
               </div>
@@ -449,7 +451,7 @@ export function ConversationPage() {
                               : 'border border-[#9ec5f4] bg-accent-soft text-[#1c5cab] font-semibold'
                           }`}
                         >
-                          {tagEmoji(h.tag_key)} {TAG_META[h.tag_key]?.name || h.tag_key}
+                          {tax.emoji(h.tag_key)} {tax.name(h.tag_key)}
                           {h.status === 'suggested' && h.confidence != null && (
                             <span className="text-muted font-normal ml-1">{h.confidence.toFixed(2)}</span>
                           )}
@@ -475,14 +477,14 @@ export function ConversationPage() {
               ) : (
                 <div className="flex flex-col gap-1" role="listbox" aria-label="Select tag">
                   <span className="text-xs text-muted px-1 mb-1">Select tag:</span>
-                  {Object.entries(TAG_META).map(([key, meta]) => (
+                  {tax.tags.map((t) => (
                     <button
-                      key={key}
+                      key={t.key}
                       role="option"
                       className="text-xs text-left px-2 py-1 rounded hover:bg-page cursor-pointer bg-transparent border-none"
-                      onClick={() => handleTagSelect(key)}
+                      onClick={() => handleTagSelect(t.key)}
                     >
-                      {meta.emoji} {meta.name}
+                      {t.emoji} {t.name}
                     </button>
                   ))}
                 </div>

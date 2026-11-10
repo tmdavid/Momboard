@@ -35,7 +35,7 @@ describe('T22: Insights tag-volume legend series toggling', () => {
     expect(screen.getAllByRole('listitem').length).toBeGreaterThan(0);
 
     // Find the legend entry for "pain" (it will have the emoji or text)
-    const painLegend = screen.getByText(/⚡ pain/);
+    const painLegend = screen.getByText(/⚡ Pain/);
     expect(painLegend).toBeInTheDocument();
 
     // Before clicking, the pain series line should be rendered in the SVG
@@ -78,7 +78,7 @@ describe('T22: Insights tag-volume legend series toggling', () => {
     });
 
     // Click pain legend entry to toggle it off
-    const painLegend = screen.getByText(/⚡ pain/);
+    const painLegend = screen.getByText(/⚡ Pain/);
     await user.click(painLegend);
 
     // Other panels should still be fully intact
@@ -105,7 +105,7 @@ describe('T22: Insights tag-volume legend series toggling', () => {
       expect(screen.getByText('Signal volume over time')).toBeInTheDocument();
     });
 
-    const painLegend = screen.getByText(/⚡ pain/);
+    const painLegend = screen.getByText(/⚡ Pain/);
 
     // Toggle off
     await user.click(painLegend);
@@ -139,8 +139,8 @@ describe('T22: Insights tag-volume legend series toggling', () => {
     });
 
     // Toggle off both pain and workaround
-    const painLegend = screen.getByText(/⚡ pain/);
-    const workaroundLegend = screen.getByText(/➡️ workaround/);
+    const painLegend = screen.getByText(/⚡ Pain/);
+    const workaroundLegend = screen.getByText(/➡️ Workaround/);
 
     await user.click(painLegend);
     await user.click(workaroundLegend);

@@ -1,19 +1,23 @@
 import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, SynthesisResponse } from '../api';
-import { tagEmoji, tagName } from '../constants';
 import { friendlyModelName } from '../utils/modelName';
+import { useTaxonomy } from '../hooks/useTaxonomy';
 
 type SavedFilter = 'all' | 'saved';
 
-function scopeLabel(scope: Record<string, unknown> | null | undefined): string {
+function scopeLabel(
+  scope: Record<string, unknown> | null | undefined,
+  emoji: (k: string) => string,
+  name: (k: string) => string,
+): string {
   if (!scope) return 'All highlights';
   const tags = scope.tags;
   const parts: string[] = [];
   if (Array.isArray(tags) && tags.length > 0) {
-    parts.push(tags.map((t) => `${tagEmoji(String(t))} ${tagName(String(t))}`).join(' + '));
+    parts.push(tags.map((t) => `${emoji(String(t))} ${name(String(t))}`).join(' + '));
   } else if (typeof scope.tag === 'string' && scope.tag) {
-    parts.push(`${tagEmoji(scope.tag)} ${tagName(scope.tag)}`);
+    parts.push(`${emoji(scope.tag)} ${name(scope.tag)}`);
   }
   if (scope.company_id) parts.push(`company #${scope.company_id}`);
   return parts.length > 0 ? parts.join(' · ') : 'All highlights';
@@ -126,6 +130,7 @@ function SummaryCard({
   busy: boolean;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
+  const tax = useTaxonomy();
   const s = synthesis;
   const isDone = !!s.result;
   const isError = s.status === 'error';
@@ -146,7 +151,7 @@ function SummaryCard({
     >
       <div className="flex items-start gap-3 mb-3">
         <div className="flex-1">
-          <h2 className="text-[15px] font-semibold">{scopeLabel(s.input_scope)}</h2>
+          <h2 className="text-[15px] font-semibold">{scopeLabel(s.input_scope, tax.emoji, tax.name)}</h2>
           <div className="text-xs text-muted mt-0.5">
             {formatDate(s.created_at)}
             {s.model ? ` · ${friendlyModelName(s.model)}` : ''}

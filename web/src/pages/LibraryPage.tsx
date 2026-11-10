@@ -5,6 +5,7 @@ import { api, ConversationListItem } from '../api';
 import { NewConversationModal, NewConversationFormData } from '../components/NewConversationModal';
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { TAG_META } from '../constants';
+import { useTaxonomy } from '../hooks/useTaxonomy';
 import { InboxPane } from './InboxPage';
 
 export function LibraryPage() {
@@ -605,6 +606,7 @@ const CONTEXT_TAGS = new Set(['context', 'person']);
 
 function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
   // Sort entries by taxonomy order
+  const tax = useTaxonomy();
   const sorted = Object.entries(tagCounts).sort(
     ([a], [b]) => (TAXONOMY_ORDER.indexOf(a) === -1 ? 99 : TAXONOMY_ORDER.indexOf(a)) - (TAXONOMY_ORDER.indexOf(b) === -1 ? 99 : TAXONOMY_ORDER.indexOf(b)),
   );
@@ -623,7 +625,7 @@ function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
               : 'border-hairline bg-page text-ink-2'
           }`}
         >
-          {TAG_META[tag]?.emoji || '?'} {count}
+          {tax.emoji(tag)} {count}
         </span>
       ))}
       {overflow > 0 && (

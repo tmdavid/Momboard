@@ -12,7 +12,7 @@ import {
   Area,
 } from 'recharts';
 import { api } from '../api';
-import { tagEmoji, tagName } from '../constants';
+import { useTaxonomy } from '../hooks/useTaxonomy';
 
 const CHART_COLORS: Record<string, string> = {
   pain: '#2a78d6',
@@ -28,6 +28,7 @@ export function InsightsPage() {
     queryKey: ['stats'],
     queryFn: () => api.getStats(),
   });
+  const tax = useTaxonomy();
 
   // Track which series are hidden (toggled off)
   const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
@@ -152,7 +153,7 @@ export function InsightsPage() {
                           stroke={CHART_COLORS[tag]}
                           strokeWidth={2}
                           dot={false}
-                          name={`${tagEmoji(tag)} ${tagName(tag)}`}
+                          name={`${tax.emoji(tag)} ${tax.name(tag)}`}
                           hide={hiddenSeries.has(tag)}
                         />
                       ))}
@@ -165,7 +166,7 @@ export function InsightsPage() {
                           className="inline-flex items-center gap-1 text-xs cursor-pointer border-none bg-transparent p-0"
                           onClick={() => toggleSeries(tag)}
                           aria-pressed={!hiddenSeries.has(tag)}
-                          aria-label={`Toggle ${tagEmoji(tag)} ${tagName(tag)} series`}
+                          aria-label={`Toggle ${tax.emoji(tag)} ${tax.name(tag)} series`}
                           style={{ opacity: hiddenSeries.has(tag) ? 0.4 : 1 }}
                         >
                           <span
@@ -173,7 +174,7 @@ export function InsightsPage() {
                             style={{ backgroundColor: color }}
                             aria-hidden="true"
                           />
-                          {tagEmoji(tag)} {tagName(tag)}
+                          {tax.emoji(tag)} {tax.name(tag)}
                         </button>
                       </li>
                     ))}
@@ -219,7 +220,7 @@ export function InsightsPage() {
                               <div className="mt-1 text-center">
                                 <div className="text-xs font-medium tabular-nums">{count}</div>
                                 <div className="text-[10px] leading-tight text-muted break-words">
-                                  {tagEmoji(tag)} {tagName(tag)}
+                                  {tax.emoji(tag)} {tax.name(tag)}
                                 </div>
                               </div>
                             </div>

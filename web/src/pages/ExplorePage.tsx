@@ -2,7 +2,8 @@ import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, HighlightWithContext } from '../api';
-import { TAG_META, tagEmoji } from '../constants';
+import { TAG_META } from '../constants';
+import { useTaxonomy } from '../hooks/useTaxonomy';
 
 const SYNTHESIS_THRESHOLD = 5;
 
@@ -455,6 +456,7 @@ function LensResultPanel({ result, onClose }: { result: Record<string, unknown>;
 
 function QuoteCard({ item }: { item: HighlightWithContext }) {
   const navigate = useNavigate();
+  const tax = useTaxonomy();
   const href = item.utterance_id
     ? `/conversations/${item.conversation_id}#utterance-${item.utterance_id}`
     : `/conversations/${item.conversation_id}`;
@@ -480,7 +482,7 @@ function QuoteCard({ item }: { item: HighlightWithContext }) {
       onKeyDown={handleKeyDown}
     >
       <div className="text-xs font-semibold text-ink-2 flex items-center gap-1.5 mb-2">
-        {tagEmoji(item.tag_key)} {item.tag_key}
+        {tax.emoji(item.tag_key)} {tax.name(item.tag_key)}
         {item.confidence != null && <span className="text-muted font-normal ml-auto">{item.confidence.toFixed(2)}</span>}
       </div>
       <blockquote className="text-[14.5px] text-ink mb-2.5">
