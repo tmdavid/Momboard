@@ -6,6 +6,7 @@ import { NewConversationModal, NewConversationFormData } from '../components/New
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { scoreBand, tagColor } from '../constants';
 import { useTaxonomy } from '../hooks/useTaxonomy';
+import { EmptyResults } from '../components/EmptyResults';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { InboxPane } from './InboxPage';
 
@@ -404,9 +405,22 @@ export function LibraryPage() {
           </div>
         )}
 
-        {/* Empty state */}
-        {isEmpty && (
-          <div className="p-16 text-center text-muted bg-surface border border-hairline rounded-xl">
+        {/* Empty state: an empty library, or filters that match nothing (not the same thing) */}
+        {isEmpty && hasActiveFilters && (
+          <EmptyResults
+            filters={{
+              q,
+              tags: activeTags,
+              companyName: companies?.find((c: { id: number; name: string }) => String(c.id) === companyId)?.name ?? (companyId ? `#${companyId}` : undefined),
+              dateFrom,
+              dateTo,
+            }}
+            onClear={clearAllFilters}
+            onNew={() => setModalOpen(true)}
+          />
+        )}
+        {isEmpty && !hasActiveFilters && (
+          <div data-testid="empty-library" className="p-16 text-center text-muted bg-surface border border-hairline rounded-xl">
             No conversations yet.
             <br />
             <br />
@@ -529,18 +543,22 @@ function SavedViews({ activeTags, companyId, dateFrom, dateTo, sort, setSearchPa
     });
   };
 
-  const views: { label: string; on: boolean; apply: () => void }[] = [
+  const views: { label: string; on: boolean; apply: () => void; title?: string }[] = [
     { label: 'All', on: activeTags.length === 0 && !companyId && !dateFrom && !dateTo, apply: () => apply(() => {}) },
     { label: 'Needs review', on: sort === 'date_asc' && !!dateFrom === false && activeTags.length === 0 && !companyId, apply: () => apply((p) => p.set('sort', 'date_asc')) },
     { label: 'Low score (≤3)', on: sort === 'score_asc', apply: () => apply((p) => p.set('sort', 'score_asc')) },
-    { label: 'Strong pains', on: activeTags.length === 1 && activeTags[0] === 'pain', apply: () => apply((p) => p.set('tag', 'pain')) },
+    // The customer hurts AND is already paying to cope: at least one Pain and one Workaround in the
+    // same call (both above their confidence floor - the API applies it to tag filters).
+    { label: 'Strong pains', on: activeTags.length === 2 && activeTags.includes('pain') && activeTags.includes('workaround'),
+      title: 'Calls with at least one pain and a workaround: the customer hurts and is already paying to cope, so they want it fixed.',
+      apply: () => apply((p) => { p.append('tag', 'pain'); p.append('tag', 'workaround'); }) },
     { label: 'Partnerships', on: activeTags.length === 1 && activeTags[0] === 'person', apply: () => apply((p) => p.set('tag', 'person')) },
   ];
 
   return (
     <div className="flex flex-wrap gap-1 p-1 rounded-lg bg-sub self-start mb-4" role="tablist" aria-label="Saved views">
       {views.map((v) => (
-        <button key={v.label} role="tab" aria-selected={v.on} onClick={v.apply}
+        <button key={v.label} role="tab" aria-selected={v.on} onClick={v.apply} title={v.title}
           className={`h-8 px-3.5 rounded-md border-none font-semibold cursor-pointer ${v.on ? 'bg-surface text-ink shadow-sm' : 'bg-transparent text-ink-2'}`}>
           {v.label}
         </button>
@@ -616,6 +634,8 @@ function ConversationRow({ conversation: c, onClick }: { conversation: Conversat
  * bar's aria-label/title. Replaces the old emoji chip soup.
  */
 const CONTEXT_TAGS = new Set(['context', 'person']);
+/** Flattery is not a signal worth leading with: never named in a row's top 3, drawn last in the bar. */
+const FLUFF_TAGS = new Set(['compliment']);
 
 function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
   const tax = useTaxonomy();
@@ -623,8 +643,10 @@ function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
   const total = entries.reduce((s, [, n]) => s + n, 0);
   if (total === 0) return <span className="text-muted text-xs">—</span>;
 
-  const sorted = [...entries].sort((a, b) => b[1] - a[1]);
-  const named = sorted.filter(([t]) => !CONTEXT_TAGS.has(t));
+  const byCount = [...entries].sort((a, b) => b[1] - a[1]);
+  // Fluff goes to the end of the bar whatever its count, so it never reads as the main signal.
+  const sorted = [...byCount.filter(([t]) => !FLUFF_TAGS.has(t)), ...byCount.filter(([t]) => FLUFF_TAGS.has(t))];
+  const named = sorted.filter(([t]) => !CONTEXT_TAGS.has(t) && !FLUFF_TAGS.has(t));
   const top = named.slice(0, 3);
   const shownCount = top.reduce((s, [, n]) => s + n, 0);
   const rest = total - shownCount;
@@ -634,11 +656,11 @@ function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
     <div className="flex flex-col gap-1.5 min-w-0">
       <div className="flex h-2 rounded overflow-hidden bg-hairline" role="img" aria-label={label} title={label}>
         {sorted.map(([t, n]) => (
-          <span key={t} className="block h-full" style={{ width: `${(n / total * 100).toFixed(1)}%`, background: tagColor(t) }} />
+          <span key={t} data-tag={t} className="block h-full" style={{ width: `${(n / total * 100).toFixed(1)}%`, background: FLUFF_TAGS.has(t) ? '#d1d5db' : tagColor(t) }} />
         ))}
       </div>
       <span className="trunc text-xs text-muted" title={label}>
-        {top.map(([t, n]) => `${tax.name(t)} ${n}`).join(' · ')}{rest > 0 ? `  +${rest} more` : ''}
+        {top.map(([t, n]) => `${tax.name(t)} ${n}`).join(' · ')}{top.length > 0 && rest > 0 ? '  ' : ''}{rest > 0 ? `+${rest} more` : ''}
       </span>
     </div>
   );
