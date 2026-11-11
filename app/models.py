@@ -608,3 +608,41 @@ class DecisionEvidence(Base):
         Index("ix_decision_evidence_decision_id", "decision_id"),
         Index("ix_decision_evidence_highlight_id", "highlight_id"),
     )
+
+
+# --- API tokens and the MCP audit log (v0.5) ---
+
+
+class ApiToken(Base):
+    """A bearer token for scripts and MCP clients. Only a hash is stored; the secret is shown once."""
+
+    __tablename__ = "api_tokens"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(8), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    scopes: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    user: Mapped["User"] = relationship()
+
+
+class McpCall(Base):
+    """Audit log of MCP tool calls: argument names and short values, never transcript text."""
+
+    __tablename__ = "mcp_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token_id: Mapped[int | None] = mapped_column(ForeignKey("api_tokens.id"), nullable=True, index=True)
+    token_prefix: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    tool: Mapped[str] = mapped_column(String(100), nullable=False)
+    args_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)  # ok | denied | error
+    duration_ms: Mapped[int] = mapped_column(Integer, default=0)
+    result_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
