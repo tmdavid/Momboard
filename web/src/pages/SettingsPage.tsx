@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router-dom';
 import { CompanyProfileCard, RetagProgressCard, TagDetailsEditor } from '../components/SettingsV05';
+import { ApiTokensCard, ConnectToClaudeCard, McpStatus } from '../components/SettingsTokens';
 import { api, Company, Contact, Tag } from '../api';
 import { formatNumber } from '../utils/format';
 
@@ -25,6 +26,7 @@ interface SettingsStatus {
   taxonomy_count: number;
   active_company_count: number;
   can_manage_taxonomy?: boolean;
+  mcp?: McpStatus;
 }
 
 function StatusDot({ ok }: { ok: boolean }) {
@@ -463,6 +465,8 @@ function DirectorySettings() {
 const SECTIONS = [
   { label: 'AI model', href: '#llm' },
   { label: 'Sources and delivery', href: '#sources' },
+  { label: 'API tokens', href: '#tokens' },
+  { label: 'Connect to Claude', href: '#claude' },
   { label: 'Your company', href: '#company' },
   { label: 'Taxonomy', href: '#taxonomy' },
   { label: 'Retag progress', href: '#retag' },
@@ -510,6 +514,8 @@ export function SettingsPage() {
       <div className="flex-[999_1_560px] min-w-0 flex flex-col gap-4">
         <AiModelSettings status={status} />
         <SourcesSettings status={status} />
+        <ApiTokensCard />
+        <ConnectToClaudeCard mcp={status.mcp} />
         <CompanyProfileCard canManage={status.can_manage_taxonomy === true} />
         <TaxonomySettings canManage={status.can_manage_taxonomy === true} />
         <RetagProgressCard canManage={status.can_manage_taxonomy === true} />

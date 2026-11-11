@@ -1372,6 +1372,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Tokens
+         * @description Your tokens (an admin sees everyone's). Never includes a secret.
+         */
+        get: operations["list_tokens_api_tokens_get"];
+        put?: never;
+        /**
+         * Create Token
+         * @description Create a token for yourself. The secret is in this response only.
+         */
+        post: operations["create_token_api_tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/tokens/{token_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Revoke Token
+         * @description Revoke a token. It stops working on its next request. The row is kept for the audit trail.
+         */
+        post: operations["revoke_token_api_tokens__token_id__revoke_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -2870,6 +2914,31 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * McpStatus
+         * @description Whether the /mcp endpoint is on, and the address to give an MCP client. Nothing secret.
+         */
+        McpStatus: {
+            /**
+             * Allow Write
+             * @default false
+             */
+            allow_write: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /**
+             * Public Url Configured
+             * @default false
+             */
+            public_url_configured: boolean;
+            /**
+             * Rate Limit Per Minute
+             * @default 60
+             */
+            rate_limit_per_minute: number;
+            /** Url */
+            url?: string | null;
+        };
         /** NoteResponse */
         NoteResponse: {
             /** Body Md */
@@ -2969,6 +3038,7 @@ export interface components {
             digest: components["schemas"]["DigestStatus"];
             gdrive: components["schemas"]["ServiceStatus"];
             llm: components["schemas"]["LLMStatus"];
+            mcp: components["schemas"]["McpStatus"];
             slack: components["schemas"]["ServiceStatus"];
             /** Taxonomy Count */
             taxonomy_count: number;
@@ -3249,6 +3319,97 @@ export interface components {
         TimelineResponse: {
             /** Events */
             events: components["schemas"]["TimelineEvent"][];
+        };
+        /** TokenCreate */
+        TokenCreate: {
+            /**
+             * Expires In Days
+             * @default 90
+             */
+            expires_in_days: (30 | 90 | 365) | null;
+            /** Name */
+            name: string;
+            /**
+             * Scope
+             * @default read
+             * @enum {string}
+             */
+            scope: "read" | "write";
+        };
+        /** TokenCreated */
+        TokenCreated: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Id */
+            id: number;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Name */
+            name: string;
+            /** Owner Id */
+            owner_id: number;
+            /** Owner Name */
+            owner_name?: string | null;
+            /** Prefix */
+            prefix: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "read" | "write";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "expired" | "revoked";
+            /** Token */
+            token: string;
+        };
+        /** TokenListResponse */
+        TokenListResponse: {
+            /** Items */
+            items: components["schemas"]["TokenResponse"][];
+        };
+        /** TokenResponse */
+        TokenResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /** Id */
+            id: number;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /** Name */
+            name: string;
+            /** Owner Id */
+            owner_id: number;
+            /** Owner Name */
+            owner_name?: string | null;
+            /** Prefix */
+            prefix: string;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * Scope
+             * @enum {string}
+             */
+            scope: "read" | "write";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "expired" | "revoked";
         };
         /** UserResponse */
         UserResponse: {
@@ -3702,6 +3863,12 @@ export interface operations {
                 date_from?: string | null;
                 date_to?: string | null;
                 deal_stage?: string | null;
+                /** @description Company name contains this text (case-insensitive) */
+                company?: string | null;
+                /** @description Mom Test score at least this */
+                min_score?: number | null;
+                /** @description Mom Test score at most this */
+                max_score?: number | null;
                 /** @description Sort order: date_desc (default), date_asc, score_desc, score_asc. Score sorts by the conversation's Mom Test critique score; conversations without a score sort last. */
                 sort?: string;
             };
@@ -4374,6 +4541,12 @@ export interface operations {
                 status?: string | null;
                 /** @description Case-insensitive text search in the quote */
                 q?: string | null;
+                /** @description Company name contains this text (case-insensitive) */
+                company?: string | null;
+                /** @description At least this confidence (accepted/manual highlights always pass) */
+                min_confidence?: number | null;
+                /** @description Drop highlights spoken by our side, except follow-up and commitment (which may be either) */
+                customer_only?: boolean;
                 /** @description Hide suggestions below their tag's confidence floor (accepted ones always show) */
                 floor?: boolean;
                 /** @description recent (default) or confidence (strongest first) */
@@ -5435,7 +5608,12 @@ export interface operations {
     };
     get_stats_api_stats_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Only calls on or after this date (by when the call happened) */
+                since?: string | null;
+                /** @description Count only highlights not spoken by our side (as the MCP tools do) */
+                customer_only?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -5449,6 +5627,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StatsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -5833,6 +6020,90 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TaxonomyStatus"];
+                };
+            };
+        };
+    };
+    list_tokens_api_tokens_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenListResponse"];
+                };
+            };
+        };
+    };
+    create_token_api_tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_token_api_tokens__token_id__revoke_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

@@ -146,6 +146,10 @@ export interface StatsResponse {
 
 export type ConversationPreview = Schemas['ConversationPreview'];
 
+export type ApiToken = Schemas['TokenResponse'];
+export type ApiTokenCreated = Schemas['TokenCreated'];
+export type ApiTokenCreate = Pick<Schemas['TokenCreate'], 'name' | 'scope' | 'expires_in_days'>;
+
 export interface CompanyProfile {
   name: string;
   aliases: string[];
@@ -503,6 +507,18 @@ export const api = {
   },
 
   // ─── v0.5: your company, taxonomy rollout ───
+
+  listApiTokens() {
+    return apiFetch<{ items: ApiToken[] }>('/api/tokens');
+  },
+
+  createApiToken(body: ApiTokenCreate) {
+    return apiFetch<ApiTokenCreated>('/api/tokens', { method: 'POST', body: JSON.stringify(body) });
+  },
+
+  revokeApiToken(id: number) {
+    return apiFetch<ApiToken>(`/api/tokens/${id}/revoke`, { method: 'POST' });
+  },
 
   getCompanyProfile() {
     return apiFetch<CompanyProfile>('/api/settings/company');

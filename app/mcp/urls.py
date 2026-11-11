@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from typing import Any
 
 _HOST = re.compile(r"^[A-Za-z0-9.\-]+(:\d{1,5})?$")
@@ -13,7 +14,7 @@ def _clean(base: str) -> str:
     return base.rstrip("/")
 
 
-def base_url(configured: str, scope: dict[str, Any]) -> str:
+def base_url(configured: str, scope: Mapping[str, Any]) -> str:
     """The public address of this MomBoard.
 
     ``PUBLIC_BASE_URL`` wins. Otherwise it is derived from the request, honouring a reverse proxy's

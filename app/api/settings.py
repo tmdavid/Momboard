@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.auth import get_current_user, require_admin
+from app.mcp import urls
 from app.models import Company, Conversation, Tag, User
 
 router = APIRouter()
@@ -45,6 +46,16 @@ class DigestStatus(BaseModel):
     schedule: str
 
 
+class McpStatus(BaseModel):
+    """Whether the /mcp endpoint is on, and the address to give an MCP client. Nothing secret."""
+
+    enabled: bool
+    url: str | None = None  # the exact address to paste into Claude (None while MCP is off)
+    allow_write: bool = False
+    rate_limit_per_minute: int = 60
+    public_url_configured: bool = False  # False means the URL was derived from this request
+
+
 class SettingsStatusResponse(BaseModel):
     llm: LLMStatus
     vexa: ServiceStatus
@@ -54,6 +65,7 @@ class SettingsStatusResponse(BaseModel):
     taxonomy_count: int
     active_company_count: int
     can_manage_taxonomy: bool
+    mcp: McpStatus
 
 
 def _mask_key(key: str) -> str:
@@ -172,6 +184,16 @@ async def get_settings_status(
         taxonomy_count=taxonomy_count,
         active_company_count=active_company_count,
         can_manage_taxonomy=user.role == "admin",
+        mcp=McpStatus(
+            enabled=settings.mcp_enabled,
+            # The same builder the tools use for their links, so the card and the citations agree.
+            url=(
+                urls.base_url(settings.public_base_url, request.scope) + "/mcp" if settings.mcp_enabled else None
+            ),
+            allow_write=settings.mcp_allow_write,
+            rate_limit_per_minute=settings.mcp_rate_limit_per_minute,
+            public_url_configured=bool(settings.public_base_url.strip()),
+        ),
     )
 
 
