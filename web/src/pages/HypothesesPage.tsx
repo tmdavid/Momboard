@@ -409,7 +409,23 @@ function EvidenceSection({
   );
 }
 
-// ─── Hypothesis Card ───
+// ─── Grounding bands ───
+
+type BandKey = 'grounded' | 'contested' | 'candidate' | 'hunch' | 'refuted';
+
+const BANDS: { key: BandKey; label: string; dot: string; blurb: string }[] = [
+  { key: 'grounded', label: 'Grounded', dot: 'bg-green-500', blurb: 'Customers back it' },
+  { key: 'contested', label: 'Contested', dot: 'bg-yellow-500', blurb: 'Customers disagree' },
+  { key: 'candidate', label: 'Candidate', dot: 'bg-accent', blurb: 'Suggested evidence only' },
+  { key: 'hunch', label: 'Hunch', dot: 'bg-gray-400', blurb: 'No evidence yet' },
+  { key: 'refuted', label: 'Refuted', dot: 'bg-red-500', blurb: 'Customers contradict it' },
+];
+
+function bandOf(h: HypothesisListItem): BandKey {
+  return (h.rollup.grounding as BandKey | undefined) ?? 'hunch';
+}
+
+// ─── Hypothesis Card (board) ───
 
 function HypothesisCard({
   hypothesis,
@@ -420,40 +436,17 @@ function HypothesisCard({
   isExpanded: boolean;
   onToggle: () => void;
 }) {
-  const queryClient = useQueryClient();
-
-  // Fetch detail when expanded
-  const { data: detail } = useQuery({
-    queryKey: ['hypothesis', hypothesis.id],
-    queryFn: () => api.getHypothesis(hypothesis.id),
-    enabled: isExpanded,
-  });
-
-  const statusMutation = useMutation({
-    mutationFn: (newStatus: string) => api.updateHypothesis(hypothesis.id, { status: newStatus }),
-    onSuccess: (data) => {
-      // Update the hypothesis in the list cache with the response data
-      queryClient.setQueryData<HypothesisListItem[]>(
-        ['hypotheses'],
-        (old) =>
-          (old || []).map((h) =>
-            h.id === hypothesis.id
-              ? {
-                  ...h,
-                  status: data.status,
-                  decided_at: data.decided_at ?? h.decided_at,
-                }
-              : h,
-          ),
-      );
-    },
-  });
-
-  const suggestedCount = hypothesis.rollup.supports.suggested + hypothesis.rollup.contradicts.suggested;
+  const { rollup } = hypothesis;
+  const suggestedCount = rollup.supports.suggested + rollup.contradicts.suggested;
+  const isStale = rollup.freshness === 'stale' && rollup.supports.confirmed > 0;
 
   return (
-    <article data-testid="hypothesis-card" className="bg-surface border border-hairline rounded-[10px] p-4 mb-3.5">
-      {/* Card header — clickable for expansion */}
+    <article
+      data-testid="hypothesis-card"
+      className={`bg-surface border rounded-[10px] p-3 ${
+        isExpanded ? 'border-accent ring-2 ring-accent-soft' : 'border-hairline'
+      }`}
+    >
       <div
         role="button"
         tabIndex={0}
@@ -465,42 +458,118 @@ function HypothesisCard({
           }
         }}
         aria-expanded={isExpanded}
-        className="flex items-start gap-3 cursor-pointer"
+        className="cursor-pointer flex flex-col gap-2"
       >
-        <div className="flex-1">
-          <span className="text-sm font-semibold">{hypothesis.statement}</span>
+        <span className="text-sm font-semibold">{hypothesis.statement}</span>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {hypothesis.segment && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-sub text-ink-2">{hypothesis.segment}</span>
+          )}
+          {hypothesis.status !== 'open' && <StatusChip status={hypothesis.status} />}
+          {suggestedCount > 0 && (
+            <span className="text-[11px] text-yellow-800 bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full whitespace-nowrap">
+              {suggestedCount} to review
+            </span>
+          )}
+          {isStale && (
+            <span className="text-[11px] text-muted bg-sub px-2 py-0.5 rounded-full">Stale</span>
+          )}
         </div>
-        {suggestedCount > 0 && (
-          <span className="text-xs text-yellow-800 bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full whitespace-nowrap">
-            {suggestedCount} to review
-          </span>
-        )}
-        <StatusChip status={hypothesis.status} />
       </div>
-
-      {/* Meter row */}
-      <div className="flex items-center gap-3 mt-3">
-        <EvidenceMeter rollup={hypothesis.rollup} />
+      <div className="mt-2">
+        <EvidenceMeter rollup={rollup} />
       </div>
-
-      {!isExpanded && (
-        <EvidenceStats
-          rollup={hypothesis.rollup}
-          verdict_hint={hypothesis.verdict_hint}
-          decided_at={hypothesis.decided_at}
-          status={hypothesis.status}
-        />
+      <EvidenceStats
+        rollup={rollup}
+        verdict_hint={hypothesis.verdict_hint}
+        decided_at={hypothesis.decided_at}
+        status={hypothesis.status}
+      />
+      {rollup.newest_evidence_at && (
+        <p className="mt-1 text-[11px] text-muted">Newest quote {formatShortDate(rollup.newest_evidence_at)}</p>
       )}
+    </article>
+  );
+}
 
-      {/* Expanded evidence detail */}
-      {isExpanded && detail && (
+// ─── Detail panel (opens under the board) ───
+
+function HypothesisDetailPanel({
+  hypothesis,
+  onClose,
+}: {
+  hypothesis: HypothesisListItem;
+  onClose: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const band = BANDS.find((b) => b.key === bandOf(hypothesis)) ?? BANDS[3];
+
+  const { data: detail } = useQuery({
+    queryKey: ['hypothesis', hypothesis.id],
+    queryFn: () => api.getHypothesis(hypothesis.id),
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (newStatus: string) => api.updateHypothesis(hypothesis.id, { status: newStatus }),
+    onSuccess: (data) => {
+      queryClient.setQueryData<HypothesisListItem[]>(['hypotheses'], (old) =>
+        (old || [])
+          .filter((h) => !(h.id === hypothesis.id && data.status === 'archived'))
+          .map((h) =>
+            h.id === hypothesis.id
+              ? { ...h, status: data.status, decided_at: data.decided_at ?? h.decided_at }
+              : h,
+          ),
+      );
+      if (data.status === 'archived') onClose();
+    },
+  });
+
+  return (
+    <div
+      role="group"
+      aria-label={`Hypothesis detail: ${hypothesis.statement}`}
+      data-testid="hypothesis-detail"
+      className="bg-surface border border-hairline rounded-xl p-4"
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-ink">
+          <span className={`w-2 h-2 rounded-full ${band.dot}`} aria-hidden="true" />
+          {band.label}
+        </span>
+        {hypothesis.segment && (
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-sub text-ink-2">{hypothesis.segment}</span>
+        )}
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={() => statusMutation.mutate('archived')}
+          disabled={statusMutation.isPending}
+          className="text-xs font-semibold text-muted hover:text-ink border border-hairline rounded-lg px-2.5 py-1"
+        >
+          Archive
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-xs font-semibold text-muted hover:text-ink border border-hairline rounded-lg px-2.5 py-1"
+        >
+          Close
+        </button>
+      </div>
+      {hypothesis.rollup.grounding_reason && (
+        <p className="mt-2 text-sm text-ink-2" data-testid="grounding-reason">
+          {hypothesis.rollup.grounding_reason}
+        </p>
+      )}
+      {detail && (
         <EvidenceSection
           evidence={detail.evidence}
           hypothesisStatus={hypothesis.status}
           onStatusChange={(status) => statusMutation.mutate(status)}
         />
       )}
-    </article>
+    </div>
   );
 }
 
@@ -899,8 +968,14 @@ function HypothesisComposer() {
 
 // ─── Main Page ───
 
+const BAND_EXPLAINER =
+  'Hypotheses sit in a band by the quotes you have confirmed: Grounded, Contested, Candidate, Hunch or Refuted.';
+
 export function HypothesesPage() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [segmentFilter, setSegmentFilter] = useState('');
+  const [bandFilter, setBandFilter] = useState('');
+  const [pendingOnly, setPendingOnly] = useState(false);
 
   const {
     data: hypotheses,
@@ -954,10 +1029,23 @@ export function HypothesesPage() {
         <HypothesisComposer />
         <div className="text-center py-12 text-gray-400">
           <p className="text-sm">No hypotheses yet. Add your first falsifiable belief above.</p>
+          <p className="text-xs mt-2">{BAND_EXPLAINER}</p>
         </div>
       </main>
     );
   }
+
+  const all = hypotheses ?? [];
+  const segments = Array.from(
+    new Set(all.map((h) => h.segment).filter((x): x is string => !!x)),
+  ).sort();
+  const visible = all.filter(
+    (h) =>
+      (!segmentFilter || h.segment === segmentFilter) &&
+      (!bandFilter || bandOf(h) === bandFilter) &&
+      (!pendingOnly || (h.rollup.pending_count ?? h.rollup.supports.suggested + h.rollup.contradicts.suggested) > 0),
+  );
+  const expanded = all.find((h) => h.id === expandedId) ?? null;
 
   return (
     <main className="p-6 flex flex-col gap-5">
@@ -968,14 +1056,79 @@ export function HypothesesPage() {
 
       <HypothesisComposer />
 
-      {hypotheses?.map((hyp) => (
-        <HypothesisCard
-          key={hyp.id}
-          hypothesis={hyp}
-          isExpanded={expandedId === hyp.id}
-          onToggle={() => setExpandedId(expandedId === hyp.id ? null : hyp.id)}
-        />
-      ))}
+      <div className="flex flex-wrap items-center gap-3" role="group" aria-label="Board filters">
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          Segment
+          <select
+            value={segmentFilter}
+            onChange={(e) => setSegmentFilter(e.target.value)}
+            className="h-8 px-2 border border-hairline rounded-lg bg-surface text-sm text-ink"
+          >
+            <option value="">All segments</option>
+            {segments.map((sg) => (
+              <option key={sg} value={sg}>{sg}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          Band
+          <select
+            value={bandFilter}
+            onChange={(e) => setBandFilter(e.target.value)}
+            className="h-8 px-2 border border-hairline rounded-lg bg-surface text-sm text-ink"
+          >
+            <option value="">All bands</option>
+            {BANDS.map((b) => (
+              <option key={b.key} value={b.key}>{b.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          <input
+            type="checkbox"
+            checked={pendingOnly}
+            onChange={(e) => setPendingOnly(e.target.checked)}
+          />
+          Has pending suggestions
+        </label>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-start">
+        {BANDS.map((band) => {
+          const inBand = visible.filter((h) => bandOf(h) === band.key);
+          return (
+            <div
+              key={band.key}
+              role="group"
+              aria-label={`${band.label} hypotheses`}
+              data-testid={`band-${band.key}`}
+              className="flex flex-col gap-2 min-w-0"
+            >
+              <header className="flex items-center gap-2 px-1">
+                <span className={`w-2 h-2 rounded-full ${band.dot}`} aria-hidden="true" />
+                <h2 className="text-sm font-semibold text-ink">{band.label}</h2>
+                <span className="text-xs text-muted tabular-nums">{inBand.length}</span>
+              </header>
+              {inBand.length === 0 ? (
+                <p className="text-xs text-muted px-1">{band.blurb}</p>
+              ) : (
+                inBand.map((hyp) => (
+                  <HypothesisCard
+                    key={hyp.id}
+                    hypothesis={hyp}
+                    isExpanded={expandedId === hyp.id}
+                    onToggle={() => setExpandedId(expandedId === hyp.id ? null : hyp.id)}
+                  />
+                ))
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {expanded && (
+        <HypothesisDetailPanel hypothesis={expanded} onClose={() => setExpandedId(null)} />
+      )}
     </main>
   );
 }

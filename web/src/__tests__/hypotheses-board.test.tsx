@@ -343,13 +343,14 @@ describe('T28: Hypotheses board — card list with status and meter', () => {
     });
   });
 
-  test('each card shows a status chip matching its status', async () => {
+  test('cards show a status chip only when the status is not the default "open"', async () => {
     renderHypothesesPage();
 
     await waitFor(() => {
-      const openChips = screen.getAllByText('OPEN');
-      expect(openChips.length).toBe(2);
+      // Band columns carry the primary state; the legacy status chip appears only
+      // for non-default statuses (here: the refuted hypothesis).
       expect(screen.getByText('REFUTED')).toBeInTheDocument();
+      expect(screen.queryByText('OPEN')).not.toBeInTheDocument();
     });
   });
 
@@ -1370,5 +1371,129 @@ describe('Hypotheses PRD C1: composer segment + evidence panel', () => {
       'Customers rely on manual Excel exports to clean listings',
     );
     expect(screen.getByRole('button', { name: /^save as hunch$/i })).toBeInTheDocument();
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Hypotheses PRD slice C2/C3: grounding-band board, filters, detail, archive
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Hypotheses PRD C2/C3: grounding-band board', () => {
+  const mk = (
+    id: number,
+    statement: string,
+    grounding: string,
+    over: Partial<{ segment: string | null; supC: number; supS: number; conC: number; pending: number; freshness: string }> = {},
+  ) => ({
+    id,
+    statement,
+    segment: over.segment ?? null,
+    status: 'open',
+    created_by: 1,
+    created_at: '2026-08-01T00:00:00Z',
+    decided_at: null,
+    rollup: {
+      supports: { confirmed: over.supC ?? 0, suggested: over.supS ?? 0 },
+      contradicts: { confirmed: over.conC ?? 0, suggested: 0 },
+      companies_supporting: over.supC ? 2 : 0,
+      companies_contradicting: over.conC ? 1 : 0,
+      last_evidence_at: null,
+      freshness: over.freshness ?? 'fresh',
+      newest_evidence_at: over.supC ? '2026-07-30' : null,
+      grounding,
+      pending_count: over.pending ?? 0,
+      grounding_reason: `Reason for ${statement}`,
+    },
+    verdict_hint: null,
+  });
+
+  const list = [
+    mk(11, 'Alpha grounded belief about ops teams', 'grounded', { segment: 'Mid-market', supC: 3, freshness: 'stale' }),
+    mk(12, 'Bravo contested belief about pricing', 'contested', { segment: 'Enterprise', supC: 2, conC: 2 }),
+    mk(13, 'Charlie candidate belief about exports', 'candidate', { segment: 'Mid-market', supS: 2, pending: 2 }),
+    mk(14, 'Delta hunch belief about onboarding', 'hunch'),
+    mk(15, 'Echo refuted belief about coverage', 'refuted', { conC: 3 }),
+  ];
+
+  const renderBoard = (items = list) => {
+    server.use(
+      http.get('/api/hypotheses', () => HttpResponse.json({ items, total: items.length })),
+      http.get('/api/hypotheses/:id', ({ params }) => {
+        const item = items.find((i) => String(i.id) === params.id);
+        return item
+          ? HttpResponse.json({ ...item, evidence: { supports: [], contradicts: [] } })
+          : new HttpResponse(null, { status: 404 });
+      }),
+    );
+    return renderWithProviders(<App />, { route: '/hypotheses' });
+  };
+
+  test('renders one column per grounding band with counts and the right cards', async () => {
+    renderBoard();
+    const grounded = await screen.findByRole('group', { name: /^grounded hypotheses$/i });
+    expect(within(grounded).getByText(/Alpha grounded/)).toBeInTheDocument();
+    expect(within(grounded).getByText('Mid-market')).toBeInTheDocument();
+    expect(within(grounded).getByText('Stale')).toBeInTheDocument();
+    for (const [name, text] of [
+      ['contested', /Bravo contested/],
+      ['candidate', /Charlie candidate/],
+      ['hunch', /Delta hunch/],
+      ['refuted', /Echo refuted/],
+    ] as const) {
+      const col = screen.getByRole('group', { name: new RegExp(`^${name} hypotheses$`, 'i') });
+      expect(within(col).getByText(text)).toBeInTheDocument();
+      expect(within(col).getByRole('heading', { name: new RegExp(name, 'i') })).toBeInTheDocument();
+    }
+    // Header counts
+    expect(within(grounded).getByText('1')).toBeInTheDocument();
+  });
+
+  test('filters by segment, band and pending suggestions', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await screen.findByText(/Alpha grounded/);
+
+    await user.selectOptions(screen.getByLabelText(/^segment$/i), 'Mid-market');
+    expect(screen.getByText(/Alpha grounded/)).toBeInTheDocument();
+    expect(screen.getByText(/Charlie candidate/)).toBeInTheDocument();
+    expect(screen.queryByText(/Bravo contested/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/has pending suggestions/i));
+    expect(screen.getByText(/Charlie candidate/)).toBeInTheDocument();
+    expect(screen.queryByText(/Alpha grounded/)).not.toBeInTheDocument();
+
+    await user.click(screen.getByLabelText(/has pending suggestions/i));
+    await user.selectOptions(screen.getByLabelText(/^segment$/i), '');
+    await user.selectOptions(screen.getByLabelText(/^band$/i), 'refuted');
+    expect(screen.getByText(/Echo refuted/)).toBeInTheDocument();
+    expect(screen.queryByText(/Alpha grounded/)).not.toBeInTheDocument();
+  });
+
+  test('opening a card shows the band, the grounding reason and an Archive action', async () => {
+    const user = userEvent.setup();
+    renderBoard();
+    await user.click(await screen.findByText(/Bravo contested/));
+    const detail = await screen.findByTestId('hypothesis-detail');
+    expect(within(detail).getByTestId('grounding-reason')).toHaveTextContent(/Reason for Bravo contested/);
+    expect(within(detail).getByText('Contested')).toBeInTheDocument();
+    expect(within(detail).getByRole('button', { name: /archive/i })).toBeInTheDocument();
+  });
+
+  test('Archive PATCHes status=archived and removes the card from the board', async () => {
+    let patched: Record<string, unknown> | null = null;
+    server.use(
+      http.patch('/api/hypotheses/:id', async ({ request }) => {
+        patched = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 14, statement: 'Delta hunch belief about onboarding', segment: null, status: 'archived', created_at: '2026-08-01T00:00:00Z', decided_at: null });
+      }),
+    );
+    const user = userEvent.setup();
+    renderBoard();
+    await user.click(await screen.findByText(/Delta hunch/));
+    const detail = await screen.findByTestId('hypothesis-detail');
+    await user.click(within(detail).getByRole('button', { name: /archive/i }));
+    await waitFor(() => expect(screen.queryByText(/Delta hunch/)).not.toBeInTheDocument());
+    expect(patched).toMatchObject({ status: 'archived' });
   });
 });
