@@ -118,7 +118,7 @@ describe('UX #19: SimulatorPage past practice sessions', () => {
     await waitFor(() => {
       expect(screen.getByTestId('past-sessions')).toBeInTheDocument();
       expect(screen.getByText('Sim: Practice A')).toBeInTheDocument();
-      expect(screen.getByText('7/10')).toBeInTheDocument();
+      expect(within(screen.getByTestId('past-sessions')).getByText('7/10')).toBeInTheDocument();
       expect(screen.getByText('Sim: Practice B')).toBeInTheDocument();
     });
 

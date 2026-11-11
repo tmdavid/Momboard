@@ -3,6 +3,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { scoreBand } from '../constants';
+import { formatDate } from '../utils/format';
 
 interface PersonaResult {
   id: number;
@@ -138,6 +139,33 @@ export function SimulatorPage() {
 
   const handleSend = () => { if (input.trim()) sendTurn.mutate(input.trim()); };
   const critique = sessionResult?.analysis?.result?.mom_test_critique ?? null;
+
+  // v0.5 U10: after a reload nothing was scored "in this visit", so fall back to the newest finished
+  // session in the list. The list's own score is shown at once so the panel can never contradict it;
+  // the critique details load behind it.
+  const latestFinished = pastSessions?.items.find((s: PastSession) => s.score != null) ?? null;
+  const { data: latestDetail } = useQuery({
+    queryKey: ['simulator-result', latestFinished?.id],
+    enabled: latestFinished != null && !critique,
+    retry: false,
+    queryFn: async () => {
+      const r = await fetch(`/api/simulator/sessions/${latestFinished!.id}/result`);
+      if (!r.ok) throw new Error('result unavailable');
+      return (await r.json()) as SessionResult;
+    },
+  });
+  const latestCritique = latestDetail?.analysis?.result?.mom_test_critique ?? null;
+
+  const shown = critique
+    ? { label: 'Last session · scored', score: critique.score, good_questions: critique.good_questions, violations: critique.violations }
+    : latestFinished && latestFinished.score != null
+      ? {
+          label: `Last finished session · ${formatDate(latestFinished.created_at)}`,
+          score: latestFinished.score,
+          good_questions: latestCritique?.good_questions ?? [],
+          violations: latestCritique?.violations ?? [],
+        }
+      : null;
   const inSession = !!sessionId && !isPolling && !sessionResult;
 
   return (
@@ -279,26 +307,26 @@ export function SimulatorPage() {
 
         {/* ── Right: last / current score ── */}
         <section className="flex-[1_1_280px] max-w-[340px] bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-2.5" aria-label="Last score">
-          {critique ? (
+          {shown ? (
             <>
-              <span className="text-xs font-semibold text-muted">Last session · scored</span>
-              <span className="text-4xl font-bold leading-none" style={{ color: scoreBand(critique.score).fg }}>
-                {critique.score}/10
+              <span className="text-xs font-semibold text-muted">{shown.label}</span>
+              <span className="text-4xl font-bold leading-none" style={{ color: scoreBand(shown.score).fg }}>
+                {shown.score}/10
               </span>
               <span className="sr-only">Mom Test Score</span>
-              {critique.good_questions.length > 0 && (
+              {shown.good_questions.length > 0 && (
                 <>
                   <span className="text-xs font-semibold text-good-text mt-1">Good questions</span>
                   <ul className="list-disc list-inside text-[13px] text-ink-2 m-0">
-                    {critique.good_questions.map((q, i) => <li key={i}>{q}</li>)}
+                    {shown.good_questions.map((q, i) => <li key={i}>{q}</li>)}
                   </ul>
                 </>
               )}
-              {critique.violations.length > 0 && (
+              {shown.violations.length > 0 && (
                 <>
                   <span className="text-xs font-semibold text-warn-text mt-1">To improve</span>
                   <ul className="flex flex-col gap-1.5 m-0 p-0 list-none">
-                    {critique.violations.map((v, i) => (
+                    {shown.violations.map((v, i) => (
                       <li key={i} className="text-[13px] text-ink-2"><span className="font-medium">{v.type}:</span> {v.better}</li>
                     ))}
                   </ul>
