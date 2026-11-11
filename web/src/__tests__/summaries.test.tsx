@@ -42,7 +42,7 @@ describe('SummariesPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/Manual triage is universal/)).toBeInTheDocument();
     });
-    expect(screen.getByText(/Validate next:/)).toBeInTheDocument();
+    expect(screen.getByText(/Validate next/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Save/i })).toBeInTheDocument();
   });
 
@@ -59,7 +59,7 @@ describe('SummariesPage', () => {
     renderWithProviders(<SummariesPage />, { route: '/summaries' });
 
     await waitFor(() => {
-      expect(screen.getByText(/Processing/i)).toBeInTheDocument();
+      expect(screen.getByText(/Running/i)).toBeInTheDocument();
     });
     // Pending syntheses cannot be saved yet.
     expect(screen.queryByRole('button', { name: /Save/i })).toBeNull();
