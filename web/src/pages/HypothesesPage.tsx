@@ -452,7 +452,7 @@ function HypothesisCard({
   const suggestedCount = hypothesis.rollup.supports.suggested + hypothesis.rollup.contradicts.suggested;
 
   return (
-    <article data-testid="hypothesis-card" className="bg-white border border-gray-200 rounded-xl p-4 mb-3.5">
+    <article data-testid="hypothesis-card" className="bg-surface border border-hairline rounded-[10px] p-4 mb-3.5">
       {/* Card header — clickable for expansion */}
       <div
         role="button"
@@ -620,30 +620,31 @@ function HypothesisComposer() {
   const isDisabled = trimmedLength === 0;
 
   return (
-    <div className="mb-5">
-      <form onSubmit={handleSubmit} className="flex flex-wrap gap-2">
-        <input
-          ref={inputRef}
-          type="text"
-          value={statement}
-          onChange={(e) => {
-            setStatement(e.target.value);
-            if (validationError) setValidationError('');
-            if (submitError) setSubmitError(false);
-          }}
-          onKeyDown={handleKeyDown}
-          placeholder={'State a falsifiable belief\u2026 e.g. \u201CMid-market brands won\u2019t pay >€10k without SLA\u201D'}
-          className="flex-1 min-w-[260px] px-3 py-2.5 border border-hairline rounded-xl bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-accent/30"
-          aria-invalid={!!validationError}
-          aria-describedby={validationError ? 'composer-error' : 'composer-help'}
-        />
+    <div className="bg-surface border border-hairline rounded-xl p-4 flex flex-col gap-3">
+      <form onSubmit={handleSubmit} className="flex flex-wrap gap-2 items-end">
+        <label className="flex-1 min-w-[260px] flex flex-col gap-1">
+          <span className="text-xs font-semibold text-muted">Belief · name a segment and a behaviour</span>
+          <input
+            ref={inputRef}
+            type="text"
+            value={statement}
+            onChange={(e) => {
+              setStatement(e.target.value);
+              if (validationError) setValidationError('');
+              if (submitError) setSubmitError(false);
+            }}
+            onKeyDown={handleKeyDown}
+            placeholder={'State a falsifiable belief\u2026 e.g. \u201CMid-market brands won\u2019t pay >€10k without SLA\u201D'}
+            className="w-full h-10 px-3 border border-hairline rounded-lg bg-surface text-sm"
+            aria-invalid={!!validationError}
+            aria-describedby={validationError ? 'composer-error' : 'composer-help'}
+          />
+        </label>
         <button
           type="submit"
           aria-disabled={isDisabled || undefined}
-          className={`px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
-            isDisabled
-              ? 'bg-hairline text-muted cursor-not-allowed'
-              : 'bg-accent text-white hover:bg-[#1c5cab]'
+          className={`h-10 px-4 rounded-lg text-sm font-semibold ${
+            isDisabled ? 'bg-sub text-muted cursor-not-allowed' : 'border border-hairline bg-surface text-ink hover:border-accent'
           }`}
         >
           Add hypothesis
@@ -652,7 +653,7 @@ function HypothesisComposer() {
           type="button"
           disabled={trimmedLength < 15 || previewMutation.isPending}
           onClick={() => previewMutation.mutate(statement.trim())}
-          className="px-4 py-2.5 rounded-xl text-sm font-semibold border border-hairline text-ink-2 hover:border-accent hover:text-accent transition-colors disabled:opacity-50"
+          className="h-10 px-4 rounded-lg text-sm font-semibold border-none bg-accent text-white hover:bg-[#2448c7] disabled:opacity-50"
         >
           {previewMutation.isPending ? 'Checking…' : 'Check evidence first'}
         </button>
@@ -707,6 +708,9 @@ function HypothesisComposer() {
                         {m.relation}
                       </span>
                       <span className="italic">“{m.quote}”</span>
+                      {typeof m.confidence === 'number' && (
+                        <span className="ml-1.5 text-xs text-muted tabular-nums">match {m.confidence.toFixed(2)}</span>
+                      )}
                       {m.rationale && <span className="block text-xs text-muted">{m.rationale}</span>}
                     </div>
                   </li>
@@ -783,8 +787,8 @@ export function HypothesesPage() {
   // Loading state
   if (isLoading) {
     return (
-      <main className="max-w-3xl mx-auto p-7">
-        <h1 className="text-xl font-bold tracking-tight mb-1">Hypotheses</h1>
+      <main className="p-6 flex flex-col gap-5">
+        <h1 className="text-2xl font-bold text-ink">Hypotheses</h1>
         <div role="status" aria-label="Loading hypotheses" className="flex justify-center py-12">
           <div className="w-4 h-4 border-2 border-gray-300 border-t-accent rounded-full animate-spin" />
         </div>
@@ -795,8 +799,8 @@ export function HypothesesPage() {
   // Error state
   if (isError) {
     return (
-      <main className="max-w-3xl mx-auto p-7">
-        <h1 className="text-xl font-bold tracking-tight mb-1">Hypotheses</h1>
+      <main className="p-6 flex flex-col gap-5">
+        <h1 className="text-2xl font-bold text-ink">Hypotheses</h1>
         <div role="alert" className="bg-red-50 border border-red-200 rounded-xl p-4 mt-4">
           <p className="text-sm text-red-700">Failed to load hypotheses.</p>
           <button
@@ -814,8 +818,8 @@ export function HypothesesPage() {
   // Empty state
   if (hypotheses && hypotheses.length === 0) {
     return (
-      <main className="max-w-3xl mx-auto p-7">
-        <h1 className="text-xl font-bold tracking-tight mb-1">Hypotheses</h1>
+      <main className="p-6 flex flex-col gap-5">
+        <h1 className="text-2xl font-bold text-ink">Hypotheses</h1>
         <p className="text-sm text-gray-500 mb-5">
           Falsifiable beliefs, tested against what customers actually said.
         </p>
@@ -828,8 +832,8 @@ export function HypothesesPage() {
   }
 
   return (
-    <main className="max-w-3xl mx-auto p-7">
-      <h1 className="text-xl font-bold tracking-tight mb-1">Hypotheses</h1>
+    <main className="p-6 flex flex-col gap-5">
+      <h1 className="text-2xl font-bold text-ink">Hypotheses</h1>
       <p className="text-sm text-gray-500 mb-5">
         Falsifiable beliefs, tested against what customers actually said.
       </p>
