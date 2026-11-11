@@ -12,6 +12,7 @@
 import { useState, useRef, FormEvent, KeyboardEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
+import { computeBand, BAND_LABEL, DEFAULT_BAND_RULES } from '../utils/bands';
 import { InlineEdit, QuestionsList, BandHistory, AddEvidence } from '../components/HypothesisDetailParts';
 import {
   api,
@@ -419,7 +420,7 @@ type BandKey = 'grounded' | 'contested' | 'candidate' | 'hunch' | 'refuted';
 const BANDS: { key: BandKey; label: string; dot: string; blurb: string }[] = [
   { key: 'grounded', label: 'Grounded', dot: 'bg-green-500', blurb: 'Customers back it' },
   { key: 'contested', label: 'Contested', dot: 'bg-yellow-500', blurb: 'Customers disagree' },
-  { key: 'candidate', label: 'Candidate', dot: 'bg-accent', blurb: 'Suggested evidence only' },
+  { key: 'candidate', label: 'Candidate', dot: 'bg-accent', blurb: 'Some evidence, not enough yet' },
   { key: 'hunch', label: 'Hunch', dot: 'bg-gray-400', blurb: 'No evidence yet' },
   { key: 'refuted', label: 'Refuted', dot: 'bg-red-500', blurb: 'Customers contradict it' },
 ];
@@ -615,15 +616,17 @@ function HypothesisDetailPanel({
 
 type IntakeMatch = NonNullable<HypothesisIntakeResponse['matches']>[number];
 
-/** Same 2x2 as the backend grounding rule, applied to the quotes ticked in the panel. */
-function previewBand(matches: IntakeMatch[], ticked: Set<number>): string {
+/** Band the belief would have if saved with the ticked quotes (same rules as the server). */
+function previewBand(
+  matches: IntakeMatch[],
+  ticked: Set<number>,
+  rules: typeof DEFAULT_BAND_RULES,
+): string {
   const chosen = matches.filter((m) => ticked.has(m.highlight_id));
-  const sup = chosen.some((m) => m.relation === 'supports');
-  const con = chosen.some((m) => m.relation === 'contradicts');
-  if (sup && con) return 'Contested';
-  if (sup) return 'Grounded';
-  if (con) return 'Refuted';
-  return 'Hunch';
+  const supports = chosen.filter((m) => m.relation === 'supports');
+  const companies = new Set(supports.map((m) => m.company_name).filter(Boolean));
+  const contradicts = chosen.length - supports.length;
+  return BAND_LABEL[computeBand(supports.length, contradicts, companies.size, rules)];
 }
 
 function matchSource(m: IntakeMatch): string {
@@ -685,6 +688,14 @@ function HypothesisComposer() {
     staleTime: 60_000,
   });
   const segmentSuggestions = segmentData?.items ?? [];
+
+  // Live band rules (server settings) so the preview matches how the server will band it.
+  const { data: rulesData } = useQuery({
+    queryKey: ['hypothesis-band-rules'],
+    queryFn: () => api.hypothesisBandRules(),
+    staleTime: 10 * 60_000,
+  });
+  const bandRules = rulesData ?? DEFAULT_BAND_RULES;
 
   // T48: evidence-gated intake — preview matches, confirm per-quote, then commit.
   const [preview, setPreview] = useState<HypothesisIntakeResponse | null>(null);
@@ -939,7 +950,7 @@ function HypothesisComposer() {
                 </>
               )}
               <p className="mt-3 text-xs text-muted" data-testid="band-preview">
-                If saved now: <b className="text-ink">{previewBand(matches, confirmedIds)}</b>
+                If saved now: <b className="text-ink">{previewBand(matches, confirmedIds, bandRules)}</b>
               </p>
             </>
           ) : (
@@ -1009,6 +1020,39 @@ function HypothesisComposer() {
 
 // ─── Main Page ───
 
+function BandRulesHelp() {
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery({
+    queryKey: ['hypothesis-band-rules'],
+    queryFn: () => api.hypothesisBandRules(),
+    staleTime: 10 * 60_000,
+  });
+  if (!data) return null;
+  return (
+    <details
+      className="text-sm text-ink-2"
+      data-testid="band-rules-help"
+      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary className="cursor-pointer text-xs font-semibold text-muted">How bands work</summary>
+      {open && (
+        <>
+          <ul className="mt-2 space-y-1">
+            {data.items.map((r) => (
+              <li key={r.band}>
+                <b className="text-ink">{r.label}</b> — {r.rule}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted">
+            Only quotes you have confirmed count. Suggested matches wait for your review and never move a band.
+          </p>
+        </>
+      )}
+    </details>
+  );
+}
+
 const BAND_EXPLAINER =
   'Hypotheses sit in a band by the quotes you have confirmed: Grounded, Contested, Candidate, Hunch or Refuted.';
 
@@ -1071,6 +1115,7 @@ export function HypothesesPage() {
         <div className="text-center py-12 text-gray-400">
           <p className="text-sm">No hypotheses yet. Add your first falsifiable belief above.</p>
           <p className="text-xs mt-2">{BAND_EXPLAINER}</p>
+          <div className="mt-3 text-left max-w-xl mx-auto"><BandRulesHelp /></div>
         </div>
       </main>
     );
@@ -1133,6 +1178,8 @@ export function HypothesesPage() {
           Has pending suggestions
         </label>
       </div>
+
+      <BandRulesHelp />
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3 items-start">
         {BANDS.map((band) => {

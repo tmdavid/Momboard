@@ -22,6 +22,8 @@ for *their* account, i.e. biased toward over-claiming what "the customer wants."
 feature's job is not to block them but to confront that bias with evidence:
 
 - **grounded** → confirmed supporting quotes exist. Real. Carries weight downstream.
+  *(v0.4: "exist" now means the PRD thresholds — 3+ quotes from 2+ companies, at most 1
+  contradicting; see CHANGELOG and `app/services/hypothesis_grounding.py`.)*
 - **weak** → only low-confidence matches. A whisper worth recording, not acting on.
 - **no-evidence** → nothing in the calls resembles this. *This is itself the signal* —
   if no customer said anything like it, maybe it isn't important enough to spend time

@@ -196,6 +196,20 @@ const hypothesesHandlers = [
     return HttpResponse.json({ items: mockHypotheses, total: mockHypotheses.length });
   }),
 
+  // Specific paths must come before '/api/hypotheses/:id' (same order as the server routes).
+  http.get('/api/hypotheses/segments', () => HttpResponse.json({ items: [] })),
+  http.get('/api/hypotheses/band-rules', () =>
+    HttpResponse.json({
+      items: [
+        { band: 'grounded', label: 'Grounded', rule: '3+ confirmed supporting quotes from 2+ companies, and at most 1 contradicting' },
+        { band: 'hunch', label: 'Hunch', rule: 'No confirmed quotes yet' },
+      ],
+      grounded_min_support: 3, grounded_min_companies: 2, grounded_max_contradict: 1,
+      contested_min_each: 2, refuted_min_contradict: 3, refuted_ratio: 2,
+    }),
+  ),
+  http.get('/api/hypotheses/:id/history', () => HttpResponse.json({ items: [] })),
+
   http.get('/api/hypotheses/:id', ({ params }) => {
     if (params.id === '1') {
       return HttpResponse.json(mockHypothesisDetail);
@@ -247,9 +261,6 @@ const hypothesesHandlers = [
     const link = allLinks.find((l) => l.link_id === Number(params.id));
     return HttpResponse.json({ ...link, status: body.status });
   }),
-
-  http.get('/api/hypotheses/segments', () => HttpResponse.json({ items: [] })),
-  http.get('/api/hypotheses/:id/history', () => HttpResponse.json({ items: [] })),
 
   // T48: evidence-gated intake
   http.post('/api/hypotheses/intake', async ({ request }) => {
@@ -1274,7 +1285,7 @@ describe('T48: evidence-gated hypothesis intake', () => {
     expect(within(panel).getByRole('checkbox', { name: /confirm evidence 501/i })).toBeChecked();
     expect(within(panel).getByRole('button', { name: /save with 1 quote/i })).toBeInTheDocument();
     expect(within(panel).getByText(/match 0\.90/i)).toBeInTheDocument();
-    expect(within(panel).getByTestId('band-preview')).toHaveTextContent(/grounded/i);
+    expect(within(panel).getByTestId('band-preview')).toHaveTextContent(/candidate/i);
 
     // Unticking it flips the button to a hunch save and the preview to Hunch.
     await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence 501/i }));
@@ -1657,5 +1668,49 @@ describe('Hypotheses PRD: detail panel features', () => {
       const options = Array.from(document.querySelectorAll('#hypothesis-segments option')).map((o) => o.getAttribute('value'));
       expect(options).toEqual(['Enterprise', 'SMB']);
     });
+  });
+});
+
+
+describe('Hypotheses PRD: band rules in the UI', () => {
+  test('composer previews Grounded only once 3 ticked supports span 2 companies', async () => {
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    server.use(
+      http.post('/api/hypotheses/intake', async ({ request }) => {
+        const body = (await request.json()) as { statement: string };
+        const m = (id: number, company: string) => ({
+          highlight_id: id, quote: `Quote ${id}`, tag_key: 'pain', conversation_id: id,
+          relation: 'supports', confidence: 0.9, rationale: 'r', strong: true, company_name: company,
+        });
+        return HttpResponse.json({
+          statement: body.statement, segment: null,
+          matches: [m(1, 'Acme'), m(2, 'Acme'), m(3, 'Northwind')],
+          grounding_preview: 'grounded', suggested_questions: [],
+        });
+      }),
+    );
+    await user.type(
+      await screen.findByPlaceholderText(/state a falsifiable belief/i),
+      'Customers rely on manual Excel exports to clean listings',
+    );
+    await user.click(screen.getByRole('button', { name: /check evidence first/i }));
+    const panel = await screen.findByTestId('intake-panel');
+    expect(within(panel).getByTestId('band-preview')).toHaveTextContent(/grounded/i);
+    // Drop the only Northwind quote: 2 supports, 1 company -> Candidate.
+    await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence 3/i }));
+    expect(within(panel).getByTestId('band-preview')).toHaveTextContent(/candidate/i);
+    await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence 1/i }));
+    await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence 2/i }));
+    expect(within(panel).getByTestId('band-preview')).toHaveTextContent(/hunch/i);
+  });
+
+  test('"How bands work" lists the live rules', async () => {
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    const help = await screen.findByTestId('band-rules-help');
+    await user.click(within(help).getByText(/how bands work/i));
+    expect(within(help).getByText(/3\+ confirmed supporting quotes from 2\+ companies/)).toBeInTheDocument();
+    expect(within(help).getByText(/suggested matches wait for your review/i)).toBeInTheDocument();
   });
 });

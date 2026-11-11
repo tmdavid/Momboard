@@ -532,27 +532,18 @@ async def remove_evidence(db: AsyncSession, decision_id: int, highlight_id: int)
 
 async def get_hypothesis_summary(db: AsyncSession, hypothesis_id: int) -> dict[str, Any] | None:
     """Return the linked hypothesis's statement + computed grounding band for the detail view."""
-    from app.api.hypotheses import _compute_grounding
+    from app.api.hypotheses import _build_rollup
     from app.models import Hypothesis
+    from app.services.hypothesis_grounding import compute_band
 
     hyp = await db.get(Hypothesis, hypothesis_id)
     if hyp is None:
         return None
-    link_result = await db.execute(
-        select(HypothesisLink).where(HypothesisLink.hypothesis_id == hypothesis_id)
-    )
-    supports = {"confirmed": 0, "suggested": 0}
-    contradicts = {"confirmed": 0, "suggested": 0}
-    for link in link_result.scalars().all():
-        bucket = supports if link.stance == "supports" else contradicts
-        if link.status == "confirmed":
-            bucket["confirmed"] += 1
-        elif link.status == "suggested":
-            bucket["suggested"] += 1
+    supports, contradicts, companies_supporting, *_ = await _build_rollup(db, hypothesis_id)
     return {
         "id": hyp.id,
         "statement": hyp.statement,
-        "band": _compute_grounding(supports, contradicts),
+        "band": compute_band(supports, contradicts, companies_supporting),
     }
 
 

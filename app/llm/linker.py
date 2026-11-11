@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.llm.client import LLMClient
 from app.llm.schemas import LinkerOutput
 from app.models import Highlight, Hypothesis, HypothesisLink
-from app.services.hypothesis_history import current_band, record_band_change
 from app.services.hypothesis_intake import _is_customer_evidence
 
 logger = logging.getLogger(__name__)
@@ -100,8 +99,6 @@ async def run_hypothesis_link(
         )
     )
     seen_pairs: set[tuple[int, int]] = {(row[0], row[1]) for row in existing_rows.all()}
-    before_band = {hid: await current_band(db, hid) for hid in valid_hypothesis_ids}
-    first_cause: dict[int, int] = {}
 
     # Persist valid links, stripping any with invalid IDs
     for link_data in result.links:
@@ -142,10 +139,6 @@ async def run_hypothesis_link(
             status="suggested",
         )
         db.add(db_link)
-        await db.flush()
-        first_cause.setdefault(link_data.hypothesis_id, db_link.id)
 
+    # Suggested links never move a band (only confirmed ones do), so no band event here.
     await db.flush()
-    # Suggested links only ever move hunch -> candidate, but that is still history.
-    for hyp_id, cause_id in first_cause.items():
-        await record_band_change(db, hyp_id, before_band[hyp_id], cause_link_id=cause_id)

@@ -533,6 +533,23 @@ export const handlers = [
 
   // Hypotheses side-requests (defaults; individual tests override as needed)
   http.get('/api/hypotheses/segments', () => HttpResponse.json({ items: [] })),
+  http.get('/api/hypotheses/band-rules', () =>
+    HttpResponse.json({
+      items: [
+        { band: 'grounded', label: 'Grounded', rule: '3+ confirmed supporting quotes from 2+ companies, and at most 1 contradicting' },
+        { band: 'contested', label: 'Contested', rule: '2+ confirmed supporting and 2+ confirmed contradicting quotes' },
+        { band: 'candidate', label: 'Candidate', rule: 'Some confirmed evidence, but not enough to call it' },
+        { band: 'hunch', label: 'Hunch', rule: 'No confirmed quotes yet' },
+        { band: 'refuted', label: 'Refuted', rule: '3+ confirmed contradicting quotes, more than 2× the supporting ones' },
+      ],
+      grounded_min_support: 3,
+      grounded_min_companies: 2,
+      grounded_max_contradict: 1,
+      contested_min_each: 2,
+      refuted_min_contradict: 3,
+      refuted_ratio: 2,
+    }),
+  ),
   http.get('/api/hypotheses/:id/history', () => HttpResponse.json({ items: [] })),
 
   // Bulk accept (#14)

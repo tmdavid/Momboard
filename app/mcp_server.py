@@ -355,8 +355,9 @@ async def handle_tool_call(
         return result_data
 
     elif tool_name == "list_hypotheses":
-        from app.api.hypotheses import _build_rollup, _compute_grounding
+        from app.api.hypotheses import _build_rollup
         from app.models import Hypothesis
+        from app.services.hypothesis_grounding import compute_band
 
         grounding_filter = arguments.get("grounding")
         limit = arguments.get("limit", 50)
@@ -367,8 +368,8 @@ async def handle_tool_call(
         )
         items = []
         for hyp in hyps_result.scalars().all():
-            supports, contradicts, _co_sup, _co_con, _last = await _build_rollup(db, hyp.id)
-            grounding = _compute_grounding(supports, contradicts)
+            supports, contradicts, co_sup, _co_con, _last = await _build_rollup(db, hyp.id)
+            grounding = compute_band(supports, contradicts, co_sup)
             if grounding_filter and grounding != grounding_filter:
                 continue
             items.append({
@@ -387,13 +388,14 @@ async def handle_tool_call(
         return {"hypotheses": items}
 
     elif tool_name == "get_hypothesis":
-        from app.api.hypotheses import _build_rollup, _compute_grounding
+        from app.api.hypotheses import _build_rollup
         from app.models import Hypothesis, HypothesisLink
+        from app.services.hypothesis_grounding import compute_band
 
         hyp_row = await db.get(Hypothesis, arguments["id"])
         if hyp_row is None:
             return {"error": "Hypothesis not found"}
-        supports, contradicts, _co_sup, _co_con, _last = await _build_rollup(db, hyp_row.id)
+        supports, contradicts, co_sup, _co_con, _last = await _build_rollup(db, hyp_row.id)
         # Confirmed evidence links with quote + conversation ref (citations).
         links_result = await db.execute(
             select(HypothesisLink, Highlight)
@@ -418,7 +420,7 @@ async def handle_tool_call(
             "segment": hyp_row.segment,
             "status": hyp_row.status,
             "origin": hyp_row.origin,
-            "grounding": _compute_grounding(supports, contradicts),
+            "grounding": compute_band(supports, contradicts, co_sup),
             "supporting": supports.get("confirmed", 0),
             "contradicting": contradicts.get("confirmed", 0),
             "evidence": evidence,

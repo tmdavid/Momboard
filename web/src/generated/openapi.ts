@@ -657,6 +657,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hypotheses/band-rules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Band Rules
+         * @description The live grounding-band rules and thresholds (configured via settings).
+         */
+        get: operations["get_band_rules_api_hypotheses_band_rules_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hypotheses/intake": {
         parameters: {
             query?: never;
@@ -2018,6 +2038,36 @@ export interface components {
             id: number;
             /** To Band */
             to_band: string;
+        };
+        /** HypothesisBandRule */
+        HypothesisBandRule: {
+            /** Band */
+            band: string;
+            /** Label */
+            label: string;
+            /** Rule */
+            rule: string;
+        };
+        /**
+         * HypothesisBandRulesResponse
+         * @description The live grounding rules (thresholds come from settings), for the board's explainer
+         *     and so clients can compute the same band the server does.
+         */
+        HypothesisBandRulesResponse: {
+            /** Contested Min Each */
+            contested_min_each: number;
+            /** Grounded Max Contradict */
+            grounded_max_contradict: number;
+            /** Grounded Min Companies */
+            grounded_min_companies: number;
+            /** Grounded Min Support */
+            grounded_min_support: number;
+            /** Items */
+            items?: components["schemas"]["HypothesisBandRule"][];
+            /** Refuted Min Contradict */
+            refuted_min_contradict: number;
+            /** Refuted Ratio */
+            refuted_ratio: number;
         };
         /** HypothesisCreate */
         HypothesisCreate: {
@@ -4122,6 +4172,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_band_rules_api_hypotheses_band_rules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisBandRulesResponse"];
                 };
             };
         };

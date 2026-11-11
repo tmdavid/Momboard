@@ -566,6 +566,18 @@ export const api = {
     return apiFetch<{ items: HypothesisBandEvent[] }>(`/api/hypotheses/${id}/history`);
   },
 
+  hypothesisBandRules() {
+    return apiFetch<{
+      items: { band: string; label: string; rule: string }[];
+      grounded_min_support: number;
+      grounded_min_companies: number;
+      grounded_max_contradict: number;
+      contested_min_each: number;
+      refuted_min_contradict: number;
+      refuted_ratio: number;
+    }>('/api/hypotheses/band-rules');
+  },
+
   hypothesisSegments() {
     return apiFetch<{ items: string[] }>('/api/hypotheses/segments');
   },

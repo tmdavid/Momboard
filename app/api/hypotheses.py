@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import (
     HypothesisBandEventResponse,
+    HypothesisBandRulesResponse,
     HypothesisCreate,
     HypothesisDetailResponse,
     HypothesisHistoryResponse,
@@ -38,6 +39,12 @@ from app.models import (
     HypothesisQuestion,
     User,
     utcnow,
+)
+from app.services.hypothesis_grounding import (
+    band_rules,
+    compute_band,
+    explain_band,
+    get_band_thresholds,
 )
 from app.services.hypothesis_history import (
     current_band,
@@ -154,73 +161,6 @@ def _compute_verdict_hint(
     return None
 
 
-def _compute_grounding(
-    supports: dict[str, int],
-    contradicts: dict[str, int],
-) -> str:
-    """Derive the 2D grounding band from confirmed/suggested link counts (T48).
-
-    Support and contradiction are independent axes — the same belief can be both
-    supported and contradicted by different customers — so grounding is a 2x2, not a
-    single gradient:
-
-        has confirmed support?  has confirmed contradiction?  -> band
-        yes                     no                            -> grounded
-        yes                     yes                           -> contested
-        no                      yes                           -> refuted
-        no                      no  (some suggested links)    -> candidate
-        no                      no  (no links at all)         -> hunch
-
-    Confirmed evidence always beats suggested: a confirmed support makes the band
-    `grounded`/`contested` regardless of how many suggested links exist. Pure and
-    computed at read time — never stored (mirrors T41 freshness).
-    """
-    has_support = supports.get("confirmed", 0) > 0
-    has_contradiction = contradicts.get("confirmed", 0) > 0
-
-    if has_support and has_contradiction:
-        return "contested"
-    if has_support:
-        return "grounded"
-    if has_contradiction:
-        return "refuted"
-    # No confirmed evidence either way.
-    if supports.get("suggested", 0) > 0 or contradicts.get("suggested", 0) > 0:
-        return "candidate"
-    return "hunch"
-
-
-def _plural(n: int, noun: str) -> str:
-    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
-
-
-def _compute_grounding_reason(
-    supports: dict[str, int],
-    contradicts: dict[str, int],
-    companies_supporting: int,
-    companies_contradicting: int,
-) -> str:
-    """One plain sentence explaining the band, from confirmed links (suggested never count)."""
-    sup = supports.get("confirmed", 0)
-    con = contradicts.get("confirmed", 0)
-    sup_part = (
-        f"{_plural(sup, 'supporting quote')} from {_plural(companies_supporting, 'company')}"
-    )
-    con_part = (
-        f"{_plural(con, 'contradicting quote')} from {_plural(companies_contradicting, 'company')}"
-    )
-    if sup and con:
-        return f"{sup_part} vs {con_part}."
-    if sup:
-        return f"{sup_part}, 0 contradicting."
-    if con:
-        return f"{con_part}, none supporting."
-    pending = supports.get("suggested", 0) + contradicts.get("suggested", 0)
-    if pending:
-        return f"No confirmed evidence yet; {_plural(pending, 'suggested quote')} awaiting review."
-    return "No evidence yet."
-
-
 def _build_rollup_model(
     supports: dict[str, int],
     contradicts: dict[str, int],
@@ -243,9 +183,9 @@ def _build_rollup_model(
         last_evidence_at=last_ev,
         freshness=freshness_data["freshness"],
         newest_evidence_at=freshness_data.get("newest_evidence_at"),
-        grounding=_compute_grounding(supports, contradicts),
+        grounding=compute_band(supports, contradicts, co_sup),
         pending_count=supports.get("suggested", 0) + contradicts.get("suggested", 0),
-        grounding_reason=_compute_grounding_reason(supports, contradicts, co_sup, co_con),
+        grounding_reason=explain_band(supports, contradicts, co_sup, co_con),
     )
 
 
@@ -335,6 +275,21 @@ async def list_hypotheses(
         # "newest" is already the query order; list.sort is stable for the others.
 
         return {"items": items[offset : offset + limit], "total": len(items)}
+
+
+@router.get("/band-rules", response_model=HypothesisBandRulesResponse)
+async def get_band_rules(user: User = Depends(get_current_user)) -> dict:
+    """The live grounding-band rules and thresholds (configured via settings)."""
+    t = get_band_thresholds()
+    return {
+        "items": band_rules(t),
+        "grounded_min_support": t.grounded_min_support,
+        "grounded_min_companies": t.grounded_min_companies,
+        "grounded_max_contradict": t.grounded_max_contradict,
+        "contested_min_each": t.contested_min_each,
+        "refuted_min_contradict": t.refuted_min_contradict,
+        "refuted_ratio": t.refuted_ratio,
+    }
 
 
 @router.get("/segments", response_model=HypothesisSegmentsResponse)

@@ -3,6 +3,23 @@
 All notable changes to MomBoard, newest first. The README shows only the current
 status and latest additions; this file is the full history.
 
+## v0.4 — Decisions, Hypotheses board, new UI (in progress)
+
+- **Hypothesis grounding bands use the PRD rules** (confirmed links only; suggested matches
+  never move a band): *Grounded* = 3+ supporting quotes from 2+ companies and at most 1
+  contradicting; *Contested* = 2+ supporting and 2+ contradicting; *Refuted* = 3+
+  contradicting and more than 2x the supporting; *Candidate* = some confirmed evidence but
+  not enough; *Hunch* = none. **Behaviour change:** one confirmed quote used to read as
+  Grounded; it is now a Candidate, and a hypothesis with only suggested links is a Hunch
+  (with a "to review" badge). Thresholds are settings (`HYPOTHESIS_GROUNDED_MIN_SUPPORT`,
+  `HYPOTHESIS_GROUNDED_MIN_COMPANIES`, `HYPOTHESIS_GROUNDED_MAX_CONTRADICT`,
+  `HYPOTHESIS_CONTESTED_MIN_EACH`, `HYPOTHESIS_REFUTED_MIN_CONTRADICT`,
+  `HYPOTHESIS_REFUTED_RATIO`), exposed at `GET /api/hypotheses/band-rules`. Each card
+  carries a one-sentence `grounding_reason` that says what is still missing.
+- Hypotheses: grounding-band board, scored evidence check, detail view with band history,
+  validation questions, add-evidence and archive; list API returns `{items, total}`.
+  Migration 010. Decisions: evidence snapshots and reactive integrity (migrations 008, 009).
+
 ## v0.3 — "From advisor to collaborator" (in progress)
 
 The corpus becomes a grounded boundary: it **feeds other tools** (insights over MCP)

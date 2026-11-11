@@ -444,6 +444,25 @@ class HypothesisHistoryResponse(BaseModel):
     items: list[HypothesisBandEventResponse] = Field(default_factory=list)
 
 
+class HypothesisBandRule(BaseModel):
+    band: str
+    label: str
+    rule: str
+
+
+class HypothesisBandRulesResponse(BaseModel):
+    """The live grounding rules (thresholds come from settings), for the board's explainer
+    and so clients can compute the same band the server does."""
+
+    items: list[HypothesisBandRule] = Field(default_factory=list)
+    grounded_min_support: int
+    grounded_min_companies: int
+    grounded_max_contradict: int
+    contested_min_each: int
+    refuted_min_contradict: int
+    refuted_ratio: float
+
+
 class HypothesisSegmentsResponse(BaseModel):
     items: list[str] = Field(default_factory=list)
 

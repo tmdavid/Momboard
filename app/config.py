@@ -79,6 +79,19 @@ class Settings(BaseSettings):
     vexa_base_url: str = ""
     vexa_api_key: str = ""
 
+    # Hypothesis grounding bands (PRD defaults). Confirmed links only; suggested never count.
+    #   grounded : >= min_support confirmed supporting quotes from >= min_companies companies,
+    #              and <= max_contradict confirmed contradicting quotes
+    #   contested: >= contested_min_each confirmed supporting AND contradicting quotes
+    #   refuted  : >= refuted_min_contradict confirmed contradicting quotes, and more than
+    #              refuted_ratio x the supporting ones
+    hypothesis_grounded_min_support: int = 3
+    hypothesis_grounded_min_companies: int = 2
+    hypothesis_grounded_max_contradict: int = 1
+    hypothesis_contested_min_each: int = 2
+    hypothesis_refuted_min_contradict: int = 3
+    hypothesis_refuted_ratio: float = 2.0
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 

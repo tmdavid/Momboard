@@ -526,31 +526,46 @@ class TestMCPInsightTools:
     """T46: read-only grounding-aware hypothesis/decision tools."""
 
     async def _make_grounded_hypothesis(self, db):
+        """A hypothesis with 3 confirmed supporting quotes from 2 companies (-> grounded)."""
         from app.models import (
+            Company,
             Conversation,
             Highlight,
             Hypothesis,
             HypothesisLink,
         )
 
-        convo = Conversation(
-            title="C", status="ready", raw_transcript="x", transcript_format="name_colon",
-        )
-        db.add(convo)
-        await db.flush()
-        hl = Highlight(
-            conversation_id=convo.id, tag_key="pain", quote="manual export every monday",
-            confidence=0.9, origin="ai", status="accepted",
-        )
         hyp = Hypothesis(statement="Customers do manual exports weekly", status="open", origin="human")
-        db.add_all([hl, hyp])
+        db.add(hyp)
+        highlights = []
+        for name, quotes in (
+            ("Acme", ["manual export every monday", "we paste it into excel weekly"]),
+            ("Northwind", ["our analyst re-keys the export by hand"]),
+        ):
+            company = Company(name=name)
+            db.add(company)
+            await db.flush()
+            convo = Conversation(
+                title=f"{name} call", status="ready", raw_transcript="x",
+                transcript_format="name_colon", company_id=company.id,
+            )
+            db.add(convo)
+            await db.flush()
+            for quote in quotes:
+                hl = Highlight(
+                    conversation_id=convo.id, tag_key="pain", quote=quote,
+                    confidence=0.9, origin="ai", status="accepted",
+                )
+                db.add(hl)
+                highlights.append(hl)
         await db.flush()
-        db.add(HypothesisLink(
-            hypothesis_id=hyp.id, highlight_id=hl.id, stance="supports",
-            origin="human", status="confirmed",
-        ))
+        for hl in highlights:
+            db.add(HypothesisLink(
+                hypothesis_id=hyp.id, highlight_id=hl.id, stance="supports",
+                origin="human", status="confirmed",
+            ))
         await db.commit()
-        return hyp.id, hl.id
+        return hyp.id, highlights[0].id
 
     @pytest.mark.asyncio
     async def test_list_hypotheses_exposes_grounding_and_counts(self, seeded_db):
@@ -559,7 +574,7 @@ class TestMCPInsightTools:
         assert "hypotheses" in result
         row = next(h for h in result["hypotheses"] if h["id"] == hyp_id)
         assert row["grounding"] == "grounded"
-        assert row["supporting"] == 1
+        assert row["supporting"] == 3
         assert row["origin"] == "human"
 
     @pytest.mark.asyncio
@@ -576,9 +591,10 @@ class TestMCPInsightTools:
         hyp_id, hl_id = await self._make_grounded_hypothesis(seeded_db)
         result = await handle_tool_call("get_hypothesis", {"id": hyp_id}, db_session=seeded_db)
         assert result["grounding"] == "grounded"
-        assert result["evidence"][0]["highlight_id"] == hl_id
-        assert result["evidence"][0]["stance"] == "supports"
-        assert "manual export" in result["evidence"][0]["quote"]
+        by_id = {e["highlight_id"]: e for e in result["evidence"]}
+        assert len(by_id) == 3
+        assert by_id[hl_id]["stance"] == "supports"
+        assert "manual export" in by_id[hl_id]["quote"]
 
     @pytest.mark.asyncio
     async def test_get_hypothesis_not_found(self, seeded_db):

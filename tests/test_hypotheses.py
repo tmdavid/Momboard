@@ -39,23 +39,7 @@ from app.seed import seed_tags
 # --- T48: grounding band (pure function) -----------------------------------
 
 
-def test_compute_grounding_states():
-    """The 2D grounding band is derived from confirmed support/contradict counts."""
-    from app.api.hypotheses import _compute_grounding
-
-    def g(sup_c, con_c, sup_s=0, con_s=0):
-        return _compute_grounding(
-            {"confirmed": sup_c, "suggested": sup_s},
-            {"confirmed": con_c, "suggested": con_s},
-        )
-
-    assert g(2, 0) == "grounded"           # confirmed support, no contradiction
-    assert g(3, 2) == "contested"          # support AND contradiction (the valuable one)
-    assert g(0, 2) == "refuted"            # confirmed contradiction, no support
-    assert g(0, 0, sup_s=2) == "candidate" # only suggested (unconfirmed) matches
-    assert g(0, 0, con_s=1) == "candidate"
-    assert g(0, 0) == "hunch"              # nothing at all
-    assert g(1, 0, sup_s=5, con_s=5) == "grounded"  # confirmed beats suggested
+# (Band rules are unit-tested in tests/test_hypothesis_grounding.py.)
 
 # ---------------------------------------------------------------------------
 # Helpers / fixtures local to this test module
@@ -1512,11 +1496,12 @@ async def test_intake_preview_scores_candidates_and_previews_grounding(
             db, "Customers rely on manual Excel exports to clean listings", llm=stub
         )
 
-    # Only the valid, related match survives; grounding previews as grounded.
+    # Only the valid, related match survives. One confirmed quote from one company is
+    # enough to be a Candidate, not yet Grounded (needs 3 quotes from 2 companies).
     assert [m["highlight_id"] for m in out["matches"]] == [hl.id]
     assert out["matches"][0]["relation"] == "supports"
     assert out["matches"][0]["strong"] is True
-    assert out["grounding_preview"] == "grounded"
+    assert out["grounding_preview"] == "candidate"
 
 
 @pytest.mark.asyncio
@@ -1583,12 +1568,34 @@ async def test_intake_commit_saves_human_hypothesis_with_confirmed_links(
     assert r.status_code == 201
     hyp_id = r.json()["id"]
 
-    # The committed hypothesis is human-origin and reads as grounded (confirmed support).
+    # One confirmed quote from one company: a Candidate (Grounded needs 3 quotes, 2 companies).
     detail = await auth_client.get(f"/api/hypotheses/{hyp_id}")
     assert detail.status_code == 200
     body = detail.json()
-    assert body["rollup"]["grounding"] == "grounded"
+    assert body["rollup"]["grounding"] == "candidate"
     assert body["rollup"]["supports"]["confirmed"] == 1
+
+
+@pytest.mark.asyncio
+async def test_intake_commit_with_enough_evidence_is_grounded(
+    auth_client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    hyp_seeded: dict,
+):
+    ids = await _grounding_ids(session_factory, hyp_seeded)
+    r = await auth_client.post(
+        "/api/hypotheses/intake/commit",
+        json={
+            "statement": "Customers rely on manual Excel exports to clean listings",
+            "confirmed": [{"highlight_id": i, "stance": "supports"} for i in ids],
+        },
+    )
+    assert r.status_code == 201
+    body = (await auth_client.get(f"/api/hypotheses/{r.json()['id']}")).json()
+    assert body["rollup"]["grounding"] == "grounded"
+    assert body["rollup"]["companies_supporting"] == 2
+    hist = (await auth_client.get(f"/api/hypotheses/{r.json()['id']}/history")).json()["items"]
+    assert [(e["from_band"], e["to_band"]) for e in hist] == [(None, "grounded")]
 
 
 @pytest.mark.asyncio
@@ -1695,6 +1702,35 @@ async def test_intake_excludes_our_side_turns(
 # ===========================================================================
 
 
+async def _more_highlights(
+    session_factory: async_sessionmaker[AsyncSession], conversation_id: int, n: int, tag: str
+) -> list[int]:
+    """n extra accepted customer highlights on an existing conversation."""
+    ids: list[int] = []
+    async with session_factory() as db:
+        for i in range(n):
+            h = Highlight(
+                conversation_id=conversation_id, tag_key="pain",
+                quote=f"{tag} extra quote {i} about the manual export workaround",
+                status="accepted", origin="ai",
+            )
+            db.add(h)
+            await db.flush()
+            ids.append(h.id)
+        await db.commit()
+    return ids
+
+
+async def _grounding_ids(
+    session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+) -> list[int]:
+    """Three distinct quotes from TWO companies: Acme x2, Northwind x1 (enough to be Grounded)."""
+    acme_extra = await _more_highlights(
+        session_factory, hyp_seeded["highlight1"].conversation_id, 1, "Acme"
+    )
+    return [hyp_seeded["highlight1"].id, acme_extra[0], hyp_seeded["highlight2"].id]
+
+
 async def _mk_hyp(
     client: AsyncClient,
     statement: str,
@@ -1751,11 +1787,14 @@ class TestHypothesisListEnvelopeAndFilters:
         assert len(ids) == 3
 
     @pytest.mark.asyncio
-    async def test_filter_by_band(self, auth_client: AsyncClient, hyp_seeded: dict):
-        h1 = hyp_seeded["highlight1"].id
+    async def test_filter_by_band(
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
+    ):
+        ids = await _grounding_ids(session_factory, hyp_seeded)
         grounded = await _mk_hyp(
             auth_client, "Grounded band hypothesis for filter",
-            links=[(h1, "supports", "confirmed")],
+            links=[(i, "supports", "confirmed") for i in ids],
         )
         hunch = await _mk_hyp(auth_client, "Hunch band hypothesis for filter")
         r = await auth_client.get("/api/hypotheses", params={"band": "grounded"})
@@ -1823,21 +1862,40 @@ class TestHypothesisListEnvelopeAndFilters:
 class TestHypothesisRollupExplain:
     @pytest.mark.asyncio
     async def test_pending_count_and_reason_for_grounded(
-        self, auth_client: AsyncClient, hyp_seeded: dict
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
     ):
-        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        ids = await _grounding_ids(session_factory, hyp_seeded)
+        extra = (await _more_highlights(
+            session_factory, hyp_seeded["highlight2"].conversation_id, 1, "Northwind"
+        ))[0]
         hid = await _mk_hyp(
             auth_client, "Reason sentence hypothesis grounded here",
-            links=[(h1, "supports", "confirmed"), (h2, "contradicts", "suggested")],
+            links=[(i, "supports", "confirmed") for i in ids] + [(extra, "contradicts", "suggested")],
         )
         item = next(
             i for i in (await auth_client.get("/api/hypotheses")).json()["items"]
             if i["id"] == hid
         )
         assert item["rollup"]["grounding"] == "grounded"
-        assert item["rollup"]["pending_count"] == 1
-        reason = item["rollup"]["grounding_reason"]
-        assert "1 supporting quote" in reason and "1 compan" in reason
+        assert item["rollup"]["pending_count"] == 1  # the suggestion waits for review
+        assert item["rollup"]["grounding_reason"] == (
+            "3 supporting quotes from 2 companies, 0 contradicting."
+        )
+
+    @pytest.mark.asyncio
+    async def test_candidate_reason_says_what_is_missing(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        hid = await _mk_hyp(
+            auth_client, "Reason sentence hypothesis candidate here",
+            links=[(hyp_seeded["highlight1"].id, "supports", "confirmed")],
+        )
+        detail = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
+        assert detail["rollup"]["grounding"] == "candidate"
+        assert detail["rollup"]["grounding_reason"] == (
+            "1 supporting quote from 1 company — Grounded needs 3 supporting quotes from 2 companies."
+        )
 
     @pytest.mark.asyncio
     async def test_reason_for_hunch_and_detail_carries_it(
@@ -1882,39 +1940,44 @@ class TestHypothesisIntegrityHook:
 
     @pytest.mark.asyncio
     async def test_rejecting_highlight_invalidates_links_and_drops_band(
-        self, auth_client: AsyncClient, hyp_seeded: dict
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
     ):
-        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        ids = await _grounding_ids(session_factory, hyp_seeded)
+        rejected = ids[0]
         hid = await _mk_hyp(
             auth_client, "Integrity hook hypothesis grounded then undermined",
-            links=[(h1, "supports", "confirmed"), (h2, "supports", "suggested")],
+            links=[(i, "supports", "confirmed") for i in ids],
         )
         before = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
         assert before["rollup"]["grounding"] == "grounded"
 
-        r = await auth_client.patch(f"/api/highlights/{h1}", json={"status": "rejected"})
+        r = await auth_client.patch(f"/api/highlights/{rejected}", json={"status": "rejected"})
         assert r.status_code == 200
 
         after = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
-        # The confirmed support is gone; only the still-suggested link remains.
-        assert after["rollup"]["supports"]["confirmed"] == 0
+        # 3 confirmed supports -> 2: no longer enough to be Grounded.
+        assert after["rollup"]["supports"]["confirmed"] == 2
         assert after["rollup"]["grounding"] == "candidate"
         statuses = {link["highlight_id"]: link["status"] for link in after["links"]}
-        assert statuses[h1] == "invalid"
-        assert statuses[h2] == "suggested"
+        assert statuses[rejected] == "invalid"
         # Invalid links are not renderable evidence on the board.
-        assert all(e["highlight_id"] != h1 for e in after["evidence"]["supports"])
+        assert all(e["highlight_id"] != rejected for e in after["evidence"]["supports"])
 
     @pytest.mark.asyncio
     async def test_rejecting_unrelated_highlight_changes_nothing(
-        self, auth_client: AsyncClient, hyp_seeded: dict
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
     ):
-        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        ids = await _grounding_ids(session_factory, hyp_seeded)
         hid = await _mk_hyp(
             auth_client, "Integrity hook hypothesis unaffected case",
-            links=[(h1, "supports", "confirmed")],
+            links=[(i, "supports", "confirmed") for i in ids],
         )
-        await auth_client.patch(f"/api/highlights/{h2}", json={"status": "rejected"})
+        unrelated = (await _more_highlights(
+            session_factory, hyp_seeded["highlight2"].conversation_id, 1, "Unrelated"
+        ))[0]
+        await auth_client.patch(f"/api/highlights/{unrelated}", json={"status": "rejected"})
         after = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
         assert after["rollup"]["grounding"] == "grounded"
 
@@ -1982,31 +2045,67 @@ class TestHypothesisQuestions:
 class TestHypothesisHistory:
     @pytest.mark.asyncio
     async def test_history_records_creation_and_band_changes_with_cause(
-        self, auth_client: AsyncClient, hyp_seeded: dict
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
     ):
-        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        acme_conv = hyp_seeded["highlight1"].conversation_id
+        nw_conv = hyp_seeded["highlight2"].conversation_id
+        acme = [hyp_seeded["highlight1"].id] + await _more_highlights(session_factory, acme_conv, 1, "Acme")
+        nw = [hyp_seeded["highlight2"].id] + await _more_highlights(session_factory, nw_conv, 1, "Northwind")
         hid = await _mk_hyp(auth_client, "History records band changes properly ok")
-        # hunch -> candidate (suggested link), -> grounded (confirmed), -> contested
-        l1 = (await auth_client.post(
-            f"/api/hypotheses/{hid}/links", json={"highlight_id": h1, "stance": "supports"}
-        )).json()["id"]
-        await auth_client.patch(f"/api/hypothesis-links/{l1}", json={"status": "confirmed"})
-        l2 = (await auth_client.post(
-            f"/api/hypotheses/{hid}/links", json={"highlight_id": h2, "stance": "contradicts"}
-        )).json()["id"]
-        await auth_client.patch(f"/api/hypothesis-links/{l2}", json={"status": "confirmed"})
+
+        async def add(highlight_id: int, stance: str, confirm: bool) -> int:
+            r = await auth_client.post(
+                f"/api/hypotheses/{hid}/links",
+                json={"highlight_id": highlight_id, "stance": stance, "confirm": confirm},
+            )
+            assert r.status_code == 201
+            return r.json()["id"]
+
+        # A suggestion never moves the band -> no event yet.
+        suggested = await add(acme[0], "supports", confirm=False)
+        assert len((await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]) == 1
+        # Confirm it: hunch -> candidate.
+        await auth_client.patch(f"/api/hypothesis-links/{suggested}", json={"status": "confirmed"})
+        await add(nw[0], "supports", confirm=True)     # 2 supports: still candidate (no event)
+        await add(acme[1], "supports", confirm=True)   # 3 supports, 2 companies: grounded
+        await add(nw[1], "contradicts", confirm=True)  # 1 contradiction: still grounded
 
         hist = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
         # newest first
         assert [(e["from_band"], e["to_band"]) for e in hist] == [
-            ("grounded", "contested"),
             ("candidate", "grounded"),
             ("hunch", "candidate"),
             (None, "hunch"),
         ]
-        assert hist[0]["cause_link_id"] == l2
-        assert hist[0]["cause_quote"]  # human-readable cause for the UI
-        assert hist[0]["cause_stance"] == "contradicts"
+        assert hist[0]["cause_quote"] and hist[0]["cause_stance"] == "supports"
+
+    @pytest.mark.asyncio
+    async def test_history_records_contested_with_cause(
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
+    ):
+        ids = await _grounding_ids(session_factory, hyp_seeded)
+        nw_extra = await _more_highlights(
+            session_factory, hyp_seeded["highlight2"].conversation_id, 2, "Contra"
+        )
+        hid = await _mk_hyp(
+            auth_client, "History records contested with its cause ok",
+            links=[(i, "supports", "confirmed") for i in ids],
+        )
+        r1 = await auth_client.post(
+            f"/api/hypotheses/{hid}/links",
+            json={"highlight_id": nw_extra[0], "stance": "contradicts", "confirm": True},
+        )
+        r2 = await auth_client.post(
+            f"/api/hypotheses/{hid}/links",
+            json={"highlight_id": nw_extra[1], "stance": "contradicts", "confirm": True},
+        )
+        assert r1.status_code == r2.status_code == 201
+        hist = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
+        assert (hist[0]["from_band"], hist[0]["to_band"]) == ("grounded", "contested")
+        assert hist[0]["cause_link_id"] == r2.json()["id"]
+        assert hist[0]["cause_stance"] == "contradicts" and hist[0]["cause_quote"]
 
     @pytest.mark.asyncio
     async def test_no_event_when_band_unchanged(self, auth_client: AsyncClient, hyp_seeded: dict):
@@ -2024,16 +2123,17 @@ class TestHypothesisHistory:
 
     @pytest.mark.asyncio
     async def test_integrity_invalidation_records_an_event(
-        self, auth_client: AsyncClient, hyp_seeded: dict
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
     ):
-        h1 = hyp_seeded["highlight1"].id
+        ids = await _grounding_ids(session_factory, hyp_seeded)
         hid = await _mk_hyp(
             auth_client, "Integrity invalidation shows in history ok",
-            links=[(h1, "supports", "confirmed")],
+            links=[(i, "supports", "confirmed") for i in ids],
         )
-        await auth_client.patch(f"/api/highlights/{h1}", json={"status": "rejected"})
+        await auth_client.patch(f"/api/highlights/{ids[0]}", json={"status": "rejected"})
         hist = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
-        assert (hist[0]["from_band"], hist[0]["to_band"]) == ("grounded", "hunch")
+        assert (hist[0]["from_band"], hist[0]["to_band"]) == ("grounded", "candidate")
 
     @pytest.mark.asyncio
     async def test_history_unknown_hypothesis_404(self, auth_client: AsyncClient, hyp_seeded: dict):
@@ -2164,21 +2264,24 @@ class TestLinkerHardening:
             assert ours.id not in sent_ids and hl1.id in sent_ids
 
     @pytest.mark.asyncio
-    async def test_suggested_link_records_hunch_to_candidate_event(
-        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    async def test_suggested_link_does_not_move_the_band(
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
     ):
         from app.llm.linker import run_hypothesis_link
-        from app.services.hypothesis_history import list_band_events
 
         hl = hyp_seeded["highlight1"]
+        hyp_id = await _mk_hyp(auth_client, "Suggestions never move the band ok yes")
         async with session_factory() as session:
-            hyp_id = await self._hyp(session)
             await run_hypothesis_link(
                 session, hyp_seeded["conversation1"].id, llm=self._llm(hyp_id, (hl.id, 0.9))
             )
             await session.commit()
-            events = await list_band_events(session, hyp_id)
-            assert [(e.from_band, e.to_band) for e in events] == [("hunch", "candidate")]
+        detail = (await auth_client.get(f"/api/hypotheses/{hyp_id}")).json()
+        assert detail["rollup"]["pending_count"] == 1
+        assert detail["rollup"]["grounding"] == "hunch"
+        hist = (await auth_client.get(f"/api/hypotheses/{hyp_id}/history")).json()["items"]
+        assert [(e["from_band"], e["to_band"]) for e in hist] == [(None, "hunch")]
 
 
 class TestEvidencePickerSupport:
@@ -2213,10 +2316,11 @@ class TestEvidencePickerSupport:
         assert r.status_code == 201
         assert r.json()["status"] == "confirmed" and r.json()["reviewed_at"] is not None
         detail = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
-        assert detail["rollup"]["grounding"] == "grounded"
+        assert detail["rollup"]["grounding"] == "candidate"
         hist = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
-        # one jump hunch -> grounded, caused by this link (no intermediate 'candidate')
-        assert (hist[0]["from_band"], hist[0]["to_band"]) == ("hunch", "grounded")
+        # one jump hunch -> candidate, caused by this link (no intermediate suggested step)
+        assert (hist[0]["from_band"], hist[0]["to_band"]) == ("hunch", "candidate")
+        assert hist[0]["cause_link_id"] == r.json()["id"]
 
     @pytest.mark.asyncio
     async def test_create_link_default_stays_suggested(
@@ -2242,3 +2346,25 @@ class TestEvidencePickerSupport:
             json={"highlight_id": hyp_seeded["highlight1"].id, "stance": "supports"},
         )
         assert r.status_code == 409
+
+
+class TestBandRulesEndpoint:
+    @pytest.mark.asyncio
+    async def test_band_rules_exposes_live_thresholds_and_text(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        r = await auth_client.get("/api/hypotheses/band-rules")
+        assert r.status_code == 200
+        body = r.json()
+        assert [i["band"] for i in body["items"]] == [
+            "grounded", "contested", "candidate", "hunch", "refuted"
+        ]
+        assert body["grounded_min_support"] == 3 and body["grounded_min_companies"] == 2
+        assert body["grounded_max_contradict"] == 1 and body["contested_min_each"] == 2
+        assert body["refuted_min_contradict"] == 3 and body["refuted_ratio"] == 2.0
+        grounded = next(i for i in body["items"] if i["band"] == "grounded")
+        assert "3+" in grounded["rule"] and "2+ companies" in grounded["rule"]
+
+    @pytest.mark.asyncio
+    async def test_band_rules_requires_auth(self, client: AsyncClient):
+        assert (await client.get("/api/hypotheses/band-rules")).status_code == 401

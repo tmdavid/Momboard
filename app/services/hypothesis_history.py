@@ -14,11 +14,12 @@ from app.models import HypothesisBandEvent
 
 async def current_band(db: AsyncSession, hypothesis_id: int) -> str:
     """The band a hypothesis would show right now (flushes pending changes first)."""
-    from app.api.hypotheses import _build_rollup, _compute_grounding
+    from app.api.hypotheses import _build_rollup
+    from app.services.hypothesis_grounding import compute_band
 
     await db.flush()
-    supports, contradicts, *_ = await _build_rollup(db, hypothesis_id)
-    return _compute_grounding(supports, contradicts)
+    supports, contradicts, companies_supporting, *_ = await _build_rollup(db, hypothesis_id)
+    return compute_band(supports, contradicts, companies_supporting)
 
 
 async def record_band_change(
