@@ -620,12 +620,17 @@ function HypothesisDetailPanel({
 type IntakeMatch = NonNullable<HypothesisIntakeResponse['matches']>[number];
 
 /** Band the belief would have if saved with the ticked quotes (same rules as the server). */
+/** Stable identity of a match: 'h<id>' when tagged, 'u<utterance id>' for untagged speech. */
+function matchKey(m: IntakeMatch): string {
+  return m.key || (m.highlight_id != null ? `h${m.highlight_id}` : `u${m.utterance_id ?? ''}`);
+}
+
 function previewBand(
   matches: IntakeMatch[],
-  ticked: Set<number>,
+  ticked: Set<string>,
   rules: typeof DEFAULT_BAND_RULES,
 ): string {
-  const chosen = matches.filter((m) => ticked.has(m.highlight_id));
+  const chosen = matches.filter((m) => ticked.has(matchKey(m)));
   const supports = chosen.filter((m) => m.relation === 'supports');
   const companies = new Set(supports.map((m) => m.company_name).filter(Boolean));
   const contradicts = chosen.length - supports.length;
@@ -651,7 +656,7 @@ function IntakeMatchRow({
       <input
         type="checkbox"
         className="mt-1"
-        aria-label={`Confirm evidence ${match.highlight_id}`}
+        aria-label={`Confirm evidence ${match.highlight_id ?? `u${match.utterance_id}`}`}
         checked={checked}
         onChange={(e) => onToggle(e.target.checked)}
       />
@@ -702,7 +707,7 @@ function HypothesisComposer() {
 
   // T48: evidence-gated intake — preview matches, confirm per-quote, then commit.
   const [preview, setPreview] = useState<HypothesisIntakeResponse | null>(null);
-  const [confirmedIds, setConfirmedIds] = useState<Set<number>>(new Set());
+  const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set());
 
   const previewMutation = useMutation({
     mutationFn: (body: { statement: string; segment?: string }) => api.intakePreview(body),
@@ -710,7 +715,7 @@ function HypothesisComposer() {
       setPreview(data);
       // Strong matches (direct, high-confidence) start ticked; weaker ones start unticked.
       setConfirmedIds(
-        new Set((data.matches ?? []).filter((m) => m.strong).map((m) => m.highlight_id)),
+        new Set((data.matches ?? []).filter((m) => m.strong).map(matchKey)),
       );
     },
   });
@@ -829,7 +834,7 @@ function HypothesisComposer() {
   const strongMatches = matches.filter((m) => m.strong);
   const weakMatches = matches.filter((m) => !m.strong);
   const questions = preview?.suggested_questions ?? [];
-  const toggle = (id: number) => (checked: boolean) =>
+  const toggle = (id: string) => (checked: boolean) =>
     setConfirmedIds((prev) => {
       const next = new Set(prev);
       if (checked) next.add(id);
@@ -928,10 +933,10 @@ function HypothesisComposer() {
               <ul className="space-y-2">
                 {strongMatches.map((m) => (
                   <IntakeMatchRow
-                    key={m.highlight_id}
+                    key={matchKey(m)}
                     match={m}
-                    checked={confirmedIds.has(m.highlight_id)}
-                    onToggle={toggle(m.highlight_id)}
+                    checked={confirmedIds.has(matchKey(m))}
+                    onToggle={toggle(matchKey(m))}
                   />
                 ))}
               </ul>
@@ -943,10 +948,10 @@ function HypothesisComposer() {
                   <ul className="space-y-2">
                     {weakMatches.map((m) => (
                       <IntakeMatchRow
-                        key={m.highlight_id}
+                        key={matchKey(m)}
                         match={m}
-                        checked={confirmedIds.has(m.highlight_id)}
-                        onToggle={toggle(m.highlight_id)}
+                        checked={confirmedIds.has(matchKey(m))}
+                        onToggle={toggle(matchKey(m))}
                       />
                     ))}
                   </ul>
@@ -987,11 +992,17 @@ function HypothesisComposer() {
               type="button"
               onClick={() => {
                 const confirmed = matches
-                  .filter((m) => confirmedIds.has(m.highlight_id))
-                  .map((m) => ({
-                    highlight_id: m.highlight_id,
-                    stance: m.relation as 'supports' | 'contradicts',
-                  }));
+                  .filter((m) => confirmedIds.has(matchKey(m)))
+                  .map((m) =>
+                    m.highlight_id != null
+                      ? { highlight_id: m.highlight_id, stance: m.relation as 'supports' | 'contradicts' }
+                      : {
+                          // Untagged customer speech: the server records it as an accepted highlight.
+                          utterance_id: m.utterance_id as number,
+                          quote: m.quote,
+                          stance: m.relation as 'supports' | 'contradicts',
+                        },
+                  );
                 const seg = trimmedSegment || preview.segment || undefined;
                 commitMutation.mutate({
                   statement: preview.statement,

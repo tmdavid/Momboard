@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router-dom';
+import { CompanyProfileCard, RetagProgressCard, TagDetailsEditor } from '../components/SettingsV05';
 import { api, Company, Contact, Tag } from '../api';
 
 interface SettingsStatus {
@@ -154,6 +155,7 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
   const [category, setCategory] = useState('');
   const [view, setView] = useState<'core' | 'custom'>('core');
   const [showAdd, setShowAdd] = useState(false);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
 
   const { data: tags = [], isLoading, error } = useQuery({
     queryKey: ['tags'],
@@ -269,7 +271,8 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
               <span className="text-right">Active</span>
             </div>
             {shown.map((tag, idx) => (
-              <div key={tag.key} className="grid items-center gap-3 py-2.5 border-b border-sub"
+              <div key={tag.key} className="border-b border-sub">
+              <div className="grid items-center gap-3 py-2.5"
                 style={{ gridTemplateColumns: canManage ? '44px 32px minmax(0,1fr) 130px 110px 90px' : '32px minmax(0,1fr) 130px 110px 90px' }}>
                 {canManage && (
                   <div className="flex flex-col">
@@ -299,6 +302,18 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
                         label={`${tag.is_active ? 'Deactivate' : 'Activate'} ${tag.name}`} />
                     : <span className={`text-xs ${tag.is_active ? 'text-good-text' : 'text-muted'}`}>{tag.is_active ? 'active' : 'inactive'}</span>}
                 </span>
+              </div>
+              {canManage && (
+                <div className="pb-2.5 pl-[44px]">
+                  <button type="button" aria-expanded={editingKey === tag.key}
+                    aria-label={`Edit tagging details for ${tag.name}`}
+                    onClick={() => setEditingKey(editingKey === tag.key ? null : tag.key)}
+                    className="text-xs font-semibold text-accent bg-transparent border-none p-0 cursor-pointer hover:underline">
+                    {editingKey === tag.key ? 'Hide tagging details' : `Tagging details · floor ${(tag.min_confidence ?? 0.5).toFixed(2)}`}
+                  </button>
+                  {editingKey === tag.key && <div className="mt-2"><TagDetailsEditor tag={tag} /></div>}
+                </div>
+              )}
               </div>
             ))}
             {shown.length === 0 && <p className="text-sm text-muted py-4">No {view} tags.</p>}
@@ -447,7 +462,9 @@ function DirectorySettings() {
 const SECTIONS = [
   { label: 'AI model', href: '#llm' },
   { label: 'Sources and delivery', href: '#sources' },
+  { label: 'Your company', href: '#company' },
   { label: 'Taxonomy', href: '#taxonomy' },
+  { label: 'Retag progress', href: '#retag' },
   { label: 'Companies and contacts', href: '#directory' },
 ];
 
@@ -492,7 +509,9 @@ export function SettingsPage() {
       <div className="flex-[999_1_560px] min-w-0 flex flex-col gap-4">
         <AiModelSettings status={status} />
         <SourcesSettings status={status} />
+        <CompanyProfileCard canManage={status.can_manage_taxonomy === true} />
         <TaxonomySettings canManage={status.can_manage_taxonomy === true} />
+        <RetagProgressCard canManage={status.can_manage_taxonomy === true} />
         <DirectorySettings />
       </div>
     </main>

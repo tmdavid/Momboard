@@ -1714,3 +1714,76 @@ describe('Hypotheses PRD: band rules in the UI', () => {
     expect(within(help).getByText(/suggested matches wait for your review/i)).toBeInTheDocument();
   });
 });
+
+
+describe('v0.5 D8: untagged evidence in the evidence check', () => {
+  const untagged = {
+    key: 'u501', tagged: false, highlight_id: null, utterance_id: 501, tag_key: null, conversation_id: 7,
+    quote: 'We would want a pilot with two attorneys before any annual contract.',
+    company_name: 'Pierce Law Group', contact_name: 'Pat', conversation_date: '2026-11-02',
+    relation: 'supports', confidence: 0.91, rationale: 'They ask for a pilot first.', strong: true,
+  };
+  const tagged = { ...untagged, key: 'h12', tagged: true, highlight_id: 12, utterance_id: 90, tag_key: 'money',
+    quote: 'Pricing only works if we can trial it first', company_name: 'Other Firm', conversation_id: 8, confidence: 0.8 };
+
+  test('untagged and tagged matches are listed together, both pre-ticked, and committed the right way', async () => {
+    let commit: Record<string, unknown> | null = null;
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    server.use(
+      http.post('/api/hypotheses/intake', async ({ request }) => {
+        const body = (await request.json()) as { statement: string };
+        return HttpResponse.json({ statement: body.statement, segment: null, matches: [untagged, tagged],
+          grounding_preview: 'candidate', suggested_questions: [] });
+      }),
+      http.post('/api/hypotheses/intake/commit', async ({ request }) => {
+        commit = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 77, statement: 'x', segment: null, status: 'open', created_at: new Date().toISOString() }, { status: 201 });
+      }),
+    );
+    await user.type(await screen.findByPlaceholderText(/state a falsifiable belief/i), "Law firms won't buy an annual plan without a pilot");
+    await user.click(screen.getByRole('button', { name: /check evidence first/i }));
+    const panel = await screen.findByTestId('intake-panel');
+
+    // Two checkboxes with distinct identities, both ticked.
+    const untaggedBox = within(panel).getByRole('checkbox', { name: /confirm evidence u501/i });
+    const taggedBox = within(panel).getByRole('checkbox', { name: /confirm evidence 12/i });
+    expect(untaggedBox).toBeChecked();
+    expect(taggedBox).toBeChecked();
+    expect(within(panel).getByText(/Pierce Law Group · Pat · 2026-11-02/)).toBeInTheDocument();
+
+    // Untick one: only the other is saved.
+    await user.click(taggedBox);
+    expect(within(panel).getByRole('button', { name: /save with 1 quote/i })).toBeInTheDocument();
+    await user.click(taggedBox);
+    await user.click(within(panel).getByRole('button', { name: /save with 2 quotes/i }));
+    await waitFor(() => expect(commit).not.toBeNull());
+    expect(commit!.confirmed).toEqual([
+      { utterance_id: 501, quote: untagged.quote, stance: 'supports' },
+      { highlight_id: 12, stance: 'supports' },
+    ]);
+  });
+
+  test('unticking an untagged match removes only it', async () => {
+    let commit: Record<string, unknown> | null = null;
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    server.use(
+      http.post('/api/hypotheses/intake', async ({ request }) => {
+        const body = (await request.json()) as { statement: string };
+        return HttpResponse.json({ statement: body.statement, segment: null, matches: [untagged, tagged], grounding_preview: 'candidate', suggested_questions: [] });
+      }),
+      http.post('/api/hypotheses/intake/commit', async ({ request }) => {
+        commit = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({ id: 78, statement: 'x', segment: null, status: 'open', created_at: new Date().toISOString() }, { status: 201 });
+      }),
+    );
+    await user.type(await screen.findByPlaceholderText(/state a falsifiable belief/i), "Law firms won't buy an annual plan without a pilot");
+    await user.click(screen.getByRole('button', { name: /check evidence first/i }));
+    const panel = await screen.findByTestId('intake-panel');
+    await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence u501/i }));
+    await user.click(within(panel).getByRole('button', { name: /save with 1 quote/i }));
+    await waitFor(() => expect(commit).not.toBeNull());
+    expect(commit!.confirmed).toEqual([{ highlight_id: 12, stance: 'supports' }]);
+  });
+});

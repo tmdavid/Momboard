@@ -977,6 +977,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/company": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Company Profile
+         * @description The seller's company profile (name, aliases, email domains).
+         */
+        get: operations["get_company_profile_api_settings_company_get"];
+        /**
+         * Put Company Profile
+         * @description Save the profile (admin only). Prompts pick it up immediately.
+         */
+        put: operations["put_company_profile_api_settings_company_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings/status": {
         parameters: {
             query?: never;
@@ -1221,6 +1245,111 @@ export interface paths {
          * @description Update a tag (admin only).
          */
         patch: operations["update_tag_api_tags__key__patch"];
+        trace?: never;
+    };
+    "/api/taxonomy/compare": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compare Snapshot
+         * @description Tag counts now vs the last snapshot. Flags tags that jumped, dropped, vanished or are new.
+         */
+        get: operations["compare_snapshot_api_taxonomy_compare_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/retag": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retag
+         * @description Queue the next batch of calls for re-tagging, newest first (admin only).
+         *
+         *     Resumable: only calls not yet on the current taxonomy are picked up, and a call already being
+         *     processed is never queued twice, so running this again simply continues. Each call spends LLM
+         *     tokens, so start with a small batch. ``dry_run`` reports what would be queued and changes nothing.
+         */
+        post: operations["retag_api_taxonomy_retag_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/snapshot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take Snapshot
+         * @description Record today's tag counts (admin only) so they can be compared after a retag pilot.
+         */
+        post: operations["take_snapshot_api_taxonomy_snapshot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/stale": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Stale For Tags
+         * @description For the tags currently filtered on, how many calls were tagged before they existed.
+         */
+        get: operations["stale_for_tags_api_taxonomy_stale_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/taxonomy/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Taxonomy Status
+         * @description Taxonomy version, rollout progress ('312 of 1,000 calls are on the current taxonomy'), the
+         *     tags some calls are missing, and a measured time estimate for the calls still to retag.
+         */
+        get: operations["taxonomy_status_api_taxonomy_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/users": {
@@ -1569,6 +1698,35 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** CompanyProfileBody */
+        CompanyProfileBody: {
+            /** Aliases */
+            aliases?: string[];
+            /** Email Domains */
+            email_domains?: string[];
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+        };
+        /** CompanyProfileResponse */
+        CompanyProfileResponse: {
+            /** Aliases */
+            aliases?: string[];
+            /**
+             * Configured
+             * @default false
+             */
+            configured: boolean;
+            /** Email Domains */
+            email_domains?: string[];
+            /**
+             * Name
+             * @default
+             */
+            name: string;
+        };
         /** CompanyResponse */
         CompanyResponse: {
             /**
@@ -1589,6 +1747,41 @@ export interface components {
             name: string;
             /** Notes */
             notes?: string | null;
+        };
+        /** CompareResponse */
+        CompareResponse: {
+            /**
+             * Flagged
+             * @default 0
+             */
+            flagged: number;
+            /** Rows */
+            rows?: components["schemas"]["CompareRow"][];
+            snapshot?: components["schemas"]["CompareSnapshot"] | null;
+        };
+        /** CompareRow */
+        CompareRow: {
+            /** After */
+            after: number;
+            /** Before */
+            before: number;
+            /** Delta */
+            delta: number;
+            /** Flag */
+            flag?: string | null;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Pct */
+            pct?: number | null;
+        };
+        /** CompareSnapshot */
+        CompareSnapshot: {
+            /** Label */
+            label?: string | null;
+            /** Taken At */
+            taken_at?: string | null;
         };
         /** ContactCreate */
         ContactCreate: {
@@ -2472,15 +2665,23 @@ export interface components {
             /** Total */
             total: number;
         };
-        /** IntakeConfirmedLink */
+        /**
+         * IntakeConfirmedLink
+         * @description A quote the human confirmed as evidence: an existing highlight, or untagged customer speech
+         *     (an utterance), which becomes an accepted highlight when saved. Exactly one must be given.
+         */
         IntakeConfirmedLink: {
             /** Highlight Id */
-            highlight_id: number;
+            highlight_id?: number | null;
+            /** Quote */
+            quote?: string | null;
             /**
              * Stance
              * @enum {string}
              */
             stance: "supports" | "contradicts";
+            /** Utterance Id */
+            utterance_id?: number | null;
         };
         /** IntakeMatchResponse */
         IntakeMatchResponse: {
@@ -2495,9 +2696,14 @@ export interface components {
             /** Conversation Id */
             conversation_id: number;
             /** Highlight Id */
-            highlight_id: number;
+            highlight_id?: number | null;
             /** In Segment */
             in_segment?: string | null;
+            /**
+             * Key
+             * @default
+             */
+            key: string;
             /** Quote */
             quote: string;
             /**
@@ -2514,6 +2720,11 @@ export interface components {
             strong: boolean;
             /** Tag Key */
             tag_key: string;
+            /**
+             * Tagged
+             * @default true
+             */
+            tagged: boolean;
             /** Utterance Id */
             utterance_id?: number | null;
         };
@@ -2641,6 +2852,34 @@ export interface components {
                 [key: string]: unknown;
             } | null;
         };
+        /** RetagRequest */
+        RetagRequest: {
+            /**
+             * Dry Run
+             * @default false
+             */
+            dry_run: boolean;
+            /**
+             * Limit
+             * @default 100
+             */
+            limit: number;
+        };
+        /** RetagResponse */
+        RetagResponse: {
+            /** Ids */
+            ids: number[];
+            /** Protected Highlights */
+            protected_highlights: number;
+            /** Queued */
+            queued: number;
+            /** Remaining */
+            remaining: number;
+            /** Taxonomy Version */
+            taxonomy_version: number;
+            /** Would Queue */
+            would_queue: number;
+        };
         /** SendBotRequest */
         SendBotRequest: {
             /** Meeting Url */
@@ -2683,6 +2922,43 @@ export interface components {
         SimulatorTurnRequest: {
             /** Text */
             text: string;
+        };
+        /** SnapshotRequest */
+        SnapshotRequest: {
+            /**
+             * Label
+             * @default before retag
+             */
+            label: string;
+        };
+        /** SnapshotResponse */
+        SnapshotResponse: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Label */
+            label: string;
+            /** Taken At */
+            taken_at: string;
+        };
+        /** StaleResponse */
+        StaleResponse: {
+            /** Items */
+            items: components["schemas"]["StaleTag"][];
+        };
+        /** StaleTag */
+        StaleTag: {
+            /** Added In Version */
+            added_in_version: number;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Stale Calls */
+            stale_calls: number;
+            /** Total Calls */
+            total_calls: number;
         };
         /** StatsResponse */
         StatsResponse: {
@@ -2787,18 +3063,32 @@ export interface components {
         };
         /** TagResponse */
         TagResponse: {
+            /**
+             * Added In Version
+             * @default 0
+             */
+            added_in_version: number;
             /** Category */
             category?: string | null;
             /** Description */
             description?: string | null;
             /** Emoji */
             emoji: string;
+            /** Example */
+            example?: string | null;
             /** Is Active */
             is_active: boolean;
             /** Key */
             key: string;
+            /**
+             * Min Confidence
+             * @default 0.5
+             */
+            min_confidence: number;
             /** Name */
             name: string;
+            /** Negative Hint */
+            negative_hint?: string | null;
             /**
              * Origin
              * @default custom
@@ -2817,14 +3107,45 @@ export interface components {
             description?: string | null;
             /** Emoji */
             emoji?: string | null;
+            /** Example */
+            example?: string | null;
             /** Is Active */
             is_active?: boolean | null;
+            /** Min Confidence */
+            min_confidence?: number | null;
             /** Name */
             name?: string | null;
+            /** Negative Hint */
+            negative_hint?: string | null;
             /** Signal Strength */
             signal_strength?: string | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /** TaxonomyStatus */
+        TaxonomyStatus: {
+            /** Calls On Current */
+            calls_on_current: number;
+            /**
+             * Eligible
+             * @default 0
+             */
+            eligible: number;
+            /** Estimated Minutes */
+            estimated_minutes?: number | null;
+            /**
+             * In Progress
+             * @default 0
+             */
+            in_progress: number;
+            /** Seconds Per Call */
+            seconds_per_call?: number | null;
+            /** Tags */
+            tags: components["schemas"]["StaleTag"][];
+            /** Total Calls */
+            total_calls: number;
+            /** Version */
+            version: number;
         };
         /** TeamUser */
         TeamUser: {
@@ -3957,6 +4278,12 @@ export interface operations {
                 status?: string | null;
                 /** @description Case-insensitive text search in the quote */
                 q?: string | null;
+                /** @description Hide suggestions below their tag's confidence floor (accepted ones always show) */
+                floor?: boolean;
+                /** @description recent (default) or confidence (strongest first) */
+                sort?: string;
+                /** @description Show at most this many highlights per call per tag (0 = no cap) */
+                per_call_cap?: number;
                 date_from?: string | null;
                 date_to?: string | null;
                 limit?: number;
@@ -4754,6 +5081,59 @@ export interface operations {
             };
         };
     };
+    get_company_profile_api_settings_company_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyProfileResponse"];
+                };
+            };
+        };
+    };
+    put_company_profile_api_settings_company_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CompanyProfileBody"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyProfileResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_settings_status_api_settings_status_get: {
         parameters: {
             query?: never;
@@ -5220,6 +5600,143 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    compare_snapshot_api_taxonomy_compare_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareResponse"];
+                };
+            };
+        };
+    };
+    retag_api_taxonomy_retag_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetagRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetagResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    take_snapshot_api_taxonomy_snapshot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stale_for_tags_api_taxonomy_stale_get: {
+        parameters: {
+            query?: {
+                tag?: string[];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    taxonomy_status_api_taxonomy_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaxonomyStatus"];
                 };
             };
         };

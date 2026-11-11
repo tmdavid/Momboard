@@ -139,6 +139,43 @@ export interface StatsResponse {
   }>;
 }
 
+// ─── v0.5 types ───
+
+export interface CompanyProfile {
+  name: string;
+  aliases: string[];
+  email_domains: string[];
+  configured: boolean;
+}
+
+export interface StaleTag {
+  key: string;
+  name: string;
+  added_in_version: number;
+  total_calls: number;
+  stale_calls: number;
+}
+
+export interface TaxonomyStatus {
+  version: number;
+  total_calls: number;
+  calls_on_current: number;
+  tags: StaleTag[];
+  eligible: number;
+  in_progress: number;
+  seconds_per_call: number | null;
+  estimated_minutes: number | null;
+}
+
+export interface RetagResult {
+  queued: number;
+  would_queue: number;
+  remaining: number;
+  ids: number[];
+  protected_highlights: number;
+  taxonomy_version: number;
+}
+
 // ─── Hypothesis types (T28) ───
 
 export interface HypothesisRollup {
@@ -436,17 +473,45 @@ export const api = {
     return apiFetch<Tag[]>('/api/tags');
   },
 
-  createTag(body: Tag) {
+  createTag(body: Omit<Tag, 'min_confidence' | 'negative_hint' | 'example' | 'added_in_version'> &
+    Partial<Pick<Tag, 'min_confidence' | 'negative_hint' | 'example'>>) {
     return apiFetch<Tag>('/api/tags', {
       method: 'POST',
       body: JSON.stringify(body),
     });
   },
 
-  updateTag(key: string, body: Partial<Pick<Tag, 'emoji' | 'name' | 'description' | 'signal_strength' | 'sort_order' | 'is_active'>>) {
+  updateTag(key: string, body: Partial<Pick<Tag, 'emoji' | 'name' | 'description' | 'signal_strength' | 'sort_order' | 'is_active' | 'category' | 'min_confidence' | 'negative_hint' | 'example'>>) {
     return apiFetch<Tag>(`/api/tags/${encodeURIComponent(key)}`, {
       method: 'PATCH',
       body: JSON.stringify(body),
+    });
+  },
+
+  // ─── v0.5: your company, taxonomy rollout ───
+
+  getCompanyProfile() {
+    return apiFetch<CompanyProfile>('/api/settings/company');
+  },
+
+  saveCompanyProfile(body: Pick<CompanyProfile, 'name' | 'aliases' | 'email_domains'>) {
+    return apiFetch<CompanyProfile>('/api/settings/company', { method: 'PUT', body: JSON.stringify(body) });
+  },
+
+  taxonomyStatus() {
+    return apiFetch<TaxonomyStatus>('/api/taxonomy/status');
+  },
+
+  /** Calls missing the given tags (used for the "not yet retagged" notice). */
+  taxonomyStale(tags: string[]) {
+    const qs = tags.map((t) => `tag=${encodeURIComponent(t)}`).join('&');
+    return apiFetch<{ items: StaleTag[] }>(`/api/taxonomy/stale${qs ? `?${qs}` : ''}`);
+  },
+
+  retagBatch(limit: number, dryRun: boolean) {
+    return apiFetch<RetagResult>('/api/taxonomy/retag', {
+      method: 'POST',
+      body: JSON.stringify({ limit, dry_run: dryRun }),
     });
   },
 
@@ -560,7 +625,14 @@ export const api = {
   intakeCommit(body: {
     statement: string;
     segment?: string;
-    confirmed: { highlight_id: number; stance: 'supports' | 'contradicts' }[];
+    // A quote is either an existing highlight or untagged customer speech (utterance_id +
+    // the excerpt shown); the server records the latter as an accepted highlight.
+    confirmed: {
+      highlight_id?: number;
+      utterance_id?: number;
+      quote?: string;
+      stance: 'supports' | 'contradicts';
+    }[];
     validation_questions?: string[];
   }) {
     return apiFetch<Schemas['HypothesisResponse']>('/api/hypotheses/intake/commit', {
