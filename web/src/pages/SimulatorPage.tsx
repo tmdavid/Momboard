@@ -55,22 +55,11 @@ export function SimulatorPage() {
   const [sessionResult, setSessionResult] = useState<SessionResult | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [endedSessionId, setEndedSessionId] = useState<number | null>(null);
-
-  // Segment controls
   const [filterCompanyId, setFilterCompanyId] = useState<string>('');
   const [filterTag, setFilterTag] = useState<string>('');
 
-  const { data: companies } = useQuery({
-    queryKey: ['companies', 'active'],
-    queryFn: () => api.listActiveCompanies(),
-  });
-
-  const { data: tags } = useQuery({
-    queryKey: ['tags'],
-    queryFn: () => api.listTags(),
-  });
-
-  // #19: Fetch past simulator sessions
+  const { data: companies } = useQuery({ queryKey: ['companies', 'active'], queryFn: () => api.listActiveCompanies() });
+  const { data: tags } = useQuery({ queryKey: ['tags'], queryFn: () => api.listTags() });
   const { data: pastSessions, isLoading: sessionsLoading, error: sessionsError } = useQuery({
     queryKey: ['simulator-sessions'],
     queryFn: () => api.listSimulatorSessions(),
@@ -82,8 +71,7 @@ export function SimulatorPage() {
       if (filterCompanyId) filters.company_id = parseInt(filterCompanyId);
       if (filterTag) filters.tag_key = filterTag;
       const r = await fetch('/api/simulator/personas', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ filters: Object.keys(filters).length ? filters : null }),
       });
       if (!r.ok) throw new Error('Failed to build persona');
@@ -95,38 +83,26 @@ export function SimulatorPage() {
   const createSession = useMutation({
     mutationFn: async (personaId: number) => {
       const r = await fetch('/api/simulator/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ persona_id: personaId }),
       });
       if (!r.ok) throw new Error('Failed to create session');
       return r.json() as Promise<{ id: number }>;
     },
-    onSuccess: (data) => {
-      setSessionId(data.id);
-      setTurns([]);
-      setSessionResult(null);
-      setEndedSessionId(null);
-    },
+    onSuccess: (data) => { setSessionId(data.id); setTurns([]); setSessionResult(null); setEndedSessionId(null); },
   });
 
   const sendTurn = useMutation({
     mutationFn: async (text: string) => {
       if (!sessionId) throw new Error('No session');
       const r = await fetch(`/api/simulator/sessions/${sessionId}/turns`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }),
       });
       if (!r.ok) throw new Error('Failed to send turn');
       return r.json() as Promise<{ reply: string }>;
     },
     onSuccess: (data, text) => {
-      setTurns((prev) => [
-        ...prev,
-        { role: 'user', text },
-        { role: 'persona', text: data.reply },
-      ]);
+      setTurns((prev) => [...prev, { role: 'user', text }, { role: 'persona', text: data.reply }]);
       setInput('');
     },
   });
@@ -135,331 +111,208 @@ export function SimulatorPage() {
     mutationFn: async () => {
       if (!sessionId) throw new Error('No session');
       const r = await fetch(`/api/simulator/sessions/${sessionId}/end`, { method: 'POST' });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({ detail: 'Failed' }));
-        throw new Error(err.detail || 'Failed to end session');
-      }
+      if (!r.ok) { const err = await r.json().catch(() => ({ detail: 'Failed' })); throw new Error(err.detail || 'Failed to end session'); }
       return r.json();
     },
     onSuccess: () => {
       const sid = sessionId!;
-      setEndedSessionId(sid);
-      setSessionId(null);
-      setIsPolling(true);
-      // Poll for result
+      setEndedSessionId(sid); setSessionId(null); setIsPolling(true);
       pollForResult(sid);
     },
   });
 
   const pollForResult = async (sid: number) => {
-    const maxAttempts = 15;
-    for (let i = 0; i < maxAttempts; i++) {
+    for (let i = 0; i < 15; i++) {
       try {
         const r = await fetch(`/api/simulator/sessions/${sid}/result`);
         if (r.ok) {
           const data: SessionResult = await r.json();
-          if (data.analysis?.result) {
-            setSessionResult(data);
-            setIsPolling(false);
-            return;
-          }
+          if (data.analysis?.result) { setSessionResult(data); setIsPolling(false); return; }
         }
-      } catch {
-        // ignore and retry
-      }
+      } catch { /* retry */ }
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
-    // Timeout: show partial result
-    try {
-      const r = await fetch(`/api/simulator/sessions/${sid}/result`);
-      if (r.ok) {
-        setSessionResult(await r.json());
-      }
-    } catch { /* ignore */ }
+    try { const r = await fetch(`/api/simulator/sessions/${sid}/result`); if (r.ok) setSessionResult(await r.json()); } catch { /* ignore */ }
     setIsPolling(false);
   };
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    sendTurn.mutate(input.trim());
-  };
+  const handleSend = () => { if (input.trim()) sendTurn.mutate(input.trim()); };
+  const critique = sessionResult?.analysis?.result?.mom_test_critique ?? null;
+  const inSession = !!sessionId && !isPolling && !sessionResult;
 
-  // Phase 1: Build/select persona
-  if (!persona) {
-    return (
-      <div className="max-w-2xl mx-auto p-6">
-        <h1 className="text-2xl font-bold text-ink mb-1">Practice interview</h1>
-        <p className="text-sm text-muted mb-6">
-          Practice your interview skills with an AI persona built from your evidence corpus.
-        </p>
-
-        <div className="bg-surface rounded-xl border border-hairline p-4 mb-4">
-          <h2 className="font-semibold mb-2 text-ink-2">Build persona from segment</h2>
-          <p className="text-sm text-muted mb-3">
-            Leave empty for a canned starter persona, or filter by company/tag.
-          </p>
-
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            <div>
-              <label htmlFor="sim-company" className="text-xs font-medium text-muted block mb-1">Company</label>
-              <select
-                id="sim-company"
-                value={filterCompanyId}
-                onChange={(e) => setFilterCompanyId(e.target.value)}
-                className="w-full border border-hairline rounded-lg px-3 py-2 text-sm bg-page text-ink-2"
-                aria-label="Simulator persona company filter"
-              >
-                <option value="">All companies</option>
-                {companies?.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label htmlFor="sim-tag" className="text-xs font-medium text-muted block mb-1">Tag</label>
-              <select
-                id="sim-tag"
-                value={filterTag}
-                onChange={(e) => setFilterTag(e.target.value)}
-                className="w-full border border-hairline rounded-lg px-3 py-2 text-sm bg-page text-ink-2"
-              >
-                <option value="">All tags</option>
-                {tags?.map((t) => (
-                  <option key={t.key} value={t.key}>{t.emoji} {t.name}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <button
-            onClick={() => buildPersona.mutate()}
-            disabled={buildPersona.isPending}
-            className="btn btn-primary"
-          >
-            {buildPersona.isPending ? 'Building...' : 'Build Persona'}
-          </button>
-        </div>
-
-        {/* #19: Past practice sessions */}
-        <div className="bg-surface rounded-xl border border-hairline p-4" data-testid="past-sessions">
-          <h2 className="font-semibold mb-3 text-ink-2">Past practice sessions</h2>
-          {sessionsLoading && (
-            <p className="text-sm text-muted">Loading sessions…</p>
-          )}
-          {sessionsError && (
-            <p className="text-sm text-crit" role="alert">Failed to load past sessions.</p>
-          )}
-          {!sessionsLoading && !sessionsError && pastSessions && pastSessions.items.length === 0 && (
-            <p className="text-sm text-muted" data-testid="no-past-sessions">No practice sessions yet. Build a persona and start practicing!</p>
-          )}
-          {!sessionsLoading && pastSessions && pastSessions.items.length > 0 && (
-            <div className="space-y-2">
-              {pastSessions.items.map((s: PastSession) => (
-                <Link
-                  key={s.id}
-                  to={`/conversations/${s.id}`}
-                  className="flex items-center justify-between p-3 rounded-lg border border-hairline hover:border-accent transition-colors"
-                  data-testid="past-session-item"
-                >
-                  <div>
-                    <span className="text-sm font-medium text-ink-2">{s.title}</span>
-                    {s.created_at && (
-                      <span className="text-xs text-muted ml-2">
-                        {new Date(s.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      s.status === 'ready' ? 'bg-[#e6f4e6] text-good-text' :
-                      s.status === 'failed' ? 'bg-[#fbe7e7] text-crit' :
-                      'bg-page text-muted'
-                    }`}>
-                      {s.status}
-                    </span>
-                    {s.score != null && (
-                      <span className="text-sm font-bold text-accent">{s.score}/10</span>
-                    )}
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Phase 2: Start session
-  if (!sessionId && !sessionResult && !isPolling) {
-    const p = persona.result;
-    return (
-      <div className="max-w-2xl mx-auto p-6">
-        <h1 className="text-2xl font-bold text-ink mb-1">Practice interview</h1>
-
-        <div className="bg-surface rounded-xl border border-hairline p-4 mb-4">
-          <h2 className="font-semibold text-lg text-ink-2">{p.name}</h2>
-          <p className="text-muted">{p.role} — {p.company_profile}</p>
-          {p.sore_points.length > 0 && (
-            <div className="mt-2">
-              <span className="text-sm font-medium">Sore points:</span>
-              <ul className="list-disc list-inside text-sm text-muted">
-                {p.sore_points.map((sp, i) => <li key={i}>{sp}</li>)}
-              </ul>
-            </div>
-          )}
-        </div>
-
-        <button
-          onClick={() => createSession.mutate(persona.id)}
-          disabled={createSession.isPending}
-          className="px-4 py-2 bg-good text-white rounded-lg font-semibold hover:bg-good/90 disabled:opacity-50"
-        >
-          {createSession.isPending ? 'Starting...' : 'Start Session'}
-        </button>
-        <button
-          onClick={() => setPersona(null)}
-          className="ml-2 px-4 py-2 bg-page border border-hairline rounded-lg text-ink-2 hover:bg-surface"
-        >
-          Choose Different Persona
-        </button>
-      </div>
-    );
-  }
-
-  // Phase 3: Chat / scoring / result display
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold text-ink mb-1">Practice interview</h1>
+    <main className="p-6 flex flex-col gap-4">
+      <div className="flex flex-col gap-0.5">
+        <h1 className="text-2xl font-bold text-ink">Practice interview</h1>
+        <span className="text-muted">Rehearse with an AI customer built from your real conversations, then get scored</span>
+      </div>
 
-      {/* Show session link if we have an ended session */}
-      {endedSessionId && (
-        <div className="text-sm text-muted mb-2">
-          Session ID: <Link to={`/conversations/${endedSessionId}`} className="text-accent hover:underline">#{endedSessionId}</Link>
-        </div>
-      )}
+      <div className="flex flex-wrap gap-4 items-start">
+        {/* ── Left: persona + past sessions ── */}
+        <aside className="flex-[1_1_280px] max-w-[340px] flex flex-col gap-3">
+          <section className="bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-2.5" aria-label="Persona">
+            <span className="text-xs font-semibold text-muted">Build persona from</span>
+            <label className="flex flex-col gap-1">
+              <span className="text-[13px]">Company</span>
+              <select value={filterCompanyId} onChange={(e) => setFilterCompanyId(e.target.value)}
+                className="h-9 px-3 border border-hairline rounded-lg text-sm bg-surface text-ink" aria-label="Simulator persona company filter">
+                <option value="">All companies</option>
+                {companies?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[13px]">Tag</span>
+              <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)}
+                className="h-9 px-3 border border-hairline rounded-lg text-sm bg-surface text-ink" aria-label="Simulator persona tag filter">
+                <option value="">All tags</option>
+                {tags?.map((t) => <option key={t.key} value={t.key}>{t.emoji} {t.name}</option>)}
+              </select>
+            </label>
+            <button onClick={() => buildPersona.mutate()} disabled={buildPersona.isPending}
+              className="h-9 rounded-lg border border-hairline bg-surface text-ink font-semibold hover:border-accent disabled:opacity-50">
+              {buildPersona.isPending ? 'Building…' : persona ? 'Rebuild Persona' : 'Build Persona'}
+            </button>
 
-      {isPolling && (
-        <div className="bg-surface rounded-xl border border-hairline p-4">
-          <h2 className="font-semibold text-lg text-ink-2 mb-2">Session Complete</h2>
-          <p className="text-muted" role="status">Scoring your interview... This may take a moment.</p>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin" aria-hidden="true" />
-            <span className="text-sm text-muted">Waiting for critique...</span>
-          </div>
-        </div>
-      )}
-
-      {sessionResult && (
-        <div className="bg-surface rounded-xl border border-hairline p-4">
-          <h2 className="font-semibold text-lg text-ink-2 mb-2">Session Complete</h2>
-
-          {sessionResult.analysis?.result?.mom_test_critique ? (
-            <div>
-              <div className="flex items-center gap-3 mb-3">
-                <span className="text-4xl font-bold" style={{ color: scoreBand(sessionResult.analysis.result.mom_test_critique.score).fg }}>
-                  {sessionResult.analysis.result.mom_test_critique.score}/10
-                </span>
-                <span className="text-muted">Mom Test Score</span>
+            {persona && (
+              <div className="border-t border-sub pt-2.5 flex flex-col gap-1.5">
+                <span className="font-semibold text-ink">{persona.result.name}</span>
+                <span className="text-[13px] text-ink-2">{persona.result.role} — {persona.result.company_profile}</span>
+                {persona.result.sore_points.length > 0 && (
+                  <>
+                    <span className="text-xs font-semibold text-muted mt-1">Sore points</span>
+                    <span className="text-[13px] text-ink-2">{persona.result.sore_points.join(' · ')}</span>
+                  </>
+                )}
+                {!sessionId && (
+                  <button onClick={() => createSession.mutate(persona.id)} disabled={createSession.isPending}
+                    className="mt-1 h-9 rounded-lg border-none bg-accent text-white font-semibold hover:bg-[#2448c7] disabled:opacity-50">
+                    {createSession.isPending ? 'Starting…' : 'Start Session'}
+                  </button>
+                )}
               </div>
+            )}
+          </section>
 
-              {sessionResult.analysis.result.mom_test_critique.good_questions.length > 0 && (
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-good-text mb-1">✓ Good questions</h3>
-                  <ul className="list-disc list-inside text-sm text-ink-2">
-                    {sessionResult.analysis.result.mom_test_critique.good_questions.map((q, i) => (
-                      <li key={i}>{q}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+          <section className="bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-1" aria-label="Past sessions" data-testid="past-sessions">
+            <span className="text-xs font-semibold text-muted mb-1">Past sessions</span>
+            {sessionsLoading && <p className="text-sm text-muted">Loading sessions…</p>}
+            {sessionsError && <p className="text-sm text-crit" role="alert">Failed to load past sessions.</p>}
+            {!sessionsLoading && !sessionsError && pastSessions && pastSessions.items.length === 0 && (
+              <p className="text-sm text-muted" data-testid="no-past-sessions">No practice sessions yet. Build a persona and start practicing!</p>
+            )}
+            {!sessionsLoading && pastSessions && pastSessions.items.map((s: PastSession) => (
+              <Link key={s.id} to={`/conversations/${s.id}`} data-testid="past-session-item"
+                className="flex items-center gap-2 py-1.5 border-t border-sub text-ink-2 hover:text-accent">
+                <span className="trunc text-sm">{s.title}</span>
+                {s.score != null && (
+                  <span className={`ml-auto text-xs font-semibold px-2 py-0.5 rounded-pill ${scoreBand(s.score).cls}`}>{s.score}/10</span>
+                )}
+              </Link>
+            ))}
+          </section>
+        </aside>
 
-              {sessionResult.analysis.result.mom_test_critique.violations.length > 0 && (
-                <div className="mb-3">
-                  <h3 className="text-sm font-semibold text-crit mb-1">✗ Violations</h3>
-                  <ul className="space-y-1">
-                    {sessionResult.analysis.result.mom_test_critique.violations.map((v, i) => (
-                      <li key={i} className="text-sm text-ink-2">
-                        <span className="font-medium">{v.type}</span>: {v.better}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-muted">
-              {sessionResult.analysis ? 'Analysis complete.' : 'Analysis not yet available.'}
-            </p>
-          )}
+        {/* ── Center: live chat ── */}
+        <section className="flex-[999_1_460px] min-w-0 bg-surface border border-hairline rounded-xl flex flex-col" aria-label="Session">
+          <div className="p-3 px-4 border-b border-hairline flex items-center gap-2">
+            {inSession ? (
+              <>
+                <span className="w-2 h-2 rounded-pill bg-good" aria-hidden="true" />
+                <span className="font-semibold text-ink">Session in progress</span>
+                <span className="text-xs text-muted">{turns.filter((t) => t.role === 'user').length} questions asked</span>
+                <button onClick={() => endSession.mutate()} disabled={endSession.isPending || turns.length === 0}
+                  className="ml-auto h-8 px-3 rounded-lg border border-hairline bg-surface text-ink font-semibold hover:border-accent disabled:opacity-50">
+                  End & Score
+                </button>
+              </>
+            ) : (
+              <span className="font-semibold text-ink">{isPolling || sessionResult ? 'Session Complete' : 'No active session'}</span>
+            )}
+          </div>
 
-          {endedSessionId && (
-            <Link
-              to={`/conversations/${endedSessionId}`}
-              className="inline-block mt-3 text-sm text-accent hover:underline"
-            >
-              View full conversation →
-            </Link>
-          )}
-
-          <button
-            onClick={() => { setPersona(null); setSessionResult(null); setEndedSessionId(null); }}
-            className="mt-4 ml-3 btn btn-primary"
-          >
-            Start New Session
-          </button>
-        </div>
-      )}
-
-      {sessionId && !isPolling && !sessionResult && (
-        <>
-          <div className="bg-surface rounded-xl border border-hairline p-4 mb-4 max-h-96 overflow-y-auto" role="log" aria-label="Conversation">
-            {turns.length === 0 && (
+          <div className="p-4 flex flex-col gap-3 min-h-[320px]" role="log" aria-label="Conversation">
+            {!persona && !sessionResult && !isPolling && (
+              <p className="text-muted italic">Build a persona on the left to start a practice session.</p>
+            )}
+            {persona && !inSession && !isPolling && !sessionResult && (
+              <p className="text-muted italic">Start a session from the persona card to begin.</p>
+            )}
+            {isPolling && (
+              <div className="flex items-center gap-2 text-muted" role="status">
+                <span className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin" aria-hidden="true" />
+                Scoring your interview…
+              </div>
+            )}
+            {inSession && turns.length === 0 && (
               <p className="text-muted italic">Start the conversation. Ask about their past experiences.</p>
             )}
-            {turns.map((turn, i) => (
-              <div
-                key={i}
-                className={`mb-3 flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+            {(inSession || sessionResult) && turns.map((turn, i) => (
+              <div key={i} className={`flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <span className={`inline-block max-w-[78%] px-3.5 py-2.5 rounded-xl text-sm ${
-                  turn.role === 'user'
-                    ? 'bg-accent text-white rounded-br-[4px]'
-                    : 'bg-sub text-ink rounded-bl-[4px]'
-                }`}>
-                  {turn.text}
-                </span>
+                  turn.role === 'user' ? 'bg-accent text-white rounded-br-[4px]' : 'bg-sub text-ink rounded-bl-[4px]'
+                }`}>{turn.text}</span>
               </div>
             ))}
           </div>
 
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask about past behaviour, not the future…"
-              className="flex-1 border border-hairline rounded-lg px-3 py-2 bg-page"
-              aria-label="Message input"
-            />
-            <button
-              onClick={handleSend}
-              disabled={sendTurn.isPending || !input.trim()}
-              className="btn btn-primary"
-            >
-              Send
-            </button>
-            <button
-              onClick={() => endSession.mutate()}
-              disabled={endSession.isPending || turns.length === 0}
-              className="px-4 py-2 bg-crit text-white rounded-lg font-semibold hover:bg-crit/90 disabled:opacity-50"
-            >
-              End & Score
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+          {inSession && (
+            <div className="p-3 px-4 border-t border-hairline flex gap-2">
+              <input type="text" value={input} onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Ask about past behaviour, not the future…"
+                className="flex-1 h-10 px-3 border border-hairline rounded-lg bg-surface text-sm" aria-label="Message input" />
+              <button onClick={handleSend} disabled={sendTurn.isPending || !input.trim()}
+                className="h-10 px-4 rounded-lg border-none bg-accent text-white font-semibold disabled:opacity-50">Send</button>
+            </div>
+          )}
+
+          {sessionResult && (
+            <div className="p-3 px-4 border-t border-hairline flex items-center gap-2">
+              {endedSessionId && (
+                <Link to={`/conversations/${endedSessionId}`} className="text-sm text-accent hover:underline">View full conversation →</Link>
+              )}
+              <button onClick={() => { setSessionResult(null); setEndedSessionId(null); if (persona) createSession.mutate(persona.id); }}
+                className="ml-auto h-9 px-4 rounded-lg border-none bg-accent text-white font-semibold">Start New Session</button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Right: last / current score ── */}
+        <section className="flex-[1_1_280px] max-w-[340px] bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-2.5" aria-label="Last score">
+          {critique ? (
+            <>
+              <span className="text-xs font-semibold text-muted">Last session · scored</span>
+              <span className="text-4xl font-bold leading-none" style={{ color: scoreBand(critique.score).fg }}>
+                {critique.score}/10
+              </span>
+              <span className="sr-only">Mom Test Score</span>
+              {critique.good_questions.length > 0 && (
+                <>
+                  <span className="text-xs font-semibold text-good-text mt-1">Good questions</span>
+                  <ul className="list-disc list-inside text-[13px] text-ink-2 m-0">
+                    {critique.good_questions.map((q, i) => <li key={i}>{q}</li>)}
+                  </ul>
+                </>
+              )}
+              {critique.violations.length > 0 && (
+                <>
+                  <span className="text-xs font-semibold text-warn-text mt-1">To improve</span>
+                  <ul className="flex flex-col gap-1.5 m-0 p-0 list-none">
+                    {critique.violations.map((v, i) => (
+                      <li key={i} className="text-[13px] text-ink-2"><span className="font-medium">{v.type}:</span> {v.better}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="text-xs font-semibold text-muted">Last score</span>
+              <p className="text-sm text-muted">Finish a session with “End & Score” to see your Mom Test critique here.</p>
+            </>
+          )}
+        </section>
+      </div>
+    </main>
   );
 }
