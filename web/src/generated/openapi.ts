@@ -387,7 +387,7 @@ export interface paths {
         };
         /**
          * List Decisions
-         * @description List decisions with optional status filter.
+         * @description List decisions. Filter by status, search title/rationale with q, sort by date or integrity.
          */
         get: operations["list_decisions_api_decisions_get"];
         put?: never;
@@ -3410,6 +3410,8 @@ export interface operations {
         parameters: {
             query?: {
                 status?: string | null;
+                q?: string | null;
+                sort?: string;
                 limit?: number;
                 offset?: number;
             };
