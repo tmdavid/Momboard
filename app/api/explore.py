@@ -4,12 +4,13 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import ColumnElement, func, select
+from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.api.schemas import HighlightsListResponse, HighlightWithContext, StatsResponse
 from app.auth import get_current_user
+from app.llm.tag_rules import EITHER_SIDE_TAGS
 from app.models import (
     Analysis,
     Company,
@@ -18,8 +19,10 @@ from app.models import (
     ConversationContact,
     Highlight,
     User,
+    Utterance,
 )
 from app.services.confidence_floor import passes_floor
+from app.services.text_filters import like_contains
 
 router = APIRouter()
 
@@ -33,6 +36,14 @@ async def list_highlights(
     company_id: int | None = None,
     status: str | None = None,
     q: str | None = Query(default=None, description="Case-insensitive text search in the quote"),
+    company: str | None = Query(default=None, description="Company name contains this text (case-insensitive)"),
+    min_confidence: float | None = Query(
+        default=None, ge=0.0, le=1.0, description="At least this confidence (accepted/manual highlights always pass)"
+    ),
+    customer_only: bool = Query(
+        default=False,
+        description="Drop highlights spoken by our side, except follow-up and commitment (which may be either)",
+    ),
     floor: bool = Query(
         default=False,
         description="Hide suggestions below their tag's confidence floor (accepted ones always show)",
@@ -83,10 +94,16 @@ async def list_highlights(
         query = query.where(Highlight.quote.ilike(f"%{needle}%", escape="\\"))
     if company_id:
         query = query.where(Conversation.company_id == company_id)
+    if company and company.strip():
+        query = query.where(Company.name.ilike(like_contains(company), escape="\\"))
     if date_from:
         query = query.where(Conversation.happened_at >= date_from)
     if date_to:
         query = query.where(Conversation.happened_at <= date_to)
+    if min_confidence is not None:
+        query = query.where(or_(Highlight.confidence.is_(None), Highlight.confidence >= min_confidence))
+    if customer_only:
+        query = query.where(_customer_only_clause())
 
     if floor:
         query = query.where(passes_floor())
@@ -131,7 +148,7 @@ async def list_highlights(
     rows = result.all()
 
     items = []
-    for highlight, convo, company in rows:
+    for highlight, convo, company_row in rows:
         # Get contact names for this conversation
         contacts_result = await db.execute(
             select(Contact.name)
@@ -152,7 +169,7 @@ async def list_highlights(
                 origin=highlight.origin,
                 conversation_title=convo.title,
                 conversation_happened_at=convo.happened_at,
-                company_name=company.name if company else None,
+                company_name=company_row.name if company_row else None,
                 contact_names=contact_names,
             )
         )
@@ -160,11 +177,34 @@ async def list_highlights(
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
+def _customer_only_clause() -> ColumnElement[bool]:
+    """Keep highlights that are not spoken by our side (follow-up and commitment may be either side)."""
+    our_side = select(Utterance.id).where(Utterance.speaker_side == "us")
+    return or_(
+        Highlight.utterance_id.is_(None),
+        Highlight.utterance_id.not_in(our_side),
+        Highlight.tag_key.in_(tuple(EITHER_SIDE_TAGS)),
+    )
+
+
+def _since_clause(since: datetime | None) -> list[ColumnElement[bool]]:
+    """Restrict stats to calls on or after ``since``: the call date, or when it was added if undated."""
+    if since is None:
+        return []
+    return [func.coalesce(Conversation.happened_at, Conversation.created_at) >= since]
+
+
 @router.get("/stats", response_model=StatsResponse)
 async def get_stats(
     request: Request,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    since: datetime | None = Query(
+        default=None, description="Only calls on or after this date (by when the call happened)"
+    ),
+    customer_only: bool = Query(
+        default=False, description="Count only highlights not spoken by our side (as the MCP tools do)"
+    ),
 ):
     """Get aggregated stats: tag counts by month, critique trend, etc."""
     # Tag counts by month — dialect-portable, done in Python
@@ -176,6 +216,8 @@ async def get_stats(
             Highlight.status.in_(["suggested", "accepted"]),
             Conversation.source != "simulator",
             passes_floor(),  # v0.5 D4
+            *_since_clause(since),
+            *([_customer_only_clause()] if customer_only else []),
         )
     )
     highlights_rows = highlights_result.all()
@@ -203,6 +245,7 @@ async def get_stats(
         .where(
             Analysis.kind == "conversation",
             Conversation.source != "simulator",
+            *_since_clause(since),
         )
         .order_by(Analysis.created_at)
     )
@@ -284,7 +327,7 @@ async def get_stats(
         await db.execute(
             select(func.count())
             .select_from(Conversation)
-            .where(Conversation.source != "simulator")
+            .where(Conversation.source != "simulator", *_since_clause(since))
         )
     ).scalar_one()
 

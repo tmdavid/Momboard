@@ -439,3 +439,31 @@ class TestAudit:
             await db.commit()
             left = {r.tool for r in (await db.execute(select(McpCall))).scalars().all()}
         assert left == {"t1", "t89"}
+
+
+class TestToolSignatures:
+    """Tool authors write ordinary annotations (strings, unions, optionals); every SDK version must cope."""
+
+    @pytest.mark.asyncio
+    async def test_unions_optionals_lists_and_string_annotations_all_become_correct_schemas(self, engine, session_factory, user_david):
+        from tests import (
+            _annotated_tools,  # a module that uses `from __future__ import annotations`
+        )
+
+        app = await build_app(engine, session_factory)
+        _annotated_tools.register(app.state.mcp)
+        _, plain = await new_token(session_factory, user_david)
+        async with serve(app):
+            async with client(app, plain) as c:
+                tools = {t["name"]: t for t in (await c.post("/mcp", json=rpc("tools/list"))).json()["result"]["tools"]}
+                schema = tools["annotated"]["inputSchema"]
+                assert schema["required"] == ["needed"]
+                props = schema["properties"]
+                assert props["needed"]["type"] == "integer"
+                assert "string" in json.dumps(props["maybe_text"]) and "null" in json.dumps(props["maybe_text"])
+                assert props["names"]["anyOf"][0]["type"] == "array" if "anyOf" in props["names"] else props["names"]["type"] == "array"
+                assert props["flag"]["type"] == "boolean" and props["flag"]["default"] is False
+                out = text(await call(c, "annotated", {"needed": 3, "names": ["a", "b"], "maybe_text": "x"}))
+                assert json.loads(out) == {"needed": 3, "names": ["a", "b"], "maybe_text": "x", "flag": False}
+                bad = await c.post("/mcp", json=rpc("tools/call", {"name": "annotated", "arguments": {"needed": "not a number"}}))
+                assert bad.json()["result"]["isError"] is True            # validated, and reported as a tool error

@@ -16,6 +16,7 @@ import inspect
 import json
 import logging
 import time
+import typing
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -152,15 +153,22 @@ class McpServer:
 
         def decorator(fn: Callable[..., Awaitable[Any]]) -> Callable[..., Awaitable[Any]]:
             tool_name = name or fn.__name__
+            # Modules that use `from __future__ import annotations` leave every annotation as a string,
+            # and the pinned SDK cannot read those. Resolve them to real types here, once, for everyone.
+            hints = typing.get_type_hints(fn)
             signature = inspect.signature(fn)
+            resolved = signature.replace(
+                parameters=[p.replace(annotation=hints.get(p.name, p.annotation)) for p in signature.parameters.values()],
+                return_annotation=str,
+            )
 
             @functools.wraps(fn)
             async def wrapper(*args: Any, **kwargs: Any) -> str:
                 return await self._run(tool_name, scope, fn, args, kwargs)
 
-            # The model reads the original parameters; the wrapper always answers with a JSON string.
-            wrapper.__signature__ = signature.replace(return_annotation=str)  # type: ignore[attr-defined]
-            wrapper.__annotations__ = {**getattr(fn, "__annotations__", {}), "return": str}
+            # The model reads the real parameters; the wrapper always answers with a JSON string.
+            wrapper.__signature__ = resolved  # type: ignore[attr-defined]
+            wrapper.__annotations__ = {**{k: v for k, v in hints.items() if k != "return"}, "return": str}
             annotations = (
                 ToolAnnotations(readOnlyHint=True)
                 if read_only

@@ -4,6 +4,7 @@ import asyncio
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from sqlalchemy import func, select
@@ -39,6 +40,7 @@ from app.models import (
     User,
 )
 from app.services.confidence_floor import passes_floor
+from app.services.text_filters import like_contains
 
 router = APIRouter()
 
@@ -194,6 +196,21 @@ async def upload_audio(
     }
 
 
+def _latest_score() -> Any:
+    """The latest conversation-level Mom Test score, as a correlated scalar subquery.
+
+    Read from Analysis.result JSON with a portable JSON path (SQLite and PostgreSQL).
+    """
+    return (
+        select(Analysis.result["mom_test_critique"]["score"].as_integer().label("score"))
+        .where(Analysis.conversation_id == Conversation.id, Analysis.kind == "conversation")
+        .order_by(Analysis.created_at.desc())
+        .limit(1)
+        .correlate(Conversation)
+        .scalar_subquery()
+    )
+
+
 @router.get("", response_model=ConversationListResponse)
 async def list_conversations(
     request: Request,
@@ -208,6 +225,9 @@ async def list_conversations(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     deal_stage: str | None = None,
+    company: str | None = Query(default=None, description="Company name contains this text (case-insensitive)"),
+    min_score: int | None = Query(default=None, ge=0, le=10, description="Mom Test score at least this"),
+    max_score: int | None = Query(default=None, ge=0, le=10, description="Mom Test score at most this"),
     sort: str = Query(
         default="date_desc",
         description=(
@@ -245,6 +265,19 @@ async def list_conversations(
         query = query.where(
             Conversation.title.ilike(like_q) | Conversation.raw_transcript.ilike(like_q)
         )
+    if company and company.strip():
+        query = query.where(
+            Conversation.company_id.in_(
+                select(Company.id).where(Company.name.ilike(like_contains(company), escape="\\"))
+            )
+        )
+    if min_score is not None or max_score is not None:
+        # Conversations without a score match neither bound.
+        score = _latest_score()
+        if min_score is not None:
+            query = query.where(score >= min_score)
+        if max_score is not None:
+            query = query.where(score <= max_score)
     if deal_stage:
         # Filter by meta.deal_stage JSON path — portable across SQLite/Postgres
         query = query.where(Conversation.meta["deal_stage"].as_string() == deal_stage)
@@ -273,19 +306,7 @@ async def list_conversations(
     if sort in ("score_desc", "score_asc"):
         # Latest conversation-level critique score per conversation, extracted from
         # Analysis.result JSON (portable JSON path across SQLite/Postgres).
-        score_subq = (
-            select(
-                Analysis.result["mom_test_critique"]["score"].as_integer().label("score")
-            )
-            .where(
-                Analysis.conversation_id == Conversation.id,
-                Analysis.kind == "conversation",
-            )
-            .order_by(Analysis.created_at.desc())
-            .limit(1)
-            .correlate(Conversation)
-            .scalar_subquery()
-        )
+        score_subq = _latest_score()
         if sort == "score_desc":
             # Highest score first; conversations without a score sort last.
             query = query.order_by(

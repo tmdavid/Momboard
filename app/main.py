@@ -167,8 +167,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from starlette.routing import Route
 
         from app.mcp.server import McpServer
+        from app.mcp.tools import register_tools
 
         app.state.mcp = McpServer(app, settings)
+        register_tools(app.state.mcp)
         app.router.routes.append(
             Route("/mcp", endpoint=app.state.mcp.asgi, methods=["GET", "POST", "DELETE"], name="mcp")
         )
