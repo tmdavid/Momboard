@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { Fragment, useState, useCallback, useRef, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api, ConversationListItem } from '../api';
 import { NewConversationModal, NewConversationFormData } from '../components/NewConversationModal';
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { scoreBand, tagColor } from '../constants';
-import { formatDate, formatNumber } from '../utils/format';
+import { formatDate, formatDayHeading, formatNumber, isoDay } from '../utils/format';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { ConversationPreviewPanel } from '../components/ConversationPreviewPanel';
 import { EmptyResults } from '../components/EmptyResults';
@@ -39,6 +39,8 @@ export function LibraryPage() {
   const dateFrom = searchParams.get('date_from') || undefined;
   const dateTo = searchParams.get('date_to') || undefined;
   const sort = searchParams.get('sort') || 'date_desc';
+  // v0.5 U11: day headers only make sense when the list is in date order.
+  const grouped = sort === 'date_desc' || sort === 'date_asc';
   const offset = parseInt(searchParams.get('offset') || '0', 10);
   const limit = 50;
 
@@ -146,6 +148,20 @@ export function LibraryPage() {
 
   const conversations = data?.items ?? [];
   const total = data?.total ?? 0;
+
+  // One group per calendar day, in the order the server returned them. A day cut by a page edge may
+  // continue on the neighbouring page, so it reports how many are *shown* rather than a false total.
+  const dayGroups: { key: string; heading: string; partial: boolean; items: ConversationListItem[] }[] = [];
+  for (const c of conversations) {
+    const day = isoDay(c.happened_at) ?? 'none';
+    const last = dayGroups[dayGroups.length - 1];
+    if (last && last.key === day) last.items.push(c);
+    else dayGroups.push({ key: day, heading: formatDayHeading(day === 'none' ? null : day), partial: false, items: [c] });
+  }
+  if (dayGroups.length > 0) {
+    if (offset > 0) dayGroups[0].partial = true;
+    if (offset + conversations.length < total) dayGroups[dayGroups.length - 1].partial = true;
+  }
   const isEmpty = !isLoading && conversations.length === 0;
 
   // #16: Active filter detection + clear all
@@ -445,9 +461,11 @@ export function LibraryPage() {
             <table className="w-full border-collapse bg-surface border border-hairline rounded-xl overflow-hidden">
               <thead>
                 <tr>
-                  <th className="text-left text-xs font-semibold text-muted uppercase tracking-wider px-3.5 py-2.5 border-b border-hairline">
-                    Date
-                  </th>
+                  {!grouped && (
+                    <th className="text-left text-xs font-semibold text-muted uppercase tracking-wider px-3.5 py-2.5 border-b border-hairline">
+                      Date
+                    </th>
+                  )}
                   <th className="text-left text-xs font-semibold text-muted uppercase tracking-wider px-3.5 py-2.5 border-b border-hairline">
                     Company / contact
                   </th>
@@ -466,9 +484,20 @@ export function LibraryPage() {
                 </tr>
               </thead>
               <tbody>
-                {conversations.map((c) => (
-                  <ConversationRow key={c.id} conversation={c} selected={previewId === c.id}
-                    rowRef={(el) => { rowRefs.current[c.id] = el; }} onClick={() => setPreviewId(c.id)} />
+                {(grouped ? dayGroups : [{ key: '', heading: '', partial: false, items: conversations }]).map((g) => (
+                  <Fragment key={g.key || 'all'}>
+                    {grouped && (
+                      <tr className="bg-page">
+                        <th scope="row" colSpan={5} className="text-left text-xs font-semibold text-ink-2 px-3.5 py-2 border-b border-hairline">
+                          {g.heading} · {g.items.length === 1 && !g.partial ? '1 call' : g.partial ? `${formatNumber(g.items.length)} shown` : `${formatNumber(g.items.length)} calls`}
+                        </th>
+                      </tr>
+                    )}
+                    {g.items.map((c) => (
+                      <ConversationRow key={c.id} conversation={c} showDate={!grouped} selected={previewId === c.id}
+                        rowRef={(el) => { rowRefs.current[c.id] = el; }} onClick={() => setPreviewId(c.id)} />
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -593,8 +622,8 @@ function SseTracker({
   return null;
 }
 
-function ConversationRow({ conversation: c, onClick, selected, rowRef }: {
-  conversation: ConversationListItem; onClick: () => void; selected: boolean; rowRef: (el: HTMLTableRowElement | null) => void;
+function ConversationRow({ conversation: c, onClick, selected, rowRef, showDate }: {
+  conversation: ConversationListItem; onClick: () => void; selected: boolean; rowRef: (el: HTMLTableRowElement | null) => void; showDate: boolean;
 }) {
   const dateStr = formatDate(c.happened_at);
 
@@ -612,7 +641,7 @@ function ConversationRow({ conversation: c, onClick, selected, rowRef }: {
         }
       }}
     >
-      <td className="px-3.5 py-3 text-muted whitespace-nowrap">{dateStr}</td>
+      {showDate && <td className="px-3.5 py-3 text-muted whitespace-nowrap">{dateStr}</td>}
       <td className="px-3.5 py-3">
         <div className="font-semibold">
           {c.company ? (

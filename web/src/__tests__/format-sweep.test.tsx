@@ -51,7 +51,7 @@ describe('Library and Explore counts read with thousands separators', () => {
     renderWithProviders(<LibraryPage />, { route: '/' });
     expect(await screen.findByText('(1,234)')).toBeInTheDocument();
     expect(screen.getByText(/of 1,234/)).toBeInTheDocument();
-    expect(screen.getByText(/14 Sep 2026/)).toBeInTheDocument();         // never the raw ISO string
+    expect(screen.getByRole('rowheader', { name: /Mon 14 Sep/ })).toBeInTheDocument();   // a day header, never the raw ISO string
     expect(screen.queryByText(/2026-09-14T/)).not.toBeInTheDocument();
   });
 
@@ -65,5 +65,23 @@ describe('Library and Explore counts read with thousands separators', () => {
     renderWithProviders(<ExplorePage />, { route: '/explore' });
     expect(await screen.findByText(/Quote 0/)).toBeInTheDocument();
     expect(screen.getAllByText(/14 Sep 2026/).length).toBeGreaterThan(0);
+  });
+});
+
+describe('formatDayHeading', () => {
+  const now = new Date(2026, 10, 10, 15, 0);                       // Tue 10 Nov 2026
+  test('today and yesterday are named, with the weekday and day', async () => {
+    const { formatDayHeading } = await import('../utils/format');
+    expect(formatDayHeading('2026-11-10', now)).toBe('Today · Tue 10 Nov');
+    expect(formatDayHeading('2026-11-09', now)).toBe('Yesterday · Mon 9 Nov');
+  });
+  test('other days this year read "Fri 6 Nov"; other years add the year', async () => {
+    const { formatDayHeading } = await import('../utils/format');
+    expect(formatDayHeading('2026-11-06', now)).toBe('Fri 6 Nov');
+    expect(formatDayHeading('2025-12-31', now)).toBe('Wed 31 Dec 2025');
+  });
+  test('a missing day is "No date"', async () => {
+    const { formatDayHeading } = await import('../utils/format');
+    expect(formatDayHeading(null, now)).toBe('No date');
   });
 });

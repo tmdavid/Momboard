@@ -56,6 +56,23 @@ export function formatTime(input: string | Date | null | undefined): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+/**
+ * A group header for one calendar day (v0.5 U11): "Today · Tue 10 Nov", "Yesterday · Mon 9 Nov",
+ * "Fri 6 Nov", or with the year when it is not this year. Takes a "YYYY-MM-DD" day (see isoDay).
+ */
+export function formatDayHeading(day: string | null | undefined, now: Date = new Date()): string {
+  const d = day ? toDate(day) : null;
+  if (!d) return 'No date';
+  const base = `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
+  const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+  const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+  if (sameDay(d, now)) return `Today · ${base}`;
+  if (sameDay(d, yesterday)) return `Yesterday · ${base}`;
+  return d.getFullYear() === now.getFullYear() ? base : `${base} ${d.getFullYear()}`;
+}
+
 /** The calendar day ("2026-09-14") of a date or datetime, or null. Handy for grouping by day. */
 export function isoDay(input: string | Date | null | undefined): string | null {
   const d = toDate(input);

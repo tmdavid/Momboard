@@ -3,7 +3,7 @@
  * Uses MSW — no mocked components, no real network.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { screen, waitFor, fireEvent } from '@testing-library/react';
+import { screen, waitFor, fireEvent, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { renderWithProviders } from '../test/render';
 import { server } from '../test/mocks/server';
@@ -220,14 +220,16 @@ describe('T39 — SimulatorPage persona filters and score', () => {
     fireEvent.click(screen.getByText('End & Score'));
 
     // Wait for result with score/10
+    // (The score also appears in the Past sessions list, so look inside the Last score panel.)
+    const panel = await screen.findByRole('region', { name: /last score/i });
     await waitFor(() => {
-      expect(screen.getByText('7/10')).toBeInTheDocument();
+      expect(within(panel).getByText('7/10')).toBeInTheDocument();
     }, { timeout: 10000 });
 
     // Critique items
-    expect(screen.getByText('Mom Test Score')).toBeInTheDocument();
-    expect(screen.getByText('Asked about past events')).toBeInTheDocument();
-    expect(screen.getByText(/pitched_the_idea/)).toBeInTheDocument();
+    expect(await within(panel).findByText('Asked about past events')).toBeInTheDocument();
+    expect(within(panel).getByText('Mom Test Score')).toBeInTheDocument();
+    expect(within(panel).getByText(/pitched_the_idea/)).toBeInTheDocument();
   });
 });
 
