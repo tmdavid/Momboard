@@ -161,15 +161,17 @@ async def create_decision(
 @router.get("", response_model=DecisionListResponse)
 async def list_decisions(
     status: str | None = None,
+    q: str | None = None,
+    sort: str = "date_desc",
     limit: int = 50,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """List decisions with optional status filter."""
+    """List decisions. Filter by status, search title/rationale with q, sort by date or integrity."""
     from app.services.decisions import list_decisions as _list
 
-    items, total = await _list(db, status=status, limit=limit, offset=offset)
+    items, total = await _list(db, status=status, q=q, sort=sort, limit=limit, offset=offset)
     return {
         "items": [
             {

@@ -117,10 +117,19 @@ async def list_decisions(
     db: AsyncSession,
     *,
     status: str | None = None,
+    q: str | None = None,
+    sort: str = "date_desc",
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[Decision], int]:
-    """List decisions with optional status filter."""
+    """List decisions with optional status filter, free-text search and sort.
+
+    - `q` matches (case-insensitive) on title or rationale.
+    - `sort`: date_desc (default), date_asc, or integrity (undermined first, then
+      by newest).
+    """
+    from sqlalchemy import case, or_
+
     query = select(Decision)
     count_query = select(Decision.id)
 
@@ -128,10 +137,27 @@ async def list_decisions(
         query = query.where(Decision.status == status)
         count_query = count_query.where(Decision.status == status)
 
+    if q:
+        pattern = f"%{q}%"
+        cond = or_(Decision.title.ilike(pattern), Decision.rationale_md.ilike(pattern))
+        query = query.where(cond)
+        count_query = count_query.where(cond)
+
     count_result = await db.execute(count_query)
     total = len(count_result.all())
 
-    query = query.order_by(Decision.created_at.desc()).limit(limit).offset(offset)
+    if sort == "date_asc":
+        query = query.order_by(Decision.created_at.asc())
+    elif sort == "integrity":
+        # Undermined decisions first (they need attention), then newest.
+        query = query.order_by(
+            case((Decision.integrity == "undermined", 0), else_=1),
+            Decision.created_at.desc(),
+        )
+    else:  # date_desc (default)
+        query = query.order_by(Decision.created_at.desc())
+
+    query = query.limit(limit).offset(offset)
     result = await db.execute(query)
     items = list(result.scalars().all())
 

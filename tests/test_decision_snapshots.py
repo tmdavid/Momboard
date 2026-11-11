@@ -291,3 +291,62 @@ async def test_detail_returns_linked_hypothesis_and_superseded_title(auth_client
     assert body["hypothesis"]["statement"] == "Mid-market teams want SSO"
     assert body["hypothesis"]["band"] == "hunch"  # hypothesis has no links yet
     assert body["superseded_by_title"] == "Successor D2"
+
+
+# --- P2: search + sort -----------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_q_searches_title_and_rationale(auth_client, seeded_db):
+    from app.services.decisions import create_decision
+
+    _convo, h, _c = await _convo_with_highlight(seeded_db)
+    await create_decision(seeded_db, title="Pricing pilot", rationale_md="annual lock-in", evidence_highlight_ids=[h.id])
+    await create_decision(seeded_db, title="Reporting dashboard", rationale_md="weekly email", evidence_highlight_ids=[h.id])
+    await seeded_db.commit()
+
+    # Match on title
+    r = await auth_client.get("/api/decisions", params={"q": "pricing"})
+    titles = [d["title"] for d in r.json()["items"]]
+    assert "Pricing pilot" in titles and "Reporting dashboard" not in titles
+
+    # Match on rationale
+    r = await auth_client.get("/api/decisions", params={"q": "weekly"})
+    titles = [d["title"] for d in r.json()["items"]]
+    assert titles == ["Reporting dashboard"]
+
+
+@pytest.mark.asyncio
+async def test_list_sort_date_asc_and_desc(auth_client, seeded_db):
+    from app.services.decisions import create_decision
+
+    _convo, h, _c = await _convo_with_highlight(seeded_db)
+    first = await create_decision(seeded_db, title="First", rationale_md="R", evidence_highlight_ids=[h.id])
+    await seeded_db.flush()
+    second = await create_decision(seeded_db, title="Second", rationale_md="R", evidence_highlight_ids=[h.id])
+    await seeded_db.commit()
+
+    desc = [d["id"] for d in (await auth_client.get("/api/decisions", params={"sort": "date_desc"})).json()["items"]]
+    asc = [d["id"] for d in (await auth_client.get("/api/decisions", params={"sort": "date_asc"})).json()["items"]]
+    assert desc.index(second.id) < desc.index(first.id)
+    assert asc.index(first.id) < asc.index(second.id)
+
+
+@pytest.mark.asyncio
+async def test_list_sort_integrity_puts_undermined_first(auth_client, seeded_db):
+    from app.services.decisions import (
+        INVALID_TAG_REJECTED,
+        create_decision,
+        invalidate_decision_evidence_for_highlights,
+    )
+
+    _convo, h1, _c = await _convo_with_highlight(seeded_db, quote="ok one")
+    ok = await create_decision(seeded_db, title="Healthy", rationale_md="R", evidence_highlight_ids=[h1.id])
+    _convo2, h2, _c2 = await _convo_with_highlight(seeded_db, company_name="Beta", quote="bad one")
+    bad = await create_decision(seeded_db, title="Undermined one", rationale_md="R", evidence_highlight_ids=[h2.id])
+    await seeded_db.flush()
+    await invalidate_decision_evidence_for_highlights(seeded_db, [h2.id], reason=INVALID_TAG_REJECTED)
+    await seeded_db.commit()
+
+    ids = [d["id"] for d in (await auth_client.get("/api/decisions", params={"sort": "integrity"})).json()["items"]]
+    assert ids.index(bad.id) < ids.index(ok.id)
