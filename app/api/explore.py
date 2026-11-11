@@ -1,6 +1,6 @@
 """Explore API: cross-conversation highlights + stats."""
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
@@ -192,7 +192,13 @@ async def get_stats(
 
     # Critique score trend (exclude simulated)
     analyses_result = await db.execute(
-        select(Analysis.result, Analysis.created_at, Analysis.conversation_id)
+        select(
+            Analysis.result,
+            # v0.5 U8: trends follow when the call happened. A retag recreates every
+            # analysis on one day, so the analysis date alone would flatten the trend.
+            func.coalesce(Conversation.happened_at, Analysis.created_at),
+            Analysis.conversation_id,
+        )
         .join(Conversation, Analysis.conversation_id == Conversation.id)
         .where(
             Analysis.kind == "conversation",
@@ -205,20 +211,18 @@ async def get_stats(
     critique_trend: list[dict[str, Any]] = []
     compliment_ratio_trend: list[dict[str, Any]] = []
     followup_tasks: dict[int, str] = {}
-    # #2: aggregate trends by month (avg per month) instead of one point per
-    # conversation — otherwise N conversations in the same month render as N
-    # points all labelled the same month.
-    _critique_by_month: dict[str, list[float]] = {}
-    _compliment_by_month: dict[str, list[float]] = {}
+    # Trends are averaged per week (v0.5 U8), one point per week rather than per call.
+    _critique_by_week: dict[str, list[float]] = {}
+    _compliment_by_week: dict[str, list[float]] = {}
     for result_data, created_at, convo_id in analyses_rows:
         if result_data and isinstance(result_data, dict):
-            month_key = created_at.strftime("%Y-%m") if created_at else None
+            week_key = _week_start(created_at)
             critique = result_data.get("mom_test_critique", {})
-            if isinstance(critique, dict) and "score" in critique and month_key:
-                _critique_by_month.setdefault(month_key, []).append(float(critique["score"]))
+            if isinstance(critique, dict) and "score" in critique and week_key:
+                _critique_by_week.setdefault(week_key, []).append(float(critique["score"]))
             ratio = result_data.get("compliment_ratio")
-            if ratio is not None and month_key:
-                _compliment_by_month.setdefault(month_key, []).append(float(ratio))
+            if ratio is not None and week_key:
+                _compliment_by_week.setdefault(week_key, []).append(float(ratio))
             commitments = result_data.get("commitments", [])
             if isinstance(commitments, list):
                 for commitment in commitments:
@@ -257,20 +261,22 @@ async def get_stats(
         for h, c in followups_result.all()
     ]
 
-    # Materialize month-averaged trends, chronologically ordered. `date` is
-    # "YYYY-MM"; the frontend slices to the month for the axis label.
-    for month in sorted(_critique_by_month):
-        scores = _critique_by_month[month]
+    # Weekly trends, chronological. `date` is the Monday of the week (YYYY-MM-DD).
+    for week in sorted(_critique_by_week):
+        scores = _critique_by_week[week]
         critique_trend.append({
-            "date": month,
+            "date": week,
             "score": round(sum(scores) / len(scores), 1),
         })
-    for month in sorted(_compliment_by_month):
-        ratios = _compliment_by_month[month]
+    for week in sorted(_compliment_by_week):
+        ratios = _compliment_by_week[week]
         compliment_ratio_trend.append({
-            "date": month,
+            "date": week,
             "ratio": sum(ratios) / len(ratios),
         })
+    # Overall averages over every call, so a headline number never depends on which week is newest.
+    all_scores = [s for week in _critique_by_week.values() for s in week]
+    all_ratios = [r for week in _compliment_by_week.values() for r in week]
 
     # #1: a real conversation count (non-simulated). The frontend previously
     # derived this from the number of *months*, which read as "1".
@@ -287,9 +293,19 @@ async def get_stats(
         tag_counts_by_month=tag_counts_by_month,
         critique_trend=critique_trend,
         compliment_ratio_trend=compliment_ratio_trend,
+        avg_critique_score=round(sum(all_scores) / len(all_scores), 1) if all_scores else None,
+        avg_compliment_ratio=(sum(all_ratios) / len(all_ratios)) if all_ratios else None,
         open_followups=followups,
         stale_hypotheses=await _count_stale_hypotheses(db),
     )
+
+
+def _week_start(moment: datetime | None) -> str | None:
+    """The Monday (YYYY-MM-DD) of the week containing ``moment``."""
+    if moment is None:
+        return None
+    day = moment.date() if isinstance(moment, datetime) else moment
+    return (day - timedelta(days=day.weekday())).isoformat()
 
 
 async def _count_stale_hypotheses(db: AsyncSession) -> int:

@@ -20,7 +20,7 @@ describe('Insights page', () => {
     renderInsights();
 
     await waitFor(() => {
-      expect(screen.getByText('Signal volume over time')).toBeInTheDocument();
+      expect(screen.getByText('Signal volume by tag')).toBeInTheDocument();
     });
 
     expect(screen.getByText('Compliment ratio trend')).toBeInTheDocument();
@@ -115,7 +115,8 @@ describe('Insights page', () => {
     expect(screen.getByText('Avg interview score')).toBeInTheDocument();
     expect(screen.getByText('Compliment ratio')).toBeInTheDocument();
     expect(screen.getByText('Lower is better')).toBeInTheDocument();
-    expect(screen.getByText('8/10')).toBeInTheDocument();
-    expect(screen.getByText('22%')).toBeInTheDocument();
+    // v0.5: overall averages across every call, not the newest week.
+    expect(screen.getByText('7.0/10')).toBeInTheDocument();
+    expect(screen.getByText('28%')).toBeInTheDocument();
   });
 });

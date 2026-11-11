@@ -207,17 +207,17 @@ async def test_stats_tag_counts_by_month(
 
 @pytest.mark.asyncio
 async def test_stats_critique_trend(auth_client: AsyncClient, seeded_explore_data):
-    """critique_trend is aggregated per month (avg score), one point per month."""
+    """critique_trend is aggregated per week (avg score), one point per week."""
     r = await auth_client.get("/api/stats")
     body = r.json()
     trend = body["critique_trend"]
     assert len(trend) >= 1
     point = trend[0]
     assert "score" in point
-    # Month-bucketed: date is YYYY-MM and there's no per-conversation id anymore.
-    assert "date" in point and len(point["date"]) == 7  # "YYYY-MM"
+    # Week-bucketed: date is the Monday (YYYY-MM-DD); no per-conversation id.
+    assert "date" in point and len(point["date"]) == 10
     assert "conversation_id" not in point
-    # One point per distinct month (not per conversation).
+    # One point per distinct week (not per conversation).
     months = [p["date"] for p in trend]
     assert len(months) == len(set(months))
 

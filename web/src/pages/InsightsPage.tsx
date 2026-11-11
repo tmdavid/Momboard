@@ -4,14 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../api';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { tagColor } from '../constants';
+import { formatDate, formatNumber, formatPercent } from '../utils/format';
 
-function formatBucket(iso: string): string {
-  // Labels come straight from the API's bucket keys (YYYY-MM). Show a short
-  // month+year so the axis never repeats the same label many times.
-  const [y, m] = iso.split('-');
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const mi = parseInt(m, 10) - 1;
-  return months[mi] ? `${months[mi]} ${String(y).slice(2)}` : iso;
+/** A week bucket (YYYY-MM-DD, the Monday) as a short axis label, e.g. "9 Nov". */
+function weekLabel(date: string): string {
+  const full = formatDate(date.slice(0, 10));
+  return full.split(' ').slice(0, 2).join(' ');
 }
 
 function daysSince(dateStr: string): number {
@@ -30,20 +28,34 @@ function Card({ label, sub, children }: { label: string; sub?: string; children:
   );
 }
 
-function TrendChart({ label, sub, data, unit, max }: { label: string; sub: string; data: { bucket: string; value: number }[]; unit: string; max: number }) {
+const MIN_WEEKS = 2;
+
+/** A weekly line with a point per week. Needs two weeks of data to say anything about a trend. */
+function TrendChart({ label, sub, ariaLabel, data, unit, max }: {
+  label: string; sub: string; ariaLabel: string; data: { bucket: string; value: number }[]; unit: string; max: number;
+}) {
+  const W = 360, H = 130, PAD_X = 18, PAD_TOP = 12, PAD_BOTTOM = 8;
+  const n = data.length;
+  const x = (i: number) => PAD_X + (n === 1 ? 0 : (i / (n - 1)) * (W - 2 * PAD_X));
+  const y = (v: number) => PAD_TOP + (1 - Math.min(1, Math.max(0, v / max))) * (H - PAD_TOP - PAD_BOTTOM);
   return (
     <Card label={label} sub={sub}>
-      {data.length === 0 ? (
-        <p className="text-sm text-muted text-center py-6">Not enough data yet.</p>
+      {n < MIN_WEEKS ? (
+        <p className="text-sm text-muted text-center py-6">Trends appear after two weeks of calls</p>
       ) : (
         <>
-          <div className="grid items-end gap-2 h-[120px] border-b border-hairline" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0,1fr))` }}>
+          <svg role="img" aria-label={ariaLabel} viewBox={`0 0 ${W} ${H}`} className="w-full h-[130px] overflow-visible">
+            <line x1={PAD_X} x2={W - PAD_X} y1={H - PAD_BOTTOM} y2={H - PAD_BOTTOM} className="stroke-hairline" strokeWidth={1} />
+            <polyline fill="none" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" className="stroke-accent"
+              points={data.map((d, i) => `${x(i)},${y(d.value)}`).join(' ')} />
             {data.map((d, i) => (
-              <span key={i} title={`${d.value}${unit}`} className="block rounded-t bg-accent" style={{ height: `${Math.max(2, Math.round((d.value / max) * 100))}%` }} />
+              <circle key={i} cx={x(i)} cy={y(d.value)} r={3.5} className="fill-accent stroke-surface" strokeWidth={1.5}>
+                <title>{`${d.bucket}: ${formatNumber(d.value, { decimals: unit === '%' ? 0 : 1 })}${unit}`}</title>
+              </circle>
             ))}
-          </div>
-          <div className="grid gap-2 text-[11px] text-muted text-center" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0,1fr))` }}>
-            {data.map((d, i) => <span key={i} className="trunc">{d.bucket}</span>)}
+          </svg>
+          <div className="flex justify-between text-[11px] text-muted">
+            {data.map((d, i) => <span key={i}>{d.bucket}</span>)}
           </div>
         </>
       )}
@@ -68,24 +80,25 @@ export function InsightsPage() {
   const painsCaptured = volume.find((v) => v.tag === 'pain')?.n ?? 0;
 
   const critiqueData = useMemo(() =>
-    (stats?.critique_trend ?? []).map((i) => ({ bucket: i.date ? formatBucket(i.date.slice(0, 7)) : '—', value: i.score })), [stats]);
+    (stats?.critique_trend ?? []).map((i) => ({ bucket: i.date ? weekLabel(i.date) : '—', value: i.score })), [stats]);
   const ratioData = useMemo(() =>
-    (stats?.compliment_ratio_trend ?? []).map((i) => ({ bucket: i.date ? formatBucket(i.date.slice(0, 7)) : '—', value: Math.round(i.ratio * 100) })), [stats]);
+    (stats?.compliment_ratio_trend ?? []).map((i) => ({ bucket: i.date ? weekLabel(i.date) : '—', value: Math.round(i.ratio * 100) })), [stats]);
 
   const totalConversations = stats?.total_conversations ?? 0;
   const openFollowups = stats?.open_followups ?? [];
-  const latestScore = stats?.critique_trend?.at(-1)?.score ?? null;
-  const latestRatio = stats?.compliment_ratio_trend?.at(-1)?.ratio ?? null;
+  // Overall averages over every call (not the newest week, which is noisy and can be one call).
+  const avgScore = stats?.avg_critique_score ?? null;
+  const avgRatio = stats?.avg_compliment_ratio ?? null;
 
   if (isLoading) return <main className="p-6 flex justify-center"><div className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin-slow mt-8" /></main>;
   if (error) return <main className="p-6 text-crit">Failed to load insights.</main>;
 
   const hasData = volume.length > 0 || critiqueData.length > 0;
   const kpis = [
-    { label: 'Conversations', value: totalConversations ? totalConversations.toLocaleString() : '—', hint: 'All imported calls' },
-    { label: 'Pains captured', value: painsCaptured ? painsCaptured.toLocaleString() : '—', hint: 'Accepted pain highlights' },
-    { label: 'Avg interview score', value: latestScore != null ? `${latestScore}/10` : '—', hint: 'Mom Test critique' },
-    { label: 'Compliment ratio', value: latestRatio != null ? `${Math.round(latestRatio * 100)}%` : '—', hint: 'Lower is better' },
+    { label: 'Conversations', value: totalConversations ? formatNumber(totalConversations) : '—', hint: 'All imported calls' },
+    { label: 'Pains captured', value: painsCaptured ? formatNumber(painsCaptured) : '—', hint: 'Accepted pain highlights' },
+    { label: 'Avg interview score', value: avgScore != null ? `${formatNumber(avgScore, { decimals: 1 })}/10` : '—', hint: 'Mom Test critique' },
+    { label: 'Compliment ratio', value: avgRatio != null ? formatPercent(avgRatio) : '—', hint: 'Lower is better' },
   ];
 
   return (
@@ -108,19 +121,19 @@ export function InsightsPage() {
       {hasData ? (
         <div className="flex flex-wrap gap-4 items-start">
           <section className="flex-[1_1_420px] min-w-0 bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-2.5" aria-label="Signal volume">
-            <div className="flex flex-col"><span className="font-semibold text-ink">Signal volume over time</span><span className="text-xs text-muted">Accepted highlights · by tag</span></div>
+            <div className="flex flex-col"><span className="font-semibold text-ink">Signal volume by tag</span><span className="text-xs text-muted">Accepted highlights · by tag</span></div>
             {volume.map((v) => (
               <div key={v.tag} className="grid items-center gap-2.5" style={{ gridTemplateColumns: '130px minmax(0,1fr) 52px' }}>
                 <span className="trunc text-[13px]">{tax.name(v.tag)}</span>
                 <div className="h-3 rounded bg-sub overflow-hidden"><span className="block h-full" style={{ width: `${(v.n / volumeMax * 100).toFixed(1)}%`, background: tagColor(v.tag) }} /></div>
-                <span className="text-[13px] text-right text-ink tabular-nums">{v.n.toLocaleString()}</span>
+                <span className="text-[13px] text-right text-ink tabular-nums">{formatNumber(v.n)}</span>
               </div>
             ))}
           </section>
 
           <div className="flex-[1_1_420px] min-w-0 flex flex-col gap-4">
-            <TrendChart label="Interview quality trend" sub="Average critique score per bucket, out of 10" data={critiqueData} unit="/10" max={10} />
-            <TrendChart label="Compliment ratio trend" sub="Share of highlights that are compliments (lower is better)" data={ratioData} unit="%" max={Math.max(15, ...ratioData.map((d) => d.value))} />
+            <TrendChart label="Interview quality trend" sub="Average critique score per week, out of 10" ariaLabel="Interview quality by week" data={critiqueData} unit="/10" max={10} />
+            <TrendChart label="Compliment ratio trend" sub="Share of highlights that are compliments, per week (lower is better)" ariaLabel="Compliment ratio by week" data={ratioData} unit="%" max={Math.max(15, ...ratioData.map((d) => d.value))} />
           </div>
         </div>
       ) : (

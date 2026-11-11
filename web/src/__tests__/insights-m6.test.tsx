@@ -27,7 +27,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
     renderInsights();
 
     await waitFor(() => {
-      expect(screen.getByText('Signal volume over time')).toBeInTheDocument();
+      expect(screen.getByText('Signal volume by tag')).toBeInTheDocument();
     });
 
     // The legend should show tag series entries — verify initial state with pain visible
@@ -39,7 +39,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
     expect(painLegend).toBeInTheDocument();
 
     // Before clicking, the pain series line should be rendered in the SVG
-    const chartContainer = screen.getByText('Signal volume over time').closest('div');
+    const chartContainer = screen.getByText('Signal volume by tag').closest('div');
     expect(chartContainer).toBeTruthy();
 
     const painLinesBefore = chartContainer!.querySelectorAll('[stroke="#2a78d6"]');
@@ -50,7 +50,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
 
     // After clicking, the pain series line should be hidden/removed
     await waitFor(() => {
-      const chartAfter = screen.getByText('Signal volume over time').closest('div');
+      const chartAfter = screen.getByText('Signal volume by tag').closest('div');
       // Verify the pain line is gone or hidden
       const visiblePainLines = Array.from(
         chartAfter!.querySelectorAll('.recharts-line'),
@@ -72,7 +72,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
     renderInsights();
 
     await waitFor(() => {
-      expect(screen.getByText('Signal volume over time')).toBeInTheDocument();
+      expect(screen.getByText('Signal volume by tag')).toBeInTheDocument();
       expect(screen.getByText('Compliment ratio trend')).toBeInTheDocument();
       expect(screen.getByText('Interview quality trend')).toBeInTheDocument();
     });
@@ -102,7 +102,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
     renderInsights();
 
     await waitFor(() => {
-      expect(screen.getByText('Signal volume over time')).toBeInTheDocument();
+      expect(screen.getByText('Signal volume by tag')).toBeInTheDocument();
     });
 
     const painLegend = screen.getByText(/⚡ Pain/);
@@ -115,7 +115,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
 
     // The pain series line should be visible again
     await waitFor(() => {
-      const chartContainer = screen.getByText('Signal volume over time').closest('div');
+      const chartContainer = screen.getByText('Signal volume by tag').closest('div');
       const visiblePainLines = Array.from(
         chartContainer!.querySelectorAll('.recharts-line'),
       ).filter((el) => {
@@ -135,7 +135,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
     renderInsights();
 
     await waitFor(() => {
-      expect(screen.getByText('Signal volume over time')).toBeInTheDocument();
+      expect(screen.getByText('Signal volume by tag')).toBeInTheDocument();
     });
 
     // Toggle off both pain and workaround
@@ -147,7 +147,7 @@ describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4
 
     // Other series (money, commitment) should still be visible
     await waitFor(() => {
-      const chartContainer = screen.getByText('Signal volume over time').closest('div');
+      const chartContainer = screen.getByText('Signal volume by tag').closest('div');
       // money uses #1baf7a
       const moneyLines = Array.from(chartContainer!.querySelectorAll('.recharts-line')).filter(
         (el) => {

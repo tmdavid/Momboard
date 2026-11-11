@@ -3023,6 +3023,10 @@ export interface components {
         };
         /** StatsResponse */
         StatsResponse: {
+            /** Avg Compliment Ratio */
+            avg_compliment_ratio?: number | null;
+            /** Avg Critique Score */
+            avg_critique_score?: number | null;
             /** Compliment Ratio Trend */
             compliment_ratio_trend: {
                 [key: string]: unknown;

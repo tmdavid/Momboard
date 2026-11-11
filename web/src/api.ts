@@ -128,6 +128,9 @@ export interface StatsResponse {
   tag_counts_by_month: Record<string, Record<string, number>>;
   critique_trend: Array<{ date: string; score: number }>;
   compliment_ratio_trend: Array<{ date: string; ratio: number }>;
+  /** v0.5: averages over every non-simulated call (null when there is none). */
+  avg_critique_score?: number | null;
+  avg_compliment_ratio?: number | null;
   open_followups: Array<{
     id: number;
     task: string;

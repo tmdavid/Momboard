@@ -157,15 +157,17 @@ export const mockStats = {
     '2026-08': { pain: 9, workaround: 5, money: 3, commitment: 2 },
   },
   critique_trend: [
-    { date: '2026-06-15T00:00:00Z', score: 6, conversation_id: 1 },
-    { date: '2026-07-10T00:00:00Z', score: 7, conversation_id: 2 },
-    { date: '2026-08-12T00:00:00Z', score: 8, conversation_id: 3 },
+    { date: '2026-06-15', score: 6 },
+    { date: '2026-07-06', score: 7 },
+    { date: '2026-08-10', score: 8 },
   ],
   compliment_ratio_trend: [
-    { date: '2026-06-15T00:00:00Z', ratio: 0.35, conversation_id: 1 },
-    { date: '2026-07-10T00:00:00Z', ratio: 0.28, conversation_id: 2 },
-    { date: '2026-08-12T00:00:00Z', ratio: 0.22, conversation_id: 3 },
+    { date: '2026-06-15', ratio: 0.35 },
+    { date: '2026-07-06', ratio: 0.28 },
+    { date: '2026-08-10', ratio: 0.22 },
   ],
+  avg_critique_score: 7,
+  avg_compliment_ratio: 0.28,
   open_followups: [
     { id: 10, quote: 'Watch the Monday export live with Tomas', conversation_id: 1, conversation_title: 'Acme Watches discovery', happened_at: '2026-08-12T10:00:00Z', created_at: '2026-08-12T12:00:00Z' },
     { id: 11, quote: 'Send ROI one-pager for procurement', conversation_id: 2, conversation_title: 'Northwind Apparel', happened_at: '2026-07-25T10:00:00Z', created_at: '2026-07-25T12:00:00Z' },

@@ -307,6 +307,8 @@ class StatsResponse(BaseModel):
     tag_counts_by_month: dict[str, Any]
     critique_trend: list[dict[str, Any]]
     compliment_ratio_trend: list[dict[str, Any]]
+    avg_critique_score: float | None = None  # v0.5: over every non-simulated call
+    avg_compliment_ratio: float | None = None
     open_followups: list[dict[str, Any]]
     stale_hypotheses: int = 0  # T41: count of open hypotheses with stale evidence
 
