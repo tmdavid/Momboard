@@ -273,7 +273,8 @@ async def preview_hypothesis_intake(
     try:
         async with session_factory() as db:
             return await preview_intake(
-                db, body.statement, llm=llm, segment=body.segment
+                db, body.statement, llm=llm, segment=body.segment,
+                min_confidence=body.min_confidence,
             )
     finally:
         await llm.close()

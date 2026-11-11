@@ -1591,3 +1591,85 @@ async def test_intake_commit_hunch_has_no_links(auth_client: AsyncClient, hyp_se
     hyp_id = r.json()["id"]
     detail = await auth_client.get(f"/api/hypotheses/{hyp_id}")
     assert detail.json()["rollup"]["grounding"] == "hunch"
+
+
+# --- Hypotheses PRD P0 slice A: intake matching quality --------------------
+
+
+@pytest.mark.asyncio
+async def test_intake_match_includes_source_fields(
+    session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+):
+    """Each match carries company/contact/date/utterance_id so the panel needs no extra calls."""
+    from app.llm.schemas import IntakeMatch, IntakeMatchOutput
+    from app.services.hypothesis_intake import preview_intake
+
+    hl = hyp_seeded["highlight1"]  # them-side, Acme Watches, contact Maria
+    stub = _StubIntakeLLM(IntakeMatchOutput(
+        matches=[IntakeMatch(highlight_id=hl.id, relation="supports", confidence=0.9, rationale="x")],
+        suggested_questions=[],
+    ))
+    async with session_factory() as db:
+        out = await preview_intake(db, "Customers rely on manual Excel exports to cope", llm=stub)
+
+    m = out["matches"][0]
+    assert m["company_name"] == "Acme Watches"
+    assert m["contact_name"] == "Maria"
+    assert m["utterance_id"] == hl.utterance_id
+    assert "conversation_date" in m
+
+
+@pytest.mark.asyncio
+async def test_intake_min_confidence_drops_weak_matches(
+    session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+):
+    """Matches below min_confidence are dropped before returning."""
+    from app.llm.schemas import IntakeMatch, IntakeMatchOutput
+    from app.services.hypothesis_intake import preview_intake
+
+    hl = hyp_seeded["highlight1"]
+    stub = _StubIntakeLLM(IntakeMatchOutput(
+        matches=[IntakeMatch(highlight_id=hl.id, relation="supports", confidence=0.4, rationale="weak")],
+        suggested_questions=[],
+    ))
+    async with session_factory() as db:
+        out = await preview_intake(
+            db, "Customers rely on manual Excel exports to cope", llm=stub, min_confidence=0.6,
+        )
+    assert out["matches"] == []  # 0.4 < 0.6 default floor
+
+
+@pytest.mark.asyncio
+async def test_intake_excludes_our_side_turns(
+    session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+):
+    """A highlight on an our-side (us) utterance is not offered as customer evidence."""
+    from app.llm.schemas import IntakeMatch, IntakeMatchOutput
+    from app.services.hypothesis_intake import preview_intake
+
+    # Add an our-side utterance + highlight on the existing Acme conversation.
+    hl1 = hyp_seeded["highlight1"]
+    async with session_factory() as db:
+        our_utt = Utterance(
+            conversation_id=hl1.conversation_id, idx=99, speaker_label="Rep",
+            speaker_side="us", text="We can automate all of that for you with exports.",
+        )
+        db.add(our_utt)
+        await db.flush()
+        our_hl = Highlight(
+            conversation_id=hl1.conversation_id, utterance_id=our_utt.id,
+            tag_key="pain", quote="We can automate all of that for you with exports.",
+            status="accepted", origin="ai",
+        )
+        db.add(our_hl)
+        await db.commit()
+        our_hl_id = our_hl.id
+
+    # LLM would score the our-side highlight as support, but it's filtered pre-LLM.
+    stub = _StubIntakeLLM(IntakeMatchOutput(
+        matches=[IntakeMatch(highlight_id=our_hl_id, relation="supports", confidence=0.95, rationale="x")],
+        suggested_questions=[],
+    ))
+    async with session_factory() as db:
+        out = await preview_intake(db, "Reps pitch automating exports to customers", llm=stub)
+    assert our_hl_id not in [m["highlight_id"] for m in out["matches"]]

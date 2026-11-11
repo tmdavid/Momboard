@@ -41,10 +41,21 @@ async def preview_intake(
     llm: Any,
     segment: str | None = None,
     filters: dict[str, Any] | None = None,
+    min_confidence: float = 0.6,
 ) -> dict[str, Any]:
-    """Preview evidence for a typed belief. Read-only; saves nothing."""
+    """Preview evidence for a typed belief. Read-only; saves nothing.
+
+    Matching rules (PRD P0): candidates are restricted to customer turns (our reps'
+    speech and compliment-tagged highlights are excluded), each surviving match is
+    enriched with its source (company/contact/date/utterance_id), and matches scored
+    below `min_confidence` are dropped. A verification pass re-checks that each quote
+    actually speaks to the belief.
+    """
     # Stage 1: retrieve candidates (code, not LLM) — reuses the T42 retriever.
     candidates = await _retrieve_candidates(db, statement, filters=filters)
+    # Restrict to customer turns: drop our-side utterances and compliment highlights,
+    # which never constitute evidence for a belief about the customer.
+    candidates = [h for h in candidates if await _is_customer_evidence(db, h)]
     candidate_by_id: dict[int, Highlight] = {h.id: h for h in candidates}
 
     if not candidates:
@@ -80,7 +91,8 @@ async def preview_intake(
         prompt=prompt, schema=IntakeMatchOutput, model="corpus_chat"
     )
 
-    # Validate: keep only relevant matches that reference real candidate IDs.
+    # Validate: keep only relevant matches that reference real candidate IDs and
+    # score at or above min_confidence.
     matches: list[dict[str, Any]] = []
     strong_supports = 0
     strong_contradicts = 0
@@ -91,11 +103,22 @@ async def preview_intake(
         if hl is None:
             logger.warning("Intake dropped match with invalid highlight_id=%s", m.highlight_id)
             continue
+        if m.confidence < min_confidence:
+            continue
+        # Verification: re-check the quote actually speaks to the belief.
+        if not await _verify_match(statement, hl.quote, m.relation, llm):
+            logger.info("Intake verification dropped highlight_id=%s", hl.id)
+            continue
+        source = await _source_for(db, hl)
         matches.append({
             "highlight_id": hl.id,
             "quote": hl.quote,
             "tag_key": hl.tag_key,
             "conversation_id": hl.conversation_id,
+            "utterance_id": hl.utterance_id,
+            "company_name": source["company_name"],
+            "contact_name": source["contact_name"],
+            "conversation_date": source["conversation_date"],
             "relation": m.relation,
             "confidence": m.confidence,
             "rationale": m.rationale,
@@ -129,6 +152,83 @@ async def preview_intake(
         "grounding_preview": grounding_preview,
         "suggested_questions": questions,
     }
+
+
+COMPLIMENT_TAGS = {"compliment"}
+
+
+async def _is_customer_evidence(db: AsyncSession, h: Highlight) -> bool:
+    """Keep only customer-turn, non-compliment highlights as candidate evidence.
+
+    Our reps' speech and compliment-tagged highlights never evidence a belief about
+    the customer. A highlight with no utterance (manual, no side) is kept.
+    """
+    if h.tag_key in COMPLIMENT_TAGS:
+        return False
+    if h.utterance_id is None:
+        return True
+    from app.models import Utterance
+    utt = await db.get(Utterance, h.utterance_id)
+    if utt is None:
+        return True
+    return utt.speaker_side != "us"
+
+
+async def _source_for(db: AsyncSession, h: Highlight) -> dict[str, Any]:
+    """Resolve company name, first contact name, and conversation date for a highlight."""
+    from sqlalchemy import select as _select
+
+    from app.models import Company, Contact, Conversation, ConversationContact
+
+    convo = await db.get(Conversation, h.conversation_id)
+    company_name = None
+    conversation_date = None
+    contact_name = None
+    if convo:
+        conversation_date = convo.happened_at.isoformat() if convo.happened_at else None
+        if convo.company_id:
+            company = await db.get(Company, convo.company_id)
+            company_name = company.name if company else None
+        row = (await db.execute(
+            _select(Contact.name)
+            .join(ConversationContact, ConversationContact.contact_id == Contact.id)
+            .where(ConversationContact.conversation_id == convo.id)
+            .order_by(Contact.id)
+            .limit(1)
+        )).first()
+        contact_name = row[0] if row else None
+    return {
+        "company_name": company_name,
+        "contact_name": contact_name,
+        "conversation_date": conversation_date,
+    }
+
+
+async def _verify_match(statement: str, quote: str, relation: str, llm: Any) -> bool:
+    """Second-pass check that a quote actually speaks to the belief.
+
+    Fail-open: if the model can't give a clear yes/no (or errors), keep the match —
+    the min_confidence floor already removed the weakest candidates, and we would
+    rather show a borderline match (the human unticks it) than silently drop real
+    evidence.
+    """
+    prompt = (
+        "Does this customer quote genuinely "
+        f"{'support' if relation == 'supports' else 'contradict'} the belief?\n"
+        f'Belief: "{statement}"\n'
+        f'Quote: "{quote}"\n'
+        "Answer with a single match whose relation is 'supports' or 'contradicts' if "
+        "the quote truly speaks to the belief, or 'unrelated' if it does not."
+    )
+    try:
+        result: IntakeMatchOutput = await llm.generate(
+            prompt=prompt, schema=IntakeMatchOutput, model="corpus_chat"
+        )
+    except Exception:  # noqa: BLE001 — verification is best-effort; fail open.
+        return True
+    if not result.matches:
+        return True
+    return result.matches[0].relation != "unrelated"
 
 
 def _clean_questions(questions: list[str]) -> list[str]:

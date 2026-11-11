@@ -339,6 +339,8 @@ class HypothesisIntakeRequest(BaseModel):
 
     statement: str = Field(min_length=15)
     segment: str | None = None
+    # Drop matches scored below this confidence before returning (PRD P0, default 0.6).
+    min_confidence: float = 0.6
 
 
 class IntakeMatchResponse(BaseModel):
@@ -346,6 +348,10 @@ class IntakeMatchResponse(BaseModel):
     quote: str
     tag_key: str
     conversation_id: int
+    utterance_id: int | None = None
+    company_name: str | None = None
+    contact_name: str | None = None
+    conversation_date: str | None = None
     relation: str  # supports|contradicts
     confidence: float
     rationale: str = ""

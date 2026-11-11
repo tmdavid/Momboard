@@ -2044,6 +2044,11 @@ export interface components {
          * @description T48: preview evidence for a typed belief (read-only, saves nothing).
          */
         HypothesisIntakeRequest: {
+            /**
+             * Min Confidence
+             * @default 0.6
+             */
+            min_confidence: number;
             /** Segment */
             segment?: string | null;
             /** Statement */
@@ -2252,8 +2257,14 @@ export interface components {
         };
         /** IntakeMatchResponse */
         IntakeMatchResponse: {
+            /** Company Name */
+            company_name?: string | null;
             /** Confidence */
             confidence: number;
+            /** Contact Name */
+            contact_name?: string | null;
+            /** Conversation Date */
+            conversation_date?: string | null;
             /** Conversation Id */
             conversation_id: number;
             /** Highlight Id */
@@ -2274,6 +2285,8 @@ export interface components {
             strong: boolean;
             /** Tag Key */
             tag_key: string;
+            /** Utterance Id */
+            utterance_id?: number | null;
         };
         /** IntegrityCheckResponse */
         IntegrityCheckResponse: {
