@@ -63,7 +63,7 @@ describe('DecisionsPage (T40)', () => {
     renderWithProviders(<DecisionsPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('⚠️ Undermined')).toBeInTheDocument();
+      expect(screen.getByText('Undermined')).toBeInTheDocument();
     });
   });
 
@@ -74,7 +74,6 @@ describe('DecisionsPage (T40)', () => {
     fireEvent.click(screen.getByText('Build auto-reports'));
 
     await waitFor(() => {
-      expect(screen.getByText('Rationale')).toBeInTheDocument();
       expect(screen.getByText(/Enterprise users report manual/)).toBeInTheDocument();
     });
   });
@@ -87,14 +86,17 @@ describe('DecisionsPage (T40)', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/Every Monday I export to Excel/)).toBeInTheDocument();
-      expect(screen.getByText('Discovery call')).toBeInTheDocument();
+      // v0.4 renders the source as one meta line "<title> · open"; match the title
+      // as a substring and confirm the conversation link is present.
+      expect(screen.getByText(/Discovery call/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'open' })).toBeInTheDocument();
     });
   });
 
   it('opens create dialog', async () => {
     renderWithProviders(<DecisionsPage />);
-    await waitFor(() => expect(screen.getByText('+ New Decision')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('+ New Decision'));
+    await waitFor(() => expect(screen.getByText('New decision')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('New decision'));
 
     expect(screen.getByRole('dialog', { name: 'Create decision' })).toBeInTheDocument();
   });

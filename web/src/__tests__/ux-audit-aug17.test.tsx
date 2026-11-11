@@ -24,8 +24,8 @@ describe('UX #1: Decisions — New Decision always opens modal', () => {
     const { DecisionsPage } = await import('../pages/DecisionsPage');
     render(<DecisionsPage />, { wrapper: createWrapper(['/decisions']) });
 
-    await waitFor(() => expect(screen.getByText('+ New Decision')).toBeInTheDocument());
-    await userEvent.click(screen.getByText('+ New Decision'));
+    await waitFor(() => expect(screen.getByText('New decision')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('New decision'));
 
     expect(screen.getByRole('dialog', { name: /create decision/i })).toBeInTheDocument();
     expect(screen.getByText(/decisions must cite evidence/i)).toBeInTheDocument();

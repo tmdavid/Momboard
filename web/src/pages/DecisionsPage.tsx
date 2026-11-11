@@ -29,20 +29,42 @@ interface DecisionDetail extends Decision {
   }[];
 }
 
+const STATUS_PILL: Record<string, string> = {
+  proposed: 'bg-[#eff4ff] text-[#1d4ed8]',
+  decided: 'bg-good-soft text-good-text',
+  superseded: 'bg-sub text-ink-2',
+};
+
+function StatusPill({ status }: { status: string }) {
+  return (
+    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-pill capitalize ${STATUS_PILL[status] || 'bg-sub text-ink-2'}`}>
+      {status}
+    </span>
+  );
+}
+
+function IntegrityPill({ integrity }: { integrity: string }) {
+  const undermined = integrity === 'undermined';
+  return (
+    <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-pill ${undermined ? 'bg-warn-soft text-warn-text' : 'bg-good-soft text-good-text'}`}>
+      {undermined ? 'Undermined' : 'OK'}
+    </span>
+  );
+}
+
+const TABS = ['all', 'proposed', 'decided', 'superseded'] as const;
+type Tab = typeof TABS[number];
+
 export function DecisionsPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [tab, setTab] = useState<Tab>('all');
 
-  // Support preselected highlight from query params (for "Cite in decision")
   const preselectedHighlightId = searchParams.get('highlight_id');
-
-  // Auto-open modal when arriving with a preselected highlight
   useEffect(() => {
-    if (preselectedHighlightId) {
-      setShowCreate(true);
-    }
+    if (preselectedHighlightId) setShowCreate(true);
   }, [preselectedHighlightId]);
 
   const { data: listData, isLoading } = useQuery({
@@ -77,169 +99,125 @@ export function DecisionsPage() {
       }
       return r.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['decisions'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['decisions'] }),
   });
 
-  if (isLoading) return <div className="p-6">Loading decisions...</div>;
-
   const items = listData?.items || [];
+  const shown = tab === 'all' ? items : items.filter((d) => d.status === tab);
 
-  // Detail view
-  if (selectedId && detail) {
-    return (
-      <div className="max-w-3xl mx-auto p-6">
-        <button onClick={() => setSelectedId(null)} className="text-accent hover:underline mb-4">
-          ← Back to list
-        </button>
+  const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—');
 
-        <div className="bg-surface rounded-xl border border-hairline p-6">
-          <div className="flex items-center gap-2 mb-2">
-            <h1 className="text-xl font-bold">{detail.title}</h1>
-            {detail.integrity === 'undermined' && (
-              <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full font-medium">
-                ⚠️ Undermined
+  return (
+    <main className="p-6 flex flex-col gap-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-2xl font-bold text-ink">Decisions</h1>
+          <span className="text-muted">What we decided, and the quotes behind it</span>
+        </div>
+        <button onClick={() => setShowCreate(true)} className="btn btn-primary ml-auto">New decision</button>
+      </div>
+
+      {/* Status segmented control (preset filter) */}
+      <div className="flex gap-0.5 p-0.5 rounded-lg bg-sub self-start" role="tablist" aria-label="Status">
+        {TABS.map((t) => (
+          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
+            className={`h-[30px] px-3 rounded-md border-none font-semibold capitalize cursor-pointer ${tab === t ? 'bg-surface text-ink shadow-sm' : 'bg-transparent text-ink-2'}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <p className="text-muted">Loading decisions…</p>
+      ) : items.length === 0 ? (
+        <p className="text-muted">No decisions yet. Create one citing highlight evidence.</p>
+      ) : (
+        <div className="bg-surface border border-hairline rounded-[10px] overflow-x-auto">
+          <div className="min-w-[640px]">
+            <div className="grid gap-4 px-4 py-2.5 border-b border-hairline text-xs font-semibold text-muted"
+              style={{ gridTemplateColumns: 'minmax(0,1fr) 120px 110px 130px 90px' }}>
+              <span>Decision</span><span>Status</span><span>Evidence</span><span>Integrity</span><span>Date</span>
+            </div>
+            {shown.map((d) => (
+              <div key={d.id} role="button" tabIndex={0} aria-label={d.title}
+                onClick={() => setSelectedId(d.id)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(d.id); } }}
+                className="grid gap-4 items-center px-4 py-3 border-b border-hairline cursor-pointer last:border-b-0"
+                style={{ gridTemplateColumns: 'minmax(0,1fr) 120px 110px 130px 90px', ...(selectedId === d.id ? { background: '#f1f5fe', boxShadow: 'inset 3px 0 0 #2f5bea' } : {}) }}>
+                <span className="trunc font-semibold text-ink" title={d.title}>{d.title}</span>
+                <span><StatusPill status={d.status} /></span>
+                <span className="text-ink-2">evidence</span>
+                <span><IntegrityPill integrity={d.integrity} /></span>
+                <span className="text-muted">{fmtDate(d.decided_at || d.created_at)}</span>
+              </div>
+            ))}
+            {shown.length === 0 && <p className="text-sm text-muted p-4">No {tab} decisions.</p>}
+          </div>
+        </div>
+      )}
+
+      {/* Inline detail for the selected row */}
+      {selectedId && detail && (
+        <section aria-label="Selected decision" className="bg-surface border border-hairline rounded-xl p-5 flex flex-col gap-3">
+          <div className="flex flex-wrap gap-2 items-center">
+            <h2 className="text-lg font-bold text-ink">{detail.title}</h2>
+            <StatusPill status={detail.status} />
+            <button onClick={() => setSelectedId(null)} className="ml-auto text-sm text-muted hover:text-ink bg-transparent border-none cursor-pointer">Close</button>
+          </div>
+          <p className="m-0">{detail.rationale_md}</p>
+
+          {detail.integrity === 'undermined' && (
+            <div className="px-3 py-2.5 rounded-lg bg-warn-soft text-[#93370d] text-[13px] flex flex-col gap-1">
+              <span>
+                <strong>Integrity check:</strong>{' '}
+                {detail.integrity_reasons && detail.integrity_reasons.length > 0
+                  ? `${detail.integrity_reasons.length} cited quote(s) changed since. Re-check whether the decision still holds.`
+                  : 'A cited quote has changed since. Re-check whether the decision still holds.'}
               </span>
-            )}
-          </div>
-
-          <div className="flex gap-2 mb-4">
-            <span className={`px-2 py-0.5 text-xs rounded-full ${
-              detail.status === 'decided' ? 'bg-green-100 text-green-700' :
-              detail.status === 'superseded' ? 'bg-gray-100 text-gray-500' :
-              'bg-yellow-100 text-yellow-700'
-            }`}>
-              {detail.status}
-            </span>
-            {detail.decided_at && (
-              <span className="text-xs text-gray-500">
-                Decided {new Date(detail.decided_at).toLocaleDateString()}
-              </span>
-            )}
-          </div>
-
-          <div className="prose prose-sm mb-4">
-            <h3>Rationale</h3>
-            <p>{detail.rationale_md}</p>
-          </div>
-
-          {/* Integrity reasons */}
-          {detail.integrity === 'undermined' && detail.integrity_reasons && detail.integrity_reasons.length > 0 && (
-            <div className="mb-4 border border-red-200 rounded-lg p-3 bg-red-50">
-              <h3 className="text-sm font-semibold text-red-700 mb-1">Integrity concerns</h3>
-              <ul className="list-disc list-inside text-sm text-red-600">
-                {detail.integrity_reasons.map((r, i) => (
-                  <li key={i}>{r.reason}</li>
-                ))}
-              </ul>
+              {detail.integrity_reasons && detail.integrity_reasons.length > 0 && (
+                <ul className="list-disc list-inside m-0">
+                  {detail.integrity_reasons.map((r, i) => <li key={i}>{r.reason}</li>)}
+                </ul>
+              )}
             </div>
           )}
 
-          <div className="mb-4">
-            <h3 className="font-semibold text-sm mb-2">Evidence ({detail.evidence.length})</h3>
-            <div className="space-y-2">
-              {detail.evidence.map((ev) => (
-                <div key={ev.highlight_id} className="border rounded p-3 bg-gray-50">
-                  <p className="text-sm italic">"{ev.quote}"</p>
-                  <div className="flex gap-2 mt-1 text-xs text-gray-500">
-                    <span className="font-medium">{ev.tag_key}</span>
-                    {ev.conversation_title && (
-                      <Link to={`/conversations/${ev.conversation_id}`} className="text-blue-600 hover:underline">
-                        {ev.conversation_title}
-                      </Link>
-                    )}
-                  </div>
+          <span className="text-xs font-semibold text-muted">Evidence receipts</span>
+          <div className="flex flex-col gap-2">
+            {detail.evidence.map((ev) => {
+              const stale = ev.status === 'rejected';
+              return (
+                <div key={ev.highlight_id}
+                  className="flex flex-col gap-0.5 px-3 py-2.5 rounded-lg border"
+                  style={stale ? { border: '1px dashed #f79009', background: '#fffcf5', opacity: 0.85 } : { borderColor: '#e5e7eb' }}>
+                  <span className="text-ink">“{ev.quote}”</span>
+                  <span className="text-xs text-muted">
+                    {ev.conversation_title || `Conversation ${ev.conversation_id}`}
+                    {stale && ' · tag rejected in review'}
+                    {' · '}
+                    <Link to={`/conversations/${ev.conversation_id}`}>open</Link>
+                  </span>
                 </div>
-              ))}
-            </div>
+              );
+            })}
+            {detail.evidence.length === 0 && <span className="text-sm text-muted">No evidence cited.</span>}
           </div>
 
           {detail.superseded_by && (
-            <div className="text-sm text-gray-500 mb-4">
-              Superseded by decision #{detail.superseded_by}
-            </div>
+            <span className="text-sm text-muted">Superseded by decision #{detail.superseded_by}</span>
           )}
 
           <div className="flex gap-2">
             {detail.status === 'proposed' && (
-              <button
-                onClick={() => transitionMutation.mutate({ id: detail.id, status: 'decided' })}
-                className="px-3 py-1.5 bg-green-600 text-white text-sm rounded hover:bg-green-700"
-              >
-                Mark as Decided
-              </button>
+              <button onClick={() => transitionMutation.mutate({ id: detail.id, status: 'decided' })} className="btn btn-sm btn-primary">Mark as decided</button>
             )}
             {detail.status === 'decided' && (
-              <SupersedeButton
-                currentId={detail.id}
-                allDecisions={items}
-                onSupersede={(successorId) =>
-                  transitionMutation.mutate({ id: detail.id, status: 'superseded', superseded_by_id: successorId })
-                }
-              />
+              <SupersedeButton currentId={detail.id} allDecisions={items}
+                onSupersede={(successorId) => transitionMutation.mutate({ id: detail.id, status: 'superseded', superseded_by_id: successorId })} />
             )}
           </div>
-          {transitionMutation.isError && (
-            <p className="text-red-600 text-sm mt-2">{(transitionMutation.error as Error).message}</p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // List view
-  return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold tracking-tight">📋 Decisions</h1>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="btn btn-primary"
-        >
-          + New Decision
-        </button>
-      </div>
-
-      {items.length === 0 ? (
-        <p className="text-muted">No decisions yet. Create one citing highlight evidence.</p>
-      ) : (
-        <div className="space-y-2">
-          {items.map((d) => (
-            <div
-              key={d.id}
-              onClick={() => setSelectedId(d.id)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  setSelectedId(d.id);
-                }
-              }}
-              className="border border-hairline rounded-xl p-4 bg-surface hover:bg-page cursor-pointer"
-              role="button"
-              tabIndex={0}
-            >
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{d.title}</span>
-                <span className={`px-2 py-0.5 text-xs rounded-full ${
-                  d.status === 'decided' ? 'bg-green-100 text-green-700' :
-                  d.status === 'superseded' ? 'bg-gray-100 text-gray-500' :
-                  'bg-yellow-100 text-yellow-700'
-                }`}>
-                  {d.status}
-                </span>
-                {d.integrity === 'undermined' && (
-                  <span className="px-2 py-0.5 text-xs bg-red-100 text-red-700 rounded-full">
-                    ⚠️ Undermined
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Created {new Date(d.created_at).toLocaleDateString()}
-              </p>
-            </div>
-          ))}
-        </div>
+          {transitionMutation.isError && <p className="text-crit text-sm">{(transitionMutation.error as Error).message}</p>}
+        </section>
       )}
 
       {showCreate && (
@@ -247,15 +225,12 @@ export function DecisionsPage() {
           preselectedHighlightId={preselectedHighlightId ? parseInt(preselectedHighlightId) : undefined}
           onClose={() => {
             setShowCreate(false);
-            // Clear the query param so the modal doesn't reopen
-            if (preselectedHighlightId) {
-              setSearchParams({}, { replace: true });
-            }
+            if (preselectedHighlightId) setSearchParams({}, { replace: true });
             queryClient.invalidateQueries({ queryKey: ['decisions'] });
           }}
         />
       )}
-    </div>
+    </main>
   );
 }
 
@@ -266,43 +241,19 @@ function SupersedeButton({ currentId, allDecisions, onSupersede }: {
 }) {
   const [selecting, setSelecting] = useState(false);
   const [successorId, setSuccessorId] = useState<string>('');
-
   const otherDecisions = allDecisions.filter((d) => d.id !== currentId && d.status !== 'superseded');
 
   if (!selecting) {
-    return (
-      <button
-        onClick={() => setSelecting(true)}
-        className="px-3 py-1.5 bg-gray-600 text-white text-sm rounded hover:bg-gray-700"
-      >
-        Supersede
-      </button>
-    );
+    return <button onClick={() => setSelecting(true)} className="btn btn-sm btn-ghost">Supersede</button>;
   }
-
   return (
     <div className="flex gap-2 items-center">
-      <select
-        value={successorId}
-        onChange={(e) => setSuccessorId(e.target.value)}
-        className="border rounded px-2 py-1 text-sm"
-        aria-label="Select successor decision"
-      >
+      <select value={successorId} onChange={(e) => setSuccessorId(e.target.value)} className="border border-hairline rounded-lg px-2 py-1 text-sm" aria-label="Select successor decision">
         <option value="">Select successor…</option>
-        {otherDecisions.map((d) => (
-          <option key={d.id} value={d.id}>{d.title}</option>
-        ))}
+        {otherDecisions.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}
       </select>
-      <button
-        onClick={() => { if (successorId) onSupersede(parseInt(successorId)); }}
-        disabled={!successorId}
-        className="px-3 py-1.5 bg-gray-600 text-white text-sm rounded hover:bg-gray-700 disabled:opacity-50"
-      >
-        Confirm
-      </button>
-      <button onClick={() => setSelecting(false)} className="text-sm text-gray-500 hover:underline">
-        Cancel
-      </button>
+      <button onClick={() => { if (successorId) onSupersede(parseInt(successorId)); }} disabled={!successorId} className="btn btn-sm btn-ghost disabled:opacity-50">Confirm</button>
+      <button onClick={() => setSelecting(false)} className="text-sm text-muted hover:underline bg-transparent border-none cursor-pointer">Cancel</button>
     </div>
   );
 }
@@ -310,12 +261,9 @@ function SupersedeButton({ currentId, allDecisions, onSupersede }: {
 function CreateDecisionModal({ onClose, preselectedHighlightId }: { onClose: () => void; preselectedHighlightId?: number }) {
   const [title, setTitle] = useState('');
   const [rationale, setRationale] = useState('');
-  const [selectedHighlights, setSelectedHighlights] = useState<number[]>(
-    preselectedHighlightId ? [preselectedHighlightId] : []
-  );
+  const [selectedHighlights, setSelectedHighlights] = useState<number[]>(preselectedHighlightId ? [preselectedHighlightId] : []);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch accepted highlights for the evidence picker
   const { data: highlightsData } = useQuery({
     queryKey: ['highlights-for-decision', searchQuery],
     queryFn: () => api.listHighlights({ status: 'accepted', limit: 50 }),
@@ -326,15 +274,11 @@ function CreateDecisionModal({ onClose, preselectedHighlightId }: { onClose: () 
     ? highlights.filter((h) =>
         h.quote.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (h.company_name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        h.tag_key.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+        h.tag_key.toLowerCase().includes(searchQuery.toLowerCase()))
     : highlights;
 
-  const toggleHighlight = (id: number) => {
-    setSelectedHighlights((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
-  };
+  const toggleHighlight = (id: number) =>
+    setSelectedHighlights((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -343,10 +287,7 @@ function CreateDecisionModal({ onClose, preselectedHighlightId }: { onClose: () 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, rationale_md: rationale, evidence: selectedHighlights }),
       });
-      if (!r.ok) {
-        const err = await r.json();
-        throw new Error(err.detail || 'Failed');
-      }
+      if (!r.ok) { const err = await r.json(); throw new Error(err.detail || 'Failed'); }
       return r.json();
     },
     onSuccess: () => onClose(),
@@ -354,77 +295,34 @@ function CreateDecisionModal({ onClose, preselectedHighlightId }: { onClose: () 
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" role="dialog" aria-label="Create decision">
-      <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col">
-        <h2 className="text-lg font-bold mb-4">New Decision</h2>
-        <input
-          type="text"
-          placeholder="Decision title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full border rounded px-3 py-2 mb-3"
-        />
-        <textarea
-          placeholder="Rationale (why this decision)"
-          value={rationale}
-          onChange={(e) => setRationale(e.target.value)}
-          className="w-full border rounded px-3 py-2 mb-3 h-20"
-        />
-
-        {/* Evidence picker */}
+      <div className="bg-surface rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col border border-hairline">
+        <h2 className="text-lg font-bold mb-4 text-ink">New decision</h2>
+        <input type="text" placeholder="Decision title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full border border-hairline rounded-lg px-3 py-2 mb-3" />
+        <textarea placeholder="Rationale (why this decision)" value={rationale} onChange={(e) => setRationale(e.target.value)} className="w-full border border-hairline rounded-lg px-3 py-2 mb-3 h-20" />
         <div className="mb-3 flex-1 min-h-0 flex flex-col">
           <label className="text-sm font-semibold mb-1">Evidence highlights ({selectedHighlights.length} selected)</label>
-          <p className="text-xs text-gray-500 mb-2">
-            Decisions must cite evidence. Select highlights from Explore, or add evidence from conversations.
-          </p>
-          <input
-            type="text"
-            placeholder="Search highlights..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full border rounded px-3 py-1.5 mb-2 text-sm"
-            aria-label="Search evidence highlights"
-          />
-          <div className="flex-1 overflow-y-auto border rounded max-h-48">
+          <p className="text-xs text-muted mb-2">Decisions must cite evidence. Select highlights from Explore, or add evidence from conversations.</p>
+          <input type="text" placeholder="Search highlights…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full border border-hairline rounded-lg px-3 py-1.5 mb-2 text-sm" aria-label="Search evidence highlights" />
+          <div className="flex-1 overflow-y-auto border border-hairline rounded-lg max-h-48">
             {filteredHighlights.map((h) => (
-              <label
-                key={h.id}
-                className={`flex items-start gap-2 p-2 border-b last:border-0 cursor-pointer hover:bg-gray-50 ${
-                  selectedHighlights.includes(h.id) ? 'bg-blue-50' : ''
-                }`}
-              >
-                <input
-                  type="checkbox"
-                  checked={selectedHighlights.includes(h.id)}
-                  onChange={() => toggleHighlight(h.id)}
-                  className="mt-1"
-                />
+              <label key={h.id} className={`flex items-start gap-2 p-2 border-b border-sub last:border-0 cursor-pointer hover:bg-page ${selectedHighlights.includes(h.id) ? 'bg-accent-soft' : ''}`}>
+                <input type="checkbox" checked={selectedHighlights.includes(h.id)} onChange={() => toggleHighlight(h.id)} className="mt-1" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm truncate">"{h.quote}"</p>
-                  <span className="text-xs text-gray-500">{h.tag_key} · {h.company_name || 'Unknown'}</span>
+                  <p className="text-sm truncate">“{h.quote}”</p>
+                  <span className="text-xs text-muted">{h.tag_key} · {h.company_name || 'Unknown'}</span>
                 </div>
               </label>
             ))}
-            {filteredHighlights.length === 0 && (
-              <p className="text-sm text-gray-400 p-3">No matching highlights</p>
-            )}
+            {filteredHighlights.length === 0 && <p className="text-sm text-muted p-3">No matching highlights</p>}
           </div>
         </div>
-
         <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-3 py-1.5 bg-gray-200 rounded hover:bg-gray-300">
-            Cancel
-          </button>
-          <button
-            onClick={() => createMutation.mutate()}
-            disabled={!title || !rationale || selectedHighlights.length === 0 || createMutation.isPending}
-            className="px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {createMutation.isPending ? 'Creating...' : 'Create'}
+          <button onClick={onClose} className="btn btn-sm btn-ghost">Cancel</button>
+          <button onClick={() => createMutation.mutate()} disabled={!title || !rationale || selectedHighlights.length === 0 || createMutation.isPending} className="btn btn-sm btn-primary disabled:opacity-50">
+            {createMutation.isPending ? 'Creating…' : 'Create'}
           </button>
         </div>
-        {createMutation.isError && (
-          <p className="text-red-600 text-sm mt-2">{(createMutation.error as Error).message}</p>
-        )}
+        {createMutation.isError && <p className="text-crit text-sm mt-2">{(createMutation.error as Error).message}</p>}
       </div>
     </div>
   );

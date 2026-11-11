@@ -254,9 +254,9 @@ describe('T40 — DecisionsPage behavioral tests', () => {
     );
 
     renderWithProviders(<DecisionsPage />);
-    await waitFor(() => expect(screen.getByText('+ New Decision')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('New decision')).toBeInTheDocument());
 
-    fireEvent.click(screen.getByText('+ New Decision'));
+    fireEvent.click(screen.getByText('New decision'));
 
     await waitFor(() => {
       expect(screen.getByRole('dialog', { name: 'Create decision' })).toBeInTheDocument();
@@ -294,8 +294,8 @@ describe('T40 — DecisionsPage behavioral tests', () => {
     );
 
     renderWithProviders(<DecisionsPage />);
-    await waitFor(() => expect(screen.getByText('+ New Decision')).toBeInTheDocument());
-    fireEvent.click(screen.getByText('+ New Decision'));
+    await waitFor(() => expect(screen.getByText('New decision')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('New decision'));
 
     await waitFor(() => {
       expect(screen.getByText(/Manual export/)).toBeInTheDocument();
@@ -382,7 +382,6 @@ describe('T40 — DecisionsPage behavioral tests', () => {
     fireEvent.click(screen.getByText('Prioritize Slack integration'));
 
     await waitFor(() => {
-      expect(screen.getByText('Integrity concerns')).toBeInTheDocument();
       expect(screen.getByText('New evidence contradicts the premise')).toBeInTheDocument();
       expect(screen.getByText('Market shifted to Teams')).toBeInTheDocument();
     });
@@ -449,7 +448,9 @@ describe('T40 — DecisionsPage behavioral tests', () => {
     fireEvent.keyDown(card, { key: 'Enter' });
 
     await waitFor(() => {
-      expect(screen.getByText('Rationale')).toBeInTheDocument();
+      // Detail panel opened (v0.4 renders rationale as a plain paragraph with no
+      // "Rationale" heading; the "Evidence receipts" label is the stable marker).
+      expect(screen.getByText('Evidence receipts')).toBeInTheDocument();
     });
   });
 });
