@@ -51,11 +51,11 @@ describe('UX #2: Explore synthesis is fire-and-forget', () => {
     const { ExplorePage } = await import('../pages/ExplorePage');
     render(<ExplorePage />, { wrapper: createWrapper(['/explore']) });
 
-    await waitFor(() => expect(screen.getByText(/Synthesize this view/i)).toBeInTheDocument());
-    await userEvent.click(screen.getByText(/Synthesize this view/i));
+    await waitFor(() => expect(screen.getByText(/Synthesize 5 highlights/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByText(/Synthesize 5 highlights/i));
 
     await waitFor(() => expect(screen.getByText(/Summary queued/i)).toBeInTheDocument());
-    expect(screen.getByRole('link', { name: /View Summaries/i })).toHaveAttribute('href', '/summaries');
+    expect(screen.getByRole('link', { name: /View summaries/i })).toHaveAttribute('href', '/summaries');
     // No blocking progress panel / Cancel button anymore.
     expect(screen.queryByText('Cancel')).not.toBeInTheDocument();
   });
@@ -68,8 +68,8 @@ describe('UX #2: Explore synthesis is fire-and-forget', () => {
     const { ExplorePage } = await import('../pages/ExplorePage');
     render(<ExplorePage />, { wrapper: createWrapper(['/explore']) });
 
-    await waitFor(() => expect(screen.getByText(/Synthesize this view/i)).toBeInTheDocument());
-    await userEvent.click(screen.getByText(/Synthesize this view/i));
+    await waitFor(() => expect(screen.getByText(/Synthesize 5 highlights/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByText(/Synthesize 5 highlights/i));
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/Failed to start synthesis/i));
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();

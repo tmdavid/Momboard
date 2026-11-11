@@ -459,7 +459,10 @@ describe('T40 — DecisionsPage behavioral tests', () => {
 // T43 — ExplorePage lens: request payload, all four result areas, evidence links
 // ═══════════════════════════════════════════════════════════════════════
 
-describe('T43 — Lens compare exact request payload and result areas', () => {
+// v0.4 redesign: the "Compare as lens" entry point is removed from Explore (user
+// decision). The POST /api/lenses backend and the LensModal/LensResultPanel code are
+// untouched; only the Explore button is gone, so these UI-path tests are skipped.
+describe.skip('T43 — Lens compare exact request payload and result areas', () => {
   it('sends correct payload with tags as list and status for both sides', async () => {
     let capturedBody: Record<string, unknown> | null = null;
 

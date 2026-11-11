@@ -43,7 +43,7 @@ describe('Explore page', () => {
     renderExplore();
 
     await waitFor(() => {
-      expect(screen.getByText(/5 highlights/)).toBeInTheDocument();
+      expect(screen.getByText(/5 highlights ·/)).toBeInTheDocument();
     });
 
     // After toggling a tag off, the count should update
@@ -52,7 +52,7 @@ describe('Explore page', () => {
 
     // After removing pain from active (leaving only workaround), count changes
     await waitFor(() => {
-      expect(screen.queryByText(/5 highlights/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/5 highlights ·/)).not.toBeInTheDocument();
     });
   });
 
@@ -60,10 +60,10 @@ describe('Explore page', () => {
     renderExplore();
 
     await waitFor(() => {
-      expect(screen.getByText(/5 highlights/)).toBeInTheDocument();
+      expect(screen.getByText(/5 highlights ·/)).toBeInTheDocument();
     });
 
-    const btn = screen.getByRole('button', { name: /Synthesize this view/ });
+    const btn = screen.getByRole('button', { name: /Synthesize 5 highlights/ });
     expect(btn).not.toBeDisabled();
   });
 
@@ -74,6 +74,6 @@ describe('Explore page', () => {
       expect(screen.getByText(/Every Monday I export all flagged listings/)).toBeInTheDocument();
     });
 
-    expect(screen.getAllByText(/open ↗/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Open in transcript/).length).toBeGreaterThan(0);
   });
 });

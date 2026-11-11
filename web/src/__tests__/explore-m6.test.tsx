@@ -7,7 +7,7 @@
  * T20: Expandable synthesis themes with evidence quotes
  */
 import { describe, test, expect, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
@@ -151,15 +151,14 @@ describe('T20: Quote card navigation anchored to source utterance', () => {
       expect(screen.getByText(/Every Monday I export all flagged listings/)).toBeInTheDocument();
     });
 
-    // Click the first quote card — it should navigate with a hash that anchors
-    // to utterance_id=2 (e.g. /conversations/1#utterance-2)
+    // Navigate via the card's "Open in transcript" action (v0.4 moves navigation
+    // from whole-card click to an explicit footer control). It should anchor to
+    // utterance_id=2 (e.g. /conversations/1#utterance-2).
     const card = screen.getByText(/Every Monday I export all flagged listings/).closest('[data-testid="quote-card"]');
-
     expect(card).toBeTruthy();
 
-    if (card) {
-      await user.click(card);
-    }
+    const openBtn = within(card as HTMLElement).getByText(/Open in transcript/i);
+    await user.click(openBtn);
 
     // After navigation, the conversation page should be rendered and scrollIntoView called
     await waitFor(() => {
@@ -192,9 +191,10 @@ describe('T20: Quote card navigation anchored to source utterance', () => {
     // Verify the card is keyboard-accessible (article with tabIndex=0)
     const cards = screen.getAllByTestId('quote-card');
     expect(cards.length).toBeGreaterThan(0);
-    // Cards should be articles with keyboard accessibility
     expect(cards[0].tagName.toLowerCase()).toBe('article');
-    expect(cards[0].getAttribute('tabindex')).toBe('0');
+    // v0.4: each card exposes an explicit, focusable "Open in transcript" control
+    // (a button) that drives the anchored navigation.
+    expect(within(cards[0]).getByText(/Open in transcript/i).tagName.toLowerCase()).toBe('button');
   });
 });
 
@@ -299,16 +299,16 @@ describe('T45: Explore synthesize is fire-and-forget', () => {
     renderExplore();
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Synthesize this view/i })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: /Synthesize \d+ highlights/i })).not.toBeDisabled();
     });
 
-    await user.click(screen.getByRole('button', { name: /Synthesize this view/i }));
+    await user.click(screen.getByRole('button', { name: /Synthesize \d+ highlights/i }));
 
     // A queued confirmation appears with a link to Summaries.
     await waitFor(() => {
       expect(screen.getByText(/Summary queued/i)).toBeInTheDocument();
     });
-    const link = screen.getByRole('link', { name: /View Summaries/i });
+    const link = screen.getByRole('link', { name: /View summaries/i });
     expect(link).toHaveAttribute('href', '/summaries');
     expect(posted).toBe(1);
 
