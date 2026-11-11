@@ -78,6 +78,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # worker doesn't stay wedged behind an orphaned job.
     await reclaim_stale_jobs(app.state.session_factory)
 
+    mcp = getattr(app.state, "mcp", None)
+    mcp_context = None
+    if mcp is not None:
+        mcp_context = mcp.lifespan()
+        await mcp_context.__aenter__()
+        try:
+            from app.mcp import audit
+
+            async with app.state.session_factory() as db:
+                await audit.prune(db)
+                await db.commit()
+        except Exception:  # noqa: BLE001 - housekeeping only
+            logging.getLogger(__name__).warning("Could not prune the MCP audit log", exc_info=True)
+
     # Start background worker pool (settings.worker_concurrency workers)
     task = asyncio.create_task(run_worker_pool(app.state.session_factory, settings))
     app.state.worker_task = task
@@ -108,6 +122,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await backup_task
         except asyncio.CancelledError:
             pass
+
+    if mcp_context is not None:
+        await mcp_context.__aexit__(None, None, None)
 
     await engine.dispose()
 
@@ -144,6 +161,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     from app.api.auth import auth_router
 
     app.include_router(auth_router)
+
+    # MCP endpoint (off by default). Registered before the SPA catch-all so /mcp is never answered with HTML.
+    if settings.mcp_enabled:
+        from starlette.routing import Route
+
+        from app.mcp.server import McpServer
+
+        app.state.mcp = McpServer(app, settings)
+        app.router.routes.append(
+            Route("/mcp", endpoint=app.state.mcp.asgi, methods=["GET", "POST", "DELETE"], name="mcp")
+        )
 
     # Serve SPA static files if built
     spa_path = Path(__file__).parent.parent / "web" / "dist"

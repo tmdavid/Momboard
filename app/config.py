@@ -92,6 +92,14 @@ class Settings(BaseSettings):
     hypothesis_refuted_min_contradict: int = 3
     hypothesis_refuted_ratio: float = 2.0
 
+    # MCP server at /mcp (API-token auth). Off by default; self-hosters opt in.
+    mcp_enabled: bool = False
+    mcp_allow_write: bool = False  # write tools are phase 2 and need a write-scoped token as well
+    mcp_rate_limit_per_minute: int = 60  # tool calls per token per minute
+    mcp_tool_timeout_seconds: float = 30.0
+    # Links in tool output point here. Empty means "derive it from the request" (set it behind a proxy).
+    public_base_url: str = ""
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
