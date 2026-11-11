@@ -4,7 +4,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api, ConversationListItem } from '../api';
 import { NewConversationModal, NewConversationFormData } from '../components/NewConversationModal';
 import { useConversationEvents } from '../hooks/useConversationEvents';
-import { TAG_META } from '../constants';
+import { scoreBand, tagColor } from '../constants';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { InboxPane } from './InboxPage';
@@ -251,8 +251,8 @@ export function LibraryPage() {
   });
 
   return (
-    <main className="flex-1 overflow-auto">
-      <div className="max-w-[1100px] mx-auto p-7">
+    <main className="p-6">
+      <div>
         {/* Subtabs: Conversations | Inbox */}
         <div className="flex gap-0.5 border-b border-hairline mb-4" role="tablist">
           <button
@@ -286,27 +286,26 @@ export function LibraryPage() {
         {/* Conversations tab content */}
         {activeTab === 'conversations' && (
           <>
-            {/* Header */}
-            <div className="flex items-center mb-4">
-              <h1 className="text-xl font-bold tracking-tight">
-                Library{' '}
-                <span className="text-muted font-normal ml-2">
+            {/* Header: title + corpus size + one primary action */}
+            <div className="flex flex-wrap items-end gap-4 mb-4">
+              <div className="flex flex-col gap-0.5">
+                <h1 className="text-2xl font-bold text-ink">Library</h1>
+                <span className="text-muted">
                   {isLoading ? (
-                    <span
-                      role="status"
-                      aria-label="Loading conversations"
-                      className="inline-block w-3 h-3 align-middle border-2 border-hairline border-t-accent rounded-full animate-spin"
-                    />
+                    <span role="status" aria-label="Loading conversations" className="inline-block w-3 h-3 align-middle border-2 border-hairline border-t-accent rounded-full animate-spin" />
                   ) : (
-                    `(${total})`
+                    <><span>({total})</span> conversation{total === 1 ? '' : 's'}</>
                   )}
                 </span>
-              </h1>
-              <div className="flex-1" />
-              <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-                ＋ New conversation
+              </div>
+              <button className="btn btn-primary ml-auto" onClick={() => setModalOpen(true)}>
+                New conversation
               </button>
             </div>
+
+            {/* Saved views — preset filters (not persisted). */}
+            <SavedViews activeTags={activeTags} companyId={companyId} dateFrom={dateFrom} dateTo={dateTo} sort={sort} setSearchParams={setSearchParams} />
+
 
         {/* Filters */}
         <div className="flex flex-wrap gap-2.5 items-center p-3 bg-surface border border-hairline rounded-xl mb-4">
@@ -513,6 +512,44 @@ export function LibraryPage() {
   );
 }
 
+type ParamSetter = ReturnType<typeof useSearchParams>[1];
+
+/**
+ * Saved views = preset filter sets (NOT persisted per user — confirmed). Each
+ * view rewrites the URL filter params; "All" clears them. Active view is derived
+ * from the current params so a manual filter change deselects the preset.
+ */
+function SavedViews({ activeTags, companyId, dateFrom, dateTo, sort, setSearchParams }: {
+  activeTags: string[]; companyId?: string; dateFrom?: string; dateTo?: string; sort: string; setSearchParams: ParamSetter;
+}) {
+  const apply = (mut: (p: URLSearchParams) => void) => {
+    setSearchParams((prev) => {
+      ['tag', 'company_id', 'date_from', 'date_to', 'sort', 'score_max', 'offset'].forEach((k) => prev.delete(k));
+      mut(prev);
+      return prev;
+    });
+  };
+
+  const views: { label: string; on: boolean; apply: () => void }[] = [
+    { label: 'All', on: activeTags.length === 0 && !companyId && !dateFrom && !dateTo, apply: () => apply(() => {}) },
+    { label: 'Needs review', on: sort === 'date_asc' && !!dateFrom === false && activeTags.length === 0 && !companyId, apply: () => apply((p) => p.set('sort', 'date_asc')) },
+    { label: 'Low score (≤3)', on: sort === 'score_asc', apply: () => apply((p) => p.set('sort', 'score_asc')) },
+    { label: 'Strong pains', on: activeTags.length === 1 && activeTags[0] === 'pain', apply: () => apply((p) => p.set('tag', 'pain')) },
+    { label: 'Partnerships', on: activeTags.length === 1 && activeTags[0] === 'person', apply: () => apply((p) => p.set('tag', 'person')) },
+  ];
+
+  return (
+    <div className="flex flex-wrap gap-1 p-1 rounded-lg bg-sub self-start mb-4" role="tablist" aria-label="Saved views">
+      {views.map((v) => (
+        <button key={v.label} role="tab" aria-selected={v.on} onClick={v.apply}
+          className={`h-8 px-3.5 rounded-md border-none font-semibold cursor-pointer ${v.on ? 'bg-surface text-ink shadow-sm' : 'bg-transparent text-ink-2'}`}>
+          {v.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** Invisible SSE tracker component */
 function SseTracker({
   conversationId,
@@ -549,26 +586,17 @@ function ConversationRow({ conversation: c, onClick }: { conversation: Conversat
       </td>
       <td className="px-3.5 py-3">
         {c.status === 'ready' && c.critique_score != null ? (
-          <span
-            className={`inline-grid place-items-center w-[30px] h-[22px] rounded-md text-xs font-bold ${
-              c.critique_score >= 7
-                ? 'bg-[#e6f4e6] text-good-text'
-                : c.critique_score >= 5
-                ? 'bg-[#fdf3dc] text-[#8a5b00]'
-                : 'bg-[#fbe7e7] text-crit'
-            }`}
-          >
-            {c.critique_score}
-          </span>
+          <span className={`score-pill ${scoreBand(c.critique_score).cls}`}>{c.critique_score}<span className="font-normal opacity-75">/10</span></span>
         ) : (
           <span className="text-muted">—</span>
         )}
       </td>
       <td className="px-3.5 py-3">
         {c.status === 'ready' ? (
-          <span className="inline-flex items-center gap-1.5 text-xs text-muted">✓ Ready</span>
+          // Ready is the normal state — no badge (mockup). Keep an SR-only marker.
+          <span className="sr-only">Ready</span>
         ) : c.status === 'failed' ? (
-          <span className="inline-flex items-center gap-1.5 text-xs text-crit">✕ Failed</span>
+          <span className="inline-flex items-center gap-1.5 text-xs text-crit-text">Failed</span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-xs text-muted">
             <span className="w-3 h-3 border-2 border-hairline border-t-accent rounded-full animate-spin-slow" />
@@ -584,42 +612,35 @@ function ConversationRow({ conversation: c, onClick }: { conversation: Conversat
 }
 
 /**
- * #13: Signal chips in taxonomy order, capped at ~6 with "+N more",
- * context tag visually de-emphasized. Preserves all data — presentation only.
+ * Signal mix (v0.4): one 8px stacked bar (segment width = count share, colour =
+ * tag colour) + the top 3 tags in words + "+N more". Full breakdown in the
+ * bar's aria-label/title. Replaces the old emoji chip soup.
  */
-const TAXONOMY_ORDER = Object.keys(TAG_META);
-const CHIP_CAP = 6;
 const CONTEXT_TAGS = new Set(['context', 'person']);
 
 function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
-  // Sort entries by taxonomy order
   const tax = useTaxonomy();
-  const sorted = Object.entries(tagCounts).sort(
-    ([a], [b]) => (TAXONOMY_ORDER.indexOf(a) === -1 ? 99 : TAXONOMY_ORDER.indexOf(a)) - (TAXONOMY_ORDER.indexOf(b) === -1 ? 99 : TAXONOMY_ORDER.indexOf(b)),
-  );
+  const entries = Object.entries(tagCounts).filter(([, n]) => n > 0);
+  const total = entries.reduce((s, [, n]) => s + n, 0);
+  if (total === 0) return <span className="text-muted text-xs">—</span>;
 
-  const visible = sorted.slice(0, CHIP_CAP);
-  const overflow = sorted.length - CHIP_CAP;
+  const sorted = [...entries].sort((a, b) => b[1] - a[1]);
+  const named = sorted.filter(([t]) => !CONTEXT_TAGS.has(t));
+  const top = named.slice(0, 3);
+  const shownCount = top.reduce((s, [, n]) => s + n, 0);
+  const rest = total - shownCount;
+  const label = 'Signal mix: ' + sorted.map(([t, n]) => `${tax.name(t)} ${n}`).join(', ');
 
   return (
-    <div className="flex gap-1 flex-wrap">
-      {visible.map(([tag, count]) => (
-        <span
-          key={tag}
-          className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full border text-xs ${
-            CONTEXT_TAGS.has(tag)
-              ? 'border-hairline bg-page text-muted'
-              : 'border-hairline bg-page text-ink-2'
-          }`}
-        >
-          {tax.emoji(tag)} {count}
-        </span>
-      ))}
-      {overflow > 0 && (
-        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs text-muted">
-          +{overflow}
-        </span>
-      )}
+    <div className="flex flex-col gap-1.5 min-w-0">
+      <div className="flex h-2 rounded overflow-hidden bg-hairline" role="img" aria-label={label} title={label}>
+        {sorted.map(([t, n]) => (
+          <span key={t} className="block h-full" style={{ width: `${(n / total * 100).toFixed(1)}%`, background: tagColor(t) }} />
+        ))}
+      </div>
+      <span className="trunc text-xs text-muted" title={label}>
+        {top.map(([t, n]) => `${tax.name(t)} ${n}`).join(' · ')}{rest > 0 ? `  +${rest} more` : ''}
+      </span>
     </div>
   );
 }
