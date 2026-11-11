@@ -194,4 +194,53 @@ describe('Settings management', () => {
       company_id: 10,
     }));
   });
+
+  it('reorders a taxonomy tag by swapping sort_order with its neighbor', async () => {
+    const twoTags = [
+      { key: 'pain', emoji: '⚡', name: 'Pain / problem', description: null, signal_strength: 'strong', sort_order: 1, is_active: true, origin: 'core', category: null },
+      { key: 'money', emoji: '💰', name: 'Money', description: null, signal_strength: 'strong', sort_order: 2, is_active: true, origin: 'core', category: null },
+    ];
+    const patches: { key: string; body: Record<string, unknown> }[] = [];
+    server.use(
+      http.get('/api/settings/status', () => HttpResponse.json(localStatus)),
+      http.get('/api/tags', () => HttpResponse.json(twoTags)),
+      http.get('/api/companies', () => HttpResponse.json(companies)),
+      http.get('/api/contacts', () => HttpResponse.json(contacts)),
+      http.patch('/api/tags/:key', async ({ request, params }) => {
+        const body = (await request.json()) as Record<string, unknown>;
+        patches.push({ key: params.key as string, body });
+        return HttpResponse.json({ ...twoTags.find((t) => t.key === params.key), ...body });
+      }),
+    );
+    const { SettingsPage } = await import('../pages/SettingsPage');
+    const user = userEvent.setup();
+
+    render(<SettingsPage />, { wrapper: createWrapper() });
+
+    // Move the second tag (Money, sort_order 2) up — swaps with Pain (sort_order 1).
+    await user.click(await screen.findByRole('button', { name: 'Move Money up' }));
+
+    await waitFor(() => expect(patches.length).toBe(2));
+    expect(patches).toContainEqual({ key: 'money', body: { sort_order: 1 } });
+    expect(patches).toContainEqual({ key: 'pain', body: { sort_order: 2 } });
+  });
+
+  it('disables the up arrow on the first tag and the down arrow on the last', async () => {
+    const twoTags = [
+      { key: 'pain', emoji: '⚡', name: 'Pain / problem', description: null, signal_strength: 'strong', sort_order: 1, is_active: true, origin: 'core', category: null },
+      { key: 'money', emoji: '💰', name: 'Money', description: null, signal_strength: 'strong', sort_order: 2, is_active: true, origin: 'core', category: null },
+    ];
+    server.use(
+      http.get('/api/settings/status', () => HttpResponse.json(localStatus)),
+      http.get('/api/tags', () => HttpResponse.json(twoTags)),
+      http.get('/api/companies', () => HttpResponse.json(companies)),
+      http.get('/api/contacts', () => HttpResponse.json(contacts)),
+    );
+    const { SettingsPage } = await import('../pages/SettingsPage');
+
+    render(<SettingsPage />, { wrapper: createWrapper() });
+
+    expect(await screen.findByRole('button', { name: 'Move Pain / problem up' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move Money down' })).toBeDisabled();
+  });
 });

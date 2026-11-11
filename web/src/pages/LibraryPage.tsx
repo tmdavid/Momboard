@@ -6,6 +6,7 @@ import { NewConversationModal, NewConversationFormData } from '../components/New
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { TAG_META } from '../constants';
 import { useTaxonomy } from '../hooks/useTaxonomy';
+import { TagFilterBar } from '../components/TagFilterBar';
 import { InboxPane } from './InboxPage';
 
 export function LibraryPage() {
@@ -132,8 +133,6 @@ export function LibraryPage() {
     },
     [setSearchParams],
   );
-
-  const filterTags = Object.entries(TAG_META).slice(0, 8);
 
   const conversations = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -321,19 +320,7 @@ export function LibraryPage() {
             />
           </div>
           <div className="flex gap-1.5 flex-wrap">
-            {filterTags.map(([key, meta]) => (
-              <button
-                key={key}
-                onClick={() => toggleTag(key)}
-                className={`px-2.5 py-1 rounded-full border text-[13px] cursor-pointer ${
-                  activeTags.includes(key)
-                    ? 'bg-accent text-white border-accent font-semibold'
-                    : 'bg-surface border-hairline text-ink-2'
-                }`}
-              >
-                {meta.emoji} {meta.name}
-              </button>
-            ))}
+            <TagFilterBar isActive={(key) => activeTags.includes(key)} onToggle={toggleTag} />
           </div>
           <select
             className="px-2 py-1.5 border border-hairline rounded-lg bg-page text-ink-2 text-sm"

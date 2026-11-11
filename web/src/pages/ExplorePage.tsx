@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { api, HighlightWithContext } from '../api';
-import { TAG_META } from '../constants';
+import { TagFilterBar } from '../components/TagFilterBar';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 
 const SYNTHESIS_THRESHOLD = 5;
@@ -71,8 +71,6 @@ export function ExplorePage() {
     });
   };
 
-  const filterTags = Object.entries(TAG_META).slice(0, 6);
-
   const belowThreshold = filteredItems.length < SYNTHESIS_THRESHOLD;
   const needed = SYNTHESIS_THRESHOLD - filteredItems.length;
 
@@ -88,19 +86,7 @@ export function ExplorePage() {
             : 'bg-surface border-hairline'
         }`} data-testid="filter-container">
           <span className="text-xs text-muted font-semibold">TAGS</span>
-          {filterTags.map(([key, meta]) => (
-            <button
-              key={key}
-              onClick={() => toggleTag(key)}
-              className={`px-2.5 py-1 rounded-full border text-[13px] cursor-pointer ${
-                activeTags.has(key)
-                  ? 'bg-accent text-white border-accent font-semibold'
-                  : 'bg-surface border-hairline text-ink-2'
-              }`}
-            >
-              {meta.emoji} {meta.name}
-            </button>
-          ))}
+          <TagFilterBar isActive={(key) => activeTags.has(key)} onToggle={toggleTag} />
           <select
             className="px-2 py-1.5 border border-hairline rounded-lg bg-page text-ink-2 text-sm"
             value={companyId || ''}

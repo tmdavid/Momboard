@@ -46,9 +46,9 @@ describe('Explore page', () => {
       expect(screen.getByText(/5 highlights/)).toBeInTheDocument();
     });
 
-    // After toggling a tag off, the count should update  
-    const painBtn = screen.getAllByRole('button').find(b => b.textContent?.includes('pain'));
-    if (painBtn) await user.click(painBtn);
+    // After toggling a tag off, the count should update
+    const painBtn = await screen.findByRole('button', { name: /pain/i });
+    await user.click(painBtn);
 
     // After removing pain from active (leaving only workaround), count changes
     await waitFor(() => {

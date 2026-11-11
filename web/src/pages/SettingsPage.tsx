@@ -62,6 +62,24 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
     },
   });
 
+  // Reorder a tag up/down by swapping its sort_order with the adjacent tag.
+  // "most common" in the filter bar quick row is curated via this order.
+  const reorderTag = useMutation({
+    mutationFn: async ({ tag, direction }: { tag: Tag; direction: 'up' | 'down' }) => {
+      const ordered = [...tags].sort((a, b) => a.sort_order - b.sort_order);
+      const idx = ordered.findIndex((t) => t.key === tag.key);
+      const neighborIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (neighborIdx < 0 || neighborIdx >= ordered.length) return;
+      const neighbor = ordered[neighborIdx];
+      // Swap the two sort_order values.
+      await api.updateTag(tag.key, { sort_order: neighbor.sort_order });
+      await api.updateTag(neighbor.key, { sort_order: tag.sort_order });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tags'] });
+    },
+  });
+
   const createTag = useMutation({
     mutationFn: () => api.createTag({
       key: key.trim(),
@@ -111,8 +129,30 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
       {error && <p className="text-sm text-crit" role="alert">Failed to load taxonomy.</p>}
       {!isLoading && !error && (
         <div className="divide-y divide-hairline border border-hairline rounded-lg overflow-hidden">
-          {tags.map((tag) => (
+          {[...tags].sort((a, b) => a.sort_order - b.sort_order).map((tag, idx, ordered) => (
             <div key={tag.key} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+              {canManage && (
+                <div className="flex flex-col">
+                  <button
+                    type="button"
+                    aria-label={`Move ${tag.name} up`}
+                    disabled={idx === 0 || reorderTag.isPending}
+                    onClick={() => reorderTag.mutate({ tag, direction: 'up' })}
+                    className="text-xs leading-none text-muted hover:text-accent disabled:opacity-30 bg-transparent border-none cursor-pointer px-1"
+                  >
+                    ▲
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Move ${tag.name} down`}
+                    disabled={idx === ordered.length - 1 || reorderTag.isPending}
+                    onClick={() => reorderTag.mutate({ tag, direction: 'down' })}
+                    className="text-xs leading-none text-muted hover:text-accent disabled:opacity-30 bg-transparent border-none cursor-pointer px-1"
+                  >
+                    ▼
+                  </button>
+                </div>
+              )}
               <span className="text-lg w-6 text-center" aria-hidden="true">{tag.emoji}</span>
               <div className="min-w-0 flex-1">
                 <div className="font-medium text-ink-2">{tag.name}</div>

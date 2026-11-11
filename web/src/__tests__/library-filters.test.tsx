@@ -52,7 +52,7 @@ describe('T15 — Multi-tag filter', () => {
     });
 
     // Click first tag: ⚡ pain
-    const painBtn = screen.getByRole('button', { name: /⚡ pain/i });
+    const painBtn = await screen.findByRole('button', { name: /⚡ pain/i });
     await user.click(painBtn);
 
     // Click second tag: 💰 money
@@ -90,11 +90,11 @@ describe('T15 — Multi-tag filter', () => {
     });
 
     // Select pain
-    await user.click(screen.getByRole('button', { name: /⚡ pain/i }));
+    await user.click(await screen.findByRole('button', { name: /⚡ pain/i }));
     // Select money
     await user.click(screen.getByRole('button', { name: /💰 money/i }));
     // Deselect pain
-    await user.click(screen.getByRole('button', { name: /⚡ pain/i }));
+    await user.click(await screen.findByRole('button', { name: /⚡ pain/i }));
 
     await waitFor(() => {
       const lastUrl = requestUrls[requestUrls.length - 1];
