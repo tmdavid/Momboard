@@ -9,26 +9,8 @@ export function AppHeader() {
   const initial = auth ? (auth.user.name || auth.user.email)[0].toUpperCase() : '?';
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [term, setTerm] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
-  const searchRef = useRef<HTMLInputElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  // "/" focuses the global search (unless typing in a field already).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '/') return;
-      const el = document.activeElement;
-      const typing = el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement ||
-        (el instanceof HTMLElement && el.isContentEditable);
-      if (!typing) {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -38,12 +20,6 @@ export function AppHeader() {
     document.addEventListener('mousedown', onOutside);
     return () => document.removeEventListener('mousedown', onOutside);
   }, [menuOpen]);
-
-  const submitSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    // Global search reuses the Library search (titles + transcripts); no new API.
-    navigate(term.trim() ? `/?q=${encodeURIComponent(term.trim())}` : '/');
-  };
 
   const handleLogout = async () => {
     try {
@@ -66,24 +42,6 @@ export function AppHeader() {
         </span>
         MomBoard
       </Link>
-
-      <form onSubmit={submitSearch} className="flex-1 max-w-[520px] min-w-[180px]">
-        <label className="flex items-center gap-2 h-9 px-3 rounded-lg bg-sub text-muted focus-within:bg-surface focus-within:border focus-within:border-accent">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-            <circle cx="11" cy="11" r="7" />
-            <path d="M20 20l-4-4" />
-          </svg>
-          <input
-            ref={searchRef}
-            value={term}
-            onChange={(e) => setTerm(e.target.value)}
-            placeholder="Search calls, companies and quotes"
-            aria-label="Search"
-            className="flex-1 bg-transparent border-none outline-none text-ink-2 placeholder:text-muted min-w-0"
-          />
-          <span className="text-xs border border-hairline rounded px-1.5 bg-surface text-muted">/</span>
-        </label>
-      </form>
 
       <div className="ml-auto flex items-center gap-3">
         <NavLink

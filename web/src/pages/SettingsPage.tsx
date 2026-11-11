@@ -29,7 +29,7 @@ function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
       aria-hidden="true"
-      className={`inline-block w-2 h-2 rounded-full mr-2 ${ok ? 'bg-good' : 'bg-hairline'}`}
+      className={`inline-block w-2 h-2 rounded-full ${ok ? 'bg-good' : 'bg-[#d0d5dd]'}`}
     />
   );
 }
@@ -39,6 +39,112 @@ function MutationError({ error }: { error: Error | null }) {
   return <p className="text-xs text-crit mt-2" role="alert">{error.message}</p>;
 }
 
+/** Card wrapper matching the mockup (white, 1px line, 12px radius, 20px pad). */
+function Card({ id, children }: { id?: string; children: React.ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-20 bg-surface border border-hairline rounded-xl p-5 flex flex-col gap-3">
+      {children}
+    </section>
+  );
+}
+
+function AiModelSettings({ status }: { status: SettingsStatus }) {
+  const [showId, setShowId] = useState(false);
+  const llm = status.llm;
+  // Friendly provider label (no raw ARN / account id in the main UI).
+  const provider = llm.backend === 'bedrock' ? 'AWS Bedrock' : llm.backend === 'local' ? 'Local (Ollama)' : 'OpenAI';
+  const friendlyModel = llm.single_model ? 'Single model' : 'Per-stage models';
+
+  return (
+    <Card id="llm">
+      <div className="flex flex-col">
+        <h2 className="text-base font-semibold text-ink">AI model</h2>
+        <span className="text-[13px] text-muted">Read-only. Change it in your environment variables, then restart.</span>
+      </div>
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-muted">Provider</span>
+          <span className="font-semibold text-ink">{provider}</span>
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-muted">Model</span>
+          <span className="font-semibold text-ink flex items-center gap-2">
+            {friendlyModel}
+            <button
+              type="button"
+              onClick={() => setShowId((v) => !v)}
+              className="text-xs font-medium text-accent bg-transparent border-none cursor-pointer p-0"
+            >
+              {showId ? 'hide ID' : 'show ID'}
+            </button>
+          </span>
+          {showId && (
+            <span className="text-xs text-muted font-mono break-all mt-0.5">
+              {llm.single_model
+                ? llm.model_tagger
+                : `normalizer=${llm.model_normalizer} · tagger=${llm.model_tagger} · analyst=${llm.model_analyst} · synthesizer=${llm.model_synthesizer}`}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-col gap-0.5">
+          <span className="text-xs text-muted">Credentials</span>
+          <span className={`font-semibold flex items-center gap-1.5 ${llm.credential_ready ? 'text-good-text' : 'text-muted'}`}>
+            <StatusDot ok={llm.credential_ready} />
+            {llm.credential_label}
+          </span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function SourcesSettings({ status }: { status: SettingsStatus }) {
+  const rows = [
+    { name: 'Meeting bots', desc: 'Send a bot to record and transcribe calls', ok: status.vexa.configured, detail: status.vexa.detail, to: '/meetings' },
+    { name: 'Google Drive sync', desc: 'Import transcripts from a shared folder', ok: status.gdrive.configured, detail: status.gdrive.detail, to: null },
+    { name: 'Weekly digest', desc: 'Post a summary to Slack every Monday 08:00 UTC', ok: status.slack.configured, detail: status.digest.schedule, to: '/digest' },
+  ];
+  return (
+    <Card id="sources">
+      <h2 className="text-base font-semibold text-ink">Sources and delivery</h2>
+      {rows.map((r) => (
+        <div key={r.name} className="flex flex-wrap items-center gap-3 py-2.5 border-t border-sub">
+          <div className="flex flex-col min-w-0">
+            {r.to ? (
+              <Link to={r.to} className="font-semibold text-ink hover:underline">{r.name}</Link>
+            ) : (
+              <span className="font-semibold text-ink">{r.name}</span>
+            )}
+            <span className="text-xs text-muted">{r.desc}</span>
+          </div>
+          <span className={`ml-auto flex items-center gap-1.5 text-[13px] ${r.ok ? 'text-good-text' : 'text-muted'}`}>
+            <StatusDot ok={r.ok} />
+            {r.ok ? r.detail || 'Connected' : 'Not set up'}
+          </span>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
+function ActiveSwitch({ on, disabled, onToggle, label }: { on: boolean; disabled: boolean; onToggle: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onToggle}
+      className={`inline-flex w-9 h-5 rounded-pill p-0.5 box-border border-none cursor-pointer disabled:opacity-50 ${
+        on ? 'bg-accent justify-end' : 'bg-[#d0d5dd] justify-start'
+      }`}
+    >
+      <span className="w-4 h-4 rounded-pill bg-white shadow" />
+    </button>
+  );
+}
+
 function TaxonomySettings({ canManage }: { canManage: boolean }) {
   const queryClient = useQueryClient();
   const [key, setKey] = useState('');
@@ -46,6 +152,8 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
   const [name, setName] = useState('');
   const [signalStrength, setSignalStrength] = useState('medium');
   const [category, setCategory] = useState('');
+  const [view, setView] = useState<'core' | 'custom'>('core');
+  const [showAdd, setShowAdd] = useState(false);
 
   const { data: tags = [], isLoading, error } = useQuery({
     queryKey: ['tags'],
@@ -62,8 +170,6 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
     },
   });
 
-  // Reorder a tag up/down by swapping its sort_order with the adjacent tag.
-  // "most common" in the filter bar quick row is curated via this order.
   const reorderTag = useMutation({
     mutationFn: async ({ tag, direction }: { tag: Tag; direction: 'up' | 'down' }) => {
       const ordered = [...tags].sort((a, b) => a.sort_order - b.sort_order);
@@ -71,13 +177,10 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
       const neighborIdx = direction === 'up' ? idx - 1 : idx + 1;
       if (neighborIdx < 0 || neighborIdx >= ordered.length) return;
       const neighbor = ordered[neighborIdx];
-      // Swap the two sort_order values.
       await api.updateTag(tag.key, { sort_order: neighbor.sort_order });
       await api.updateTag(neighbor.key, { sort_order: tag.sort_order });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tags'] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tags'] }),
   });
 
   const createTag = useMutation({
@@ -96,11 +199,8 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
       queryClient.setQueryData<Tag[]>(['tags'], (current = []) =>
         [...current, created].sort((a, b) => a.sort_order - b.sort_order),
       );
-      setKey('');
-      setEmoji('');
-      setName('');
-      setSignalStrength('medium');
-      setCategory('');
+      setKey(''); setEmoji(''); setName(''); setSignalStrength('medium'); setCategory('');
+      setShowAdd(false);
     },
   });
 
@@ -109,108 +209,112 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
     if (key.trim() && emoji.trim() && name.trim()) createTag.mutate();
   };
 
-  // Existing categories to suggest in the create-form (dynamic — no new code to
-  // add a category; it appears here as soon as one tag uses it).
   const existingCategories = Array.from(
     new Set(tags.map((tag) => tag.category).filter((c): c is string => !!c)),
   ).sort((a, b) => a.localeCompare(b));
 
+  const ordered = [...tags].sort((a, b) => a.sort_order - b.sort_order);
+  const shown = ordered.filter((t) => (view === 'core' ? t.origin === 'core' : t.origin !== 'core'));
+  const coreCount = ordered.filter((t) => t.origin === 'core').length;
+  const customCount = ordered.length - coreCount;
+
   return (
-    <section id="taxonomy" className="scroll-mt-20 bg-surface border border-hairline rounded-xl p-5 mb-4">
-      <div className="flex items-start justify-between gap-4 mb-3">
-        <div>
-          <h2 className="text-sm font-semibold text-ink">🏷 Taxonomy</h2>
-          <p className="text-xs text-muted mt-1">Evidence tags used by review, Explore, and agents.</p>
+    <Card id="taxonomy">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="flex flex-col">
+          <h2 className="text-base font-semibold text-ink">Taxonomy</h2>
+          <span className="text-[13px] text-muted">{coreCount} core · {customCount} custom tags. Changes save immediately.</span>
         </div>
-        {!canManage && <span className="text-xs text-muted">Admin access required to edit</span>}
+        {canManage && (
+          <button
+            type="button"
+            onClick={() => setShowAdd((v) => !v)}
+            className="btn btn-sm btn-primary ml-auto"
+          >
+            Add tag
+          </button>
+        )}
+        {!canManage && <span className="ml-auto text-xs text-muted">Admin access required to edit</span>}
+      </div>
+
+      {/* Core | Custom segmented control */}
+      <div className="flex gap-0.5 p-0.5 rounded-lg bg-sub self-start" role="tablist" aria-label="Tag type">
+        {(['core', 'custom'] as const).map((v) => (
+          <button
+            key={v}
+            role="tab"
+            aria-selected={view === v}
+            onClick={() => setView(v)}
+            className={`h-[30px] px-3 rounded-md border-none font-semibold capitalize cursor-pointer ${
+              view === v ? 'bg-surface text-ink shadow-sm' : 'bg-transparent text-ink-2'
+            }`}
+          >
+            {v}
+          </button>
+        ))}
       </div>
 
       {isLoading && <p className="text-sm text-muted">Loading taxonomy…</p>}
       {error && <p className="text-sm text-crit" role="alert">Failed to load taxonomy.</p>}
       {!isLoading && !error && (
-        <div className="divide-y divide-hairline border border-hairline rounded-lg overflow-hidden">
-          {[...tags].sort((a, b) => a.sort_order - b.sort_order).map((tag, idx, ordered) => (
-            <div key={tag.key} className="flex items-center gap-3 px-3 py-2.5 text-sm">
-              {canManage && (
-                <div className="flex flex-col">
-                  <button
-                    type="button"
-                    aria-label={`Move ${tag.name} up`}
-                    disabled={idx === 0 || reorderTag.isPending}
-                    onClick={() => reorderTag.mutate({ tag, direction: 'up' })}
-                    className="text-xs leading-none text-muted hover:text-accent disabled:opacity-30 bg-transparent border-none cursor-pointer px-1"
-                  >
-                    ▲
-                  </button>
-                  <button
-                    type="button"
-                    aria-label={`Move ${tag.name} down`}
-                    disabled={idx === ordered.length - 1 || reorderTag.isPending}
-                    onClick={() => reorderTag.mutate({ tag, direction: 'down' })}
-                    className="text-xs leading-none text-muted hover:text-accent disabled:opacity-30 bg-transparent border-none cursor-pointer px-1"
-                  >
-                    ▼
-                  </button>
-                </div>
-              )}
-              <span className="text-lg w-6 text-center" aria-hidden="true">{tag.emoji}</span>
-              <div className="min-w-0 flex-1">
-                <div className="font-medium text-ink-2">{tag.name}</div>
-                <div className="text-xs text-muted">
-                  <code>{tag.key}</code> · {tag.signal_strength || 'unrated'}
-                </div>
-              </div>
-              <span className={`text-xs ${tag.is_active ? 'text-good-text' : 'text-muted'}`}>
-                {tag.is_active ? 'active' : 'inactive'}
-              </span>
-              {canManage && (
-                <button
-                  type="button"
-                  className="px-2.5 py-1 text-xs border border-hairline rounded-md hover:border-accent disabled:opacity-50"
-                  aria-label={`${tag.is_active ? 'Deactivate' : 'Activate'} ${tag.name}`}
-                  disabled={toggleTag.isPending}
-                  onClick={() => toggleTag.mutate({ tag, active: !tag.is_active })}
-                >
-                  {tag.is_active ? 'Deactivate' : 'Activate'}
-                </button>
-              )}
+        <div className="overflow-x-auto">
+          <div className="min-w-[600px]">
+            <div className="grid items-center gap-3 py-2 text-xs font-semibold text-muted border-b border-hairline"
+              style={{ gridTemplateColumns: canManage ? '44px 32px minmax(0,1fr) 130px 110px 90px' : '32px minmax(0,1fr) 130px 110px 90px' }}>
+              {canManage && <span />}
+              <span />
+              <span>Tag</span>
+              <span>Category</span>
+              <span>Strength</span>
+              <span className="text-right">Active</span>
             </div>
-          ))}
+            {shown.map((tag, idx) => (
+              <div key={tag.key} className="grid items-center gap-3 py-2.5 border-b border-sub"
+                style={{ gridTemplateColumns: canManage ? '44px 32px minmax(0,1fr) 130px 110px 90px' : '32px minmax(0,1fr) 130px 110px 90px' }}>
+                {canManage && (
+                  <div className="flex flex-col">
+                    <button type="button" aria-label={`Move ${tag.name} up`} disabled={idx === 0 || reorderTag.isPending}
+                      onClick={() => reorderTag.mutate({ tag, direction: 'up' })}
+                      className="text-xs leading-none text-muted hover:text-accent disabled:opacity-30 bg-transparent border-none cursor-pointer px-1">▲</button>
+                    <button type="button" aria-label={`Move ${tag.name} down`} disabled={idx === shown.length - 1 || reorderTag.isPending}
+                      onClick={() => reorderTag.mutate({ tag, direction: 'down' })}
+                      className="text-xs leading-none text-muted hover:text-accent disabled:opacity-30 bg-transparent border-none cursor-pointer px-1">▼</button>
+                  </div>
+                )}
+                <span className="text-lg text-center" aria-hidden="true">{tag.emoji}</span>
+                <div className="min-w-0 flex flex-col">
+                  <span className="trunc font-semibold text-ink">{tag.name}</span>
+                  {tag.description && <span className="trunc text-xs text-muted" title={tag.description}>{tag.description}</span>}
+                </div>
+                <span>
+                  {tag.category
+                    ? <span className="text-xs font-semibold px-2.5 py-0.5 rounded-pill bg-sub text-ink-2 capitalize">{tag.category}</span>
+                    : <span className="text-xs text-muted">—</span>}
+                </span>
+                <span className="text-[13px]">{tag.signal_strength || 'n/a'}</span>
+                <span className="flex justify-end">
+                  {canManage
+                    ? <ActiveSwitch on={tag.is_active} disabled={toggleTag.isPending}
+                        onToggle={() => toggleTag.mutate({ tag, active: !tag.is_active })}
+                        label={`${tag.is_active ? 'Deactivate' : 'Activate'} ${tag.name}`} />
+                    : <span className={`text-xs ${tag.is_active ? 'text-good-text' : 'text-muted'}`}>{tag.is_active ? 'active' : 'inactive'}</span>}
+                </span>
+              </div>
+            ))}
+            {shown.length === 0 && <p className="text-sm text-muted py-4">No {view} tags.</p>}
+          </div>
         </div>
       )}
       <MutationError error={toggleTag.error as Error | null} />
 
-      {canManage && (
-        <form onSubmit={handleCreate} className="mt-4 border-t border-hairline pt-4">
-          <h3 className="text-sm font-medium mb-2">Add taxonomy tag</h3>
-          <div className="grid grid-cols-[1fr_72px_1.5fr_130px_130px_auto] gap-2">
-            <input
-              aria-label="New tag key"
-              value={key}
-              onChange={(event) => setKey(event.target.value)}
-              placeholder="key"
-              className="border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <input
-              aria-label="New tag emoji"
-              value={emoji}
-              onChange={(event) => setEmoji(event.target.value)}
-              placeholder="emoji"
-              className="border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <input
-              aria-label="New tag name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Display name"
-              className="border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <select
-              aria-label="New tag signal strength"
-              value={signalStrength}
-              onChange={(event) => setSignalStrength(event.target.value)}
-              className="border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            >
+      {canManage && showAdd && (
+        <form onSubmit={handleCreate} className="border-t border-hairline pt-4 flex flex-col gap-2">
+          <h3 className="text-sm font-medium">Add taxonomy tag</h3>
+          <div className="grid gap-2" style={{ gridTemplateColumns: '1fr 72px 1.5fr 130px 130px auto' }}>
+            <input aria-label="New tag key" value={key} onChange={(e) => setKey(e.target.value)} placeholder="key" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+            <input aria-label="New tag emoji" value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="emoji" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+            <input aria-label="New tag name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Display name" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+            <select aria-label="New tag signal strength" value={signalStrength} onChange={(e) => setSignalStrength(e.target.value)} className="border border-hairline rounded-lg px-2.5 py-2 text-sm">
               <option value="very strong">very strong</option>
               <option value="strong">strong</option>
               <option value="medium">medium</option>
@@ -218,31 +322,16 @@ function TaxonomySettings({ canManage }: { canManage: boolean }) {
               <option value="anti-signal">anti-signal</option>
               <option value="n/a">n/a</option>
             </select>
-            <input
-              aria-label="New tag category"
-              value={category}
-              onChange={(event) => setCategory(event.target.value)}
-              placeholder="category"
-              list="tag-category-suggestions"
-              className="border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
+            <input aria-label="New tag category" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="category" list="tag-category-suggestions" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
             <datalist id="tag-category-suggestions">
-              {existingCategories.map((cat) => (
-                <option key={cat} value={cat} />
-              ))}
+              {existingCategories.map((cat) => <option key={cat} value={cat} />)}
             </datalist>
-            <button
-              type="submit"
-              className="btn btn-primary whitespace-nowrap"
-              disabled={!key.trim() || !emoji.trim() || !name.trim() || createTag.isPending}
-            >
-              Add tag
-            </button>
+            <button type="submit" className="btn btn-sm btn-primary whitespace-nowrap" disabled={!key.trim() || !emoji.trim() || !name.trim() || createTag.isPending}>Add tag</button>
           </div>
           <MutationError error={createTag.error as Error | null} />
         </form>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -254,98 +343,75 @@ function DirectorySettings() {
   const [contactRole, setContactRole] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [contactCompanyId, setContactCompanyId] = useState('');
+  const [search, setSearch] = useState('');
 
-  const companiesQuery = useQuery({
-    queryKey: ['companies'],
-    queryFn: () => api.listCompanies(),
-  });
-  const contactsQuery = useQuery({
-    queryKey: ['contacts'],
-    queryFn: () => api.listContacts(),
-  });
+  const companiesQuery = useQuery({ queryKey: ['companies'], queryFn: () => api.listCompanies() });
+  const contactsQuery = useQuery({ queryKey: ['contacts'], queryFn: () => api.listContacts() });
   const companies = companiesQuery.data ?? [];
   const contacts = contactsQuery.data ?? [];
 
   const createCompany = useMutation({
-    mutationFn: () => api.createCompany({
-      name: companyName.trim(),
-      domain: companyDomain.trim() || null,
-    }),
+    mutationFn: () => api.createCompany({ name: companyName.trim(), domain: companyDomain.trim() || null }),
     onSuccess: (created) => {
-      queryClient.setQueryData<Company[]>(['companies'], (current = []) =>
-        [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
-      );
+      queryClient.setQueryData<Company[]>(['companies'], (current = []) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
       queryClient.invalidateQueries({ queryKey: ['settings-status'] });
-      setCompanyName('');
-      setCompanyDomain('');
+      setCompanyName(''); setCompanyDomain('');
     },
   });
 
   const createContact = useMutation({
     mutationFn: () => api.createContact({
-      name: contactName.trim(),
-      role: contactRole.trim() || null,
-      email: contactEmail.trim() || null,
+      name: contactName.trim(), role: contactRole.trim() || null, email: contactEmail.trim() || null,
       company_id: contactCompanyId ? Number(contactCompanyId) : null,
     }),
     onSuccess: (created) => {
-      queryClient.setQueryData<Contact[]>(['contacts'], (current = []) =>
-        [...current, created].sort((a, b) => a.name.localeCompare(b.name)),
-      );
-      setContactName('');
-      setContactRole('');
-      setContactEmail('');
-      setContactCompanyId('');
+      queryClient.setQueryData<Contact[]>(['contacts'], (current = []) => [...current, created].sort((a, b) => a.name.localeCompare(b.name)));
+      setContactName(''); setContactRole(''); setContactEmail(''); setContactCompanyId('');
     },
   });
 
-  const companyById = new Map(companies.map((company) => [company.id, company]));
+  const companyById = new Map(companies.map((c) => [c.id, c]));
+  const q = search.trim().toLowerCase();
+  const shownCompanies = q ? companies.filter((c) => c.name.toLowerCase().includes(q)) : companies;
 
   return (
-    <section id="directory" className="scroll-mt-20 bg-surface border border-hairline rounded-xl p-5 mb-4">
-      <h2 className="text-sm font-semibold text-ink">🏢 Companies &amp; contacts</h2>
-      <p className="text-xs text-muted mt-1 mb-4">Directory entries can be reused when capturing conversations.</p>
+    <Card id="directory">
+      <div className="flex items-center gap-3">
+        <h2 className="text-base font-semibold text-ink">Companies and contacts</h2>
+        <span className="text-[13px] text-muted">{companies.length} companies</span>
+      </div>
+      {(companiesQuery.error || contactsQuery.error) && <p className="text-sm text-crit" role="alert">Failed to load the directory.</p>}
 
-      {(companiesQuery.error || contactsQuery.error) && (
-        <p className="text-sm text-crit mb-3" role="alert">Failed to load the directory.</p>
-      )}
+      <label className="flex items-center gap-2 h-[38px] px-3 rounded-lg border border-hairline text-muted">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4-4" /></svg>
+        <input aria-label="Find a company" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Find a company" className="flex-1 bg-transparent border-none outline-none text-ink-2 placeholder:text-muted" />
+      </label>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Companies</h3>
-          <div className="border border-hairline rounded-lg divide-y divide-hairline max-h-64 overflow-auto">
-            {companies.length === 0 && <p className="text-sm text-muted p-3">No companies yet.</p>}
-            {companies.map((company) => {
+          <h3 className="text-xs font-semibold text-muted mb-2">Companies</h3>
+          <div className="border border-hairline rounded-lg divide-y divide-sub max-h-64 overflow-auto">
+            {shownCompanies.length === 0 && <p className="text-sm text-muted p-3">No companies.</p>}
+            {shownCompanies.map((company) => {
               const count = company.conversation_count ?? 0;
               return (
-                <div key={company.id} className="p-3 text-sm">
-                  <div className="flex justify-between gap-2">
-                    <Link to={`/companies/${company.id}`} className="font-medium text-accent hover:underline">
-                      {company.name}
-                    </Link>
-                    <span className="text-xs text-muted">
-                      {count} conversation{count === 1 ? '' : 's'}
-                    </span>
-                  </div>
-                  {company.domain && <div className="text-xs text-muted mt-0.5">{company.domain}</div>}
+                <div key={company.id} className="p-3 text-sm flex items-center gap-2">
+                  <Link to={`/companies/${company.id}`} className="trunc font-semibold text-ink hover:underline">{company.name}</Link>
+                  <span className="ml-auto text-xs text-muted whitespace-nowrap">{count} conversation{count === 1 ? '' : 's'}</span>
                 </div>
               );
             })}
           </div>
         </div>
-
         <div>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-muted mb-2">Contacts</h3>
-          <div className="border border-hairline rounded-lg divide-y divide-hairline max-h-64 overflow-auto">
-            {contacts.length === 0 && <p className="text-sm text-muted p-3">No contacts yet.</p>}
+          <h3 className="text-xs font-semibold text-muted mb-2">Contacts</h3>
+          <div className="border border-hairline rounded-lg divide-y divide-sub max-h-64 overflow-auto">
+            {contacts.length === 0 && <p className="text-sm text-muted p-3">No contacts.</p>}
             {contacts.map((contact) => (
               <div key={contact.id} className="p-3 text-sm">
-                <Link to={`/contacts/${contact.id}`} className="font-medium text-accent hover:underline">
-                  {contact.name}
-                </Link>
+                <Link to={`/contacts/${contact.id}`} className="font-semibold text-ink hover:underline">{contact.name}</Link>
                 <div className="text-xs text-muted mt-0.5">
-                  {[contact.role, contact.company_id ? companyById.get(contact.company_id)?.name : null]
-                    .filter(Boolean).join(' · ') || 'No role or company'}
+                  {[contact.role, contact.company_id ? companyById.get(contact.company_id)?.name : null].filter(Boolean).join(' · ') || 'No role or company'}
                 </div>
               </div>
             ))}
@@ -353,95 +419,37 @@ function DirectorySettings() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mt-4 border-t border-hairline pt-4">
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (companyName.trim()) createCompany.mutate();
-          }}
-        >
-          <h3 className="text-sm font-medium mb-2">Add company</h3>
-          <div className="space-y-2">
-            <input
-              aria-label="New company name"
-              value={companyName}
-              onChange={(event) => setCompanyName(event.target.value)}
-              placeholder="Company name"
-              className="w-full border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <input
-              aria-label="New company domain"
-              value={companyDomain}
-              onChange={(event) => setCompanyDomain(event.target.value)}
-              placeholder="Domain (optional)"
-              className="w-full border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={!companyName.trim() || createCompany.isPending}
-            >
-              Add company
-            </button>
-          </div>
+      <div className="grid grid-cols-2 gap-4 border-t border-hairline pt-4">
+        <form onSubmit={(e) => { e.preventDefault(); if (companyName.trim()) createCompany.mutate(); }} className="flex flex-col gap-2">
+          <h3 className="text-sm font-medium">Add company</h3>
+          <input aria-label="New company name" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Company name" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+          <input aria-label="New company domain" value={companyDomain} onChange={(e) => setCompanyDomain(e.target.value)} placeholder="Domain (optional)" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+          <button type="submit" className="btn btn-sm btn-primary self-start" disabled={!companyName.trim() || createCompany.isPending}>Add company</button>
           <MutationError error={createCompany.error as Error | null} />
         </form>
-
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (contactName.trim()) createContact.mutate();
-          }}
-        >
-          <h3 className="text-sm font-medium mb-2">Add contact</h3>
-          <div className="space-y-2">
-            <input
-              aria-label="New contact name"
-              value={contactName}
-              onChange={(event) => setContactName(event.target.value)}
-              placeholder="Contact name"
-              className="w-full border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <input
-              aria-label="New contact role"
-              value={contactRole}
-              onChange={(event) => setContactRole(event.target.value)}
-              placeholder="Role (optional)"
-              className="w-full border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <input
-              aria-label="New contact email"
-              type="email"
-              value={contactEmail}
-              onChange={(event) => setContactEmail(event.target.value)}
-              placeholder="Email (optional)"
-              className="w-full border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            />
-            <select
-              aria-label="New contact company"
-              value={contactCompanyId}
-              onChange={(event) => setContactCompanyId(event.target.value)}
-              className="w-full border border-hairline rounded-lg px-2.5 py-2 bg-page text-sm"
-            >
-              <option value="">No company</option>
-              {companies.map((company) => (
-                <option key={company.id} value={company.id}>{company.name}</option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={!contactName.trim() || createContact.isPending}
-            >
-              Add contact
-            </button>
-          </div>
+        <form onSubmit={(e) => { e.preventDefault(); if (contactName.trim()) createContact.mutate(); }} className="flex flex-col gap-2">
+          <h3 className="text-sm font-medium">Add contact</h3>
+          <input aria-label="New contact name" value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Contact name" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+          <input aria-label="New contact role" value={contactRole} onChange={(e) => setContactRole(e.target.value)} placeholder="Role (optional)" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+          <input aria-label="New contact email" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="Email (optional)" className="border border-hairline rounded-lg px-2.5 py-2 text-sm" />
+          <select aria-label="New contact company" value={contactCompanyId} onChange={(e) => setContactCompanyId(e.target.value)} className="border border-hairline rounded-lg px-2.5 py-2 text-sm">
+            <option value="">No company</option>
+            {companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}
+          </select>
+          <button type="submit" className="btn btn-sm btn-primary self-start" disabled={!contactName.trim() || createContact.isPending}>Add contact</button>
           <MutationError error={createContact.error as Error | null} />
         </form>
       </div>
-    </section>
+    </Card>
   );
 }
+
+const SECTIONS = [
+  { label: 'AI model', href: '#llm' },
+  { label: 'Sources and delivery', href: '#sources' },
+  { label: 'Taxonomy', href: '#taxonomy' },
+  { label: 'Companies and contacts', href: '#directory' },
+];
 
 export function SettingsPage() {
   const location = useLocation();
@@ -452,102 +460,38 @@ export function SettingsPage() {
 
   useEffect(() => {
     if (!status || !location.hash) return;
-    const target = document.getElementById(location.hash.slice(1));
-    target?.scrollIntoView({ block: 'start' });
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' });
   }, [location.hash, status]);
 
   if (isLoading) {
     return (
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-[960px] mx-auto p-7 flex justify-center py-12">
-          <div className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin-slow" />
-        </div>
+      <main className="p-6 flex justify-center">
+        <div className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin-slow mt-8" />
       </main>
     );
   }
-
   if (error || !status) {
     return (
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-[960px] mx-auto p-7">
-          <div className="p-4 bg-surface border border-crit/20 rounded-xl text-crit text-sm">
-            Failed to load settings status.
-          </div>
-        </div>
+      <main className="p-6">
+        <div className="p-4 bg-surface border border-crit/20 rounded-xl text-crit text-sm">Failed to load settings status.</div>
       </main>
     );
   }
 
-  const singleModel = status.llm.single_model;
-  const keyReady = status.llm.credential_ready;
-
   return (
-    <main className="flex-1 overflow-auto">
-      <div className="max-w-[960px] mx-auto p-7">
-        <h1 className="text-xl font-bold tracking-tight mb-2">Settings</h1>
-        <p className="text-sm text-muted mb-6">
-          Provider credentials and integrations are read-only environment configuration. Taxonomy and directory changes save immediately.
-        </p>
-
-        <section id="llm" className="scroll-mt-20 bg-surface border border-hairline rounded-xl p-5 mb-4">
-          <h2 className="text-sm font-semibold mb-3 text-ink">🔑 LLM &amp; API configuration</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <span className="text-muted">Backend</span>
-              <div className="font-medium">{status.llm.backend}</div>
-            </div>
-            <div>
-              <span className="text-muted">Credential status</span>
-              <div className="font-medium">
-                <StatusDot ok={keyReady} />
-                {status.llm.credential_label}
-              </div>
-            </div>
-            {singleModel ? (
-              <div className="col-span-2">
-                <span className="text-muted">Model for all stages</span>
-                <div className="font-medium">{status.llm.model_tagger}</div>
-              </div>
-            ) : (
-              <>
-                <div><span className="text-muted">Normalizer model</span><div className="font-medium">{status.llm.model_normalizer}</div></div>
-                <div><span className="text-muted">Tagger model</span><div className="font-medium">{status.llm.model_tagger}</div></div>
-                <div><span className="text-muted">Analyst model</span><div className="font-medium">{status.llm.model_analyst}</div></div>
-                <div><span className="text-muted">Synthesizer model</span><div className="font-medium">{status.llm.model_synthesizer}</div></div>
-              </>
-            )}
-          </div>
-          <p className="text-xs text-muted mt-3">
-            Change <code>LLM_BACKEND</code>, provider credentials, and model variables in <code>.env</code> or deployment secrets, then restart MomBoard.
-          </p>
-        </section>
-
-        <section id="sources" className="scroll-mt-20 bg-surface border border-hairline rounded-xl p-5 mb-4">
-          <h2 className="text-sm font-semibold mb-3 text-ink">🔌 Sources &amp; delivery</h2>
-          <div className="space-y-3 text-sm">
-            <div className="flex justify-between items-center gap-4">
-              <div><Link to="/meetings" className="font-medium text-accent hover:underline">🤖 Vexa meeting bots</Link><div className="text-xs text-muted">VEXA_BASE_URL + VEXA_API_KEY</div></div>
-              <span className={status.vexa.configured ? 'text-good-text' : 'text-muted'}><StatusDot ok={status.vexa.configured} />{status.vexa.detail}</span>
-            </div>
-            <div className="flex justify-between items-center gap-4">
-              <div><span className="font-medium">📁 Google Drive sync</span><div className="text-xs text-muted">GDRIVE_FOLDER_ID + GDRIVE_SERVICE_ACCOUNT_JSON</div></div>
-              <span className={status.gdrive.configured ? 'text-good-text' : 'text-muted'}><StatusDot ok={status.gdrive.configured} />{status.gdrive.detail}</span>
-            </div>
-            <div className="flex justify-between items-center gap-4">
-              <div><Link to="/digest" className="font-medium text-accent hover:underline">📬 Weekly digest</Link><div className="text-xs text-muted">SLACK_WEBHOOK_URL · Monday 08:00 UTC</div></div>
-              <span className={status.slack.configured ? 'text-good-text' : 'text-muted'}><StatusDot ok={status.slack.configured} />{status.digest.schedule}</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-surface border border-hairline rounded-xl p-5 mb-4">
-          <h2 className="text-sm font-semibold mb-3 text-ink">📊 Data summary</h2>
-          <div className="grid grid-cols-2 gap-3 text-sm">
-            <div><span className="text-muted">Taxonomy tags</span><div className="font-medium">{status.taxonomy_count}</div></div>
-            <div><span className="text-muted">Active companies</span><div className="font-medium">{status.active_company_count}</div></div>
-          </div>
-        </section>
-
+    <main className="p-6 flex flex-wrap gap-6 items-start">
+      <nav aria-label="Settings sections" className="flex-[1_1_180px] max-w-[200px] flex flex-col gap-0.5">
+        <h1 className="text-2xl font-bold text-ink mb-3">Settings</h1>
+        {SECTIONS.map((s, i) => (
+          <a key={s.href} href={s.href}
+            className={`block px-3 py-2 rounded-lg font-medium ${i === 0 ? '' : ''} text-ink-2 hover:bg-sub`}>
+            {s.label}
+          </a>
+        ))}
+      </nav>
+      <div className="flex-[999_1_560px] min-w-0 flex flex-col gap-4">
+        <AiModelSettings status={status} />
+        <SourcesSettings status={status} />
         <TaxonomySettings canManage={status.can_manage_taxonomy === true} />
         <DirectorySettings />
       </div>

@@ -500,7 +500,8 @@ describe('UX #23: Token alignment', () => {
     await waitFor(() => {
       const h1 = screen.getByRole('heading', { level: 1, name: 'Settings' });
       expect(h1).toBeInTheDocument();
-      expect(h1.className).toContain('text-xl');
+      // v0.4 redesign: page titles are 24px (text-2xl), not the old text-xl.
+      expect(h1.className).toContain('text-2xl');
     });
   });
 });

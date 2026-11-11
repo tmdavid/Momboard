@@ -48,6 +48,8 @@ const tags = [
     signal_strength: 'strong',
     sort_order: 1,
     is_active: true,
+    origin: 'core',
+    category: null,
   },
 ];
 
@@ -89,8 +91,12 @@ describe('Settings management', () => {
 
     render(<SettingsPage />, { wrapper: createWrapper() });
 
-    expect(await screen.findByText('qwen3:8b')).toBeInTheDocument();
+    // Friendly provider + credential label are visible; the raw model ID is behind "show ID".
+    expect(await screen.findByText('Local (Ollama)')).toBeInTheDocument();
     expect(screen.getByText('Local model — no API key required')).toBeInTheDocument();
+    expect(screen.queryByText('qwen3:8b')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /show id/i }));
+    expect(screen.getByText('qwen3:8b')).toBeInTheDocument();
     expect(await screen.findByText('Pain / problem')).toBeInTheDocument();
     expect(await screen.findByRole('link', { name: 'Acme Corp' })).toBeInTheDocument();
     expect(await screen.findByText('Jane Doe')).toBeInTheDocument();
@@ -123,12 +129,13 @@ describe('Settings management', () => {
 
     render(<SettingsPage />, { wrapper: createWrapper() });
 
-    // Backend shown, AWS credential label (not OpenAI framing), per-stage models visible.
-    expect(await screen.findByText('bedrock')).toBeInTheDocument();
+    // Friendly AWS provider + credential label (not OpenAI framing, not raw ARN).
+    expect(await screen.findByText('AWS Bedrock')).toBeInTheDocument();
     expect(screen.getByText('AWS credentials resolved')).toBeInTheDocument();
-    expect(screen.getByText('eu.anthropic.claude-sonnet-5-5')).toBeInTheDocument();
-    // Per-stage labels render (not the single "Model for all stages" view).
-    expect(screen.getByText('Analyst model')).toBeInTheDocument();
+    // Raw model IDs are hidden until "show ID" is clicked.
+    expect(screen.queryByText(/eu.anthropic.claude-sonnet-5-5/)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /show id/i }));
+    expect(screen.getByText(/eu.anthropic.claude-sonnet-5-5/)).toBeInTheDocument();
   });
 
   it('lets an admin deactivate a taxonomy tag', async () => {
@@ -144,7 +151,7 @@ describe('Settings management', () => {
     const user = userEvent.setup();
 
     render(<SettingsPage />, { wrapper: createWrapper() });
-    await user.click(await screen.findByRole('button', { name: 'Deactivate Pain / problem' }));
+    await user.click(await screen.findByRole('switch', { name: 'Deactivate Pain / problem' }));
 
     await waitFor(() => expect(patchBody).toEqual({ is_active: false }));
   });
