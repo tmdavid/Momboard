@@ -7,6 +7,7 @@ import { AnalysisSidebar } from '../components/AnalysisSidebar';
 import { HighlightPopover } from '../components/HighlightPopover';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { formatDate } from '../utils/format';
 
 export function ConversationPage() {
   const { id } = useParams<{ id: string }>();
@@ -299,7 +300,7 @@ export function ConversationPage() {
         <div className="flex gap-1.5 ml-auto items-center">
           {convo.happened_at && (
             <span className="text-xs px-2 py-0.5 rounded-full bg-page border border-hairline text-ink-2">
-              {new Date(convo.happened_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+              {formatDate(convo.happened_at)}
             </span>
           )}
           {/* Show ALL contacts, not just the first */}

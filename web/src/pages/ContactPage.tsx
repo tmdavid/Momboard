@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatDate } from '../utils/format';
 
 type KindFilter = '' | 'conversations' | 'signals' | 'commitments';
 
@@ -224,7 +225,7 @@ export function ContactPage() {
                     </p>
                   )}
                   <time className="text-xs text-gray-400">
-                    {new Date(event.timestamp).toLocaleDateString()}
+                    {formatDate(event.timestamp)}
                   </time>
                 </div>
               </li>

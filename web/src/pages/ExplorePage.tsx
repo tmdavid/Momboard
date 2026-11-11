@@ -6,6 +6,7 @@ import { RetagNotice } from '../components/RetagNotice';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { tagColor } from '../constants';
+import { formatDate, formatNumber } from '../utils/format';
 
 const SYNTHESIS_THRESHOLD = 5;
 
@@ -99,7 +100,7 @@ export function ExplorePage() {
           Show low-confidence
         </label>
 
-        <span className="ml-auto text-[13px] text-muted">{filteredItems.length} highlights · {companiesInResults.size} companies</span>
+        <span className="ml-auto text-[13px] text-muted">{formatNumber(filteredItems.length)} highlights · {formatNumber(companiesInResults.size)} companies</span>
 
         {synthDisabled && !synthesisMutation.isPending ? (
           <span className="flex items-center gap-2">
@@ -120,7 +121,7 @@ export function ExplorePage() {
             className="h-9 px-3 rounded-lg border border-accent bg-accent-soft text-accent-ink text-[13px] font-semibold cursor-pointer disabled:opacity-60"
             disabled={synthesisMutation.isPending}
             onClick={() => { setSynthError(null); setSynthQueued(false); synthesisMutation.mutate(); }}>
-            {synthesisMutation.isPending ? 'Queuing…' : `Synthesize ${filteredItems.length} highlights`}
+            {synthesisMutation.isPending ? 'Queuing…' : `Synthesize ${formatNumber(filteredItems.length)} highlights`}
           </button>
         )}
       </div>
@@ -201,7 +202,7 @@ function QuoteCard({ item }: { item: HighlightWithContext }) {
         <strong className="text-ink-2 font-semibold">{item.company_name || 'Unknown'}</strong>
         <span aria-hidden="true">·</span><span>{item.contact_names[0] || '—'}</span>
         <span aria-hidden="true">·</span>
-        <span>{item.conversation_happened_at ? new Date(item.conversation_happened_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—'}</span>
+        <span>{formatDate(item.conversation_happened_at)}</span>
       </div>
       <div className="flex gap-3 pt-2 border-t border-sub text-[13px]">
         <button onClick={() => navigate(href)} className="bg-transparent border-none p-0 text-accent cursor-pointer">Open in transcript</button>

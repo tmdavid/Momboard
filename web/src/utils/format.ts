@@ -49,6 +49,13 @@ export function formatDateTime(input: string | Date | null | undefined): string 
   return `${formatDate(d)}, ${hh}:${mm}`;
 }
 
+/** A 24-hour clock time, "09:05". */
+export function formatTime(input: string | Date | null | undefined): string {
+  const d = toDate(input);
+  if (!d) return DASH;
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
 /** The calendar day ("2026-09-14") of a date or datetime, or null. Handy for grouping by day. */
 export function isoDay(input: string | Date | null | undefined): string | null {
   const d = toDate(input);

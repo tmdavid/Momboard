@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { formatNumber, formatTime } from '../utils/format';
 
 interface BotResponse {
   platform: string;
@@ -185,7 +186,7 @@ export function MeetingsPage() {
           {/* Transcript preview */}
           {transcript && transcript.segments.length > 0 && (
             <div className="border border-hairline rounded-lg p-3 max-h-60 overflow-y-auto bg-page">
-              <h3 className="text-sm font-medium mb-2 text-ink-2">Preview ({transcript.total} segments)</h3>
+              <h3 className="text-sm font-medium mb-2 text-ink-2">Preview ({formatNumber(transcript.total)} segments)</h3>
               {transcript.segments.map((seg, i) => (
                 <p key={i} className="text-sm mb-1 text-ink-2">
                   <span className="font-medium">{seg.speaker}:</span> {seg.text}
@@ -220,7 +221,7 @@ export function MeetingsPage() {
                     {entry.meeting_id}
                   </td>
                   <td className="py-2 pr-3 text-muted">
-                    {new Date(entry.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    {formatTime(entry.started_at)}
                   </td>
                   <td className="py-2">
                     <span

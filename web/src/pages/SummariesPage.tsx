@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, SynthesisResponse } from '../api';
 import { useTaxonomy } from '../hooks/useTaxonomy';
+import { formatDateTime } from '../utils/format';
 
 type SavedFilter = 'all' | 'saved';
 
@@ -30,7 +31,7 @@ function scopeTags(scope: Record<string, unknown> | null | undefined): string[] 
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return formatDateTime(iso);
 }
 
 export function SummariesPage() {

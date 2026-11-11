@@ -5,6 +5,7 @@ import { api } from '../api';
 import {
   jsonFetch, useTeamUsers, EditDecisionForm, AddQuote, LinkedHypothesisBox,
 } from '../components/DecisionParts';
+import { formatDate } from '../utils/format';
 
 interface Decision {
   id: number;
@@ -144,7 +145,7 @@ export function DecisionsPage() {
   const items = listData?.items || [];
   const shown = tab === 'all' ? items : items.filter((d) => d.status === tab);
 
-  const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) : '—');
+  const fmtDate = (iso: string | null) => formatDate(iso);
 
   return (
     <main className="p-6 flex flex-col gap-4">

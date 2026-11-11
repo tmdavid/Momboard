@@ -1369,7 +1369,7 @@ describe('Hypotheses PRD C1: composer segment + evidence panel', () => {
     expect(within(panel).getByText(/weaker matches/i)).toBeInTheDocument();
     expect(within(panel).getByRole('checkbox', { name: /confirm evidence 2/i })).toBeChecked();
     expect(within(panel).getByRole('checkbox', { name: /confirm evidence 1/i })).not.toBeChecked();
-    expect(within(panel).getByText(/Acme Watches · Maria · 2026-03-02/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Acme Watches · Maria · 2 Mar 2026/)).toBeInTheDocument();
     expect(within(panel).getByText(/ask next to test it/i)).toBeInTheDocument();
     expect(within(panel).getByRole('button', { name: /save with 1 quote/i })).toBeInTheDocument();
   });
@@ -1750,7 +1750,7 @@ describe('v0.5 D8: untagged evidence in the evidence check', () => {
     const taggedBox = within(panel).getByRole('checkbox', { name: /confirm evidence 12/i });
     expect(untaggedBox).toBeChecked();
     expect(taggedBox).toBeChecked();
-    expect(within(panel).getByText(/Pierce Law Group · Pat · 2026-11-02/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Pierce Law Group · Pat · 2 Nov 2026/)).toBeInTheDocument();
 
     // Untick one: only the other is saved.
     await user.click(taggedBox);

@@ -5,6 +5,7 @@
 import { useState, FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, HypothesisDetail, HypothesisBandEvent } from '../api';
+import { formatDate } from '../utils/format';
 
 const BAND_LABEL: Record<string, string> = {
   grounded: 'Grounded',
@@ -15,7 +16,7 @@ const BAND_LABEL: Record<string, string> = {
 };
 
 function shortDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return formatDate(iso);
 }
 
 function useInvalidateHypothesis(id: number) {

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router-dom';
 import { CompanyProfileCard, RetagProgressCard, TagDetailsEditor } from '../components/SettingsV05';
 import { api, Company, Contact, Tag } from '../api';
+import { formatNumber } from '../utils/format';
 
 interface SettingsStatus {
   llm: {
@@ -412,7 +413,7 @@ function DirectorySettings() {
               return (
                 <div key={company.id} className="p-3 text-sm flex items-center gap-2">
                   <Link to={`/companies/${company.id}`} className="trunc font-semibold text-ink hover:underline">{company.name}</Link>
-                  <span className="ml-auto text-xs text-muted whitespace-nowrap">{count} conversation{count === 1 ? '' : 's'}</span>
+                  <span className="ml-auto text-xs text-muted whitespace-nowrap">{formatNumber(count)} conversation{count === 1 ? '' : 's'}</span>
                 </div>
               );
             })}

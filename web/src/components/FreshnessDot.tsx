@@ -1,3 +1,4 @@
+import { formatDate } from '../utils/format';
 /**
  * T41: Freshness dot + tooltip for hypothesis cards and evidence.
  * Reusable across hypothesis board and decision evidence rendering.
@@ -25,7 +26,7 @@ export function FreshnessDot({ freshness, newestEvidenceAt, className = '' }: Fr
   const color = COLORS[freshness] || COLORS.stale;
   const label = LABELS[freshness] || LABELS.stale;
   const dateStr = newestEvidenceAt
-    ? `Last: ${new Date(newestEvidenceAt).toLocaleDateString()}`
+    ? `Last: ${formatDate(newestEvidenceAt)}`
     : 'No evidence';
 
   return (

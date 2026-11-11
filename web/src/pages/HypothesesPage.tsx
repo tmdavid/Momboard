@@ -21,6 +21,7 @@ import {
   HypothesisEvidenceLink,
   HypothesisIntakeResponse,
 } from '../api';
+import { formatDate, formatNumber } from '../utils/format';
 
 // ─── Status chip component ───
 
@@ -168,10 +169,7 @@ function EvidenceStats({ rollup, verdict_hint, decided_at, status }: {
   );
 }
 
-function formatShortDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
+const formatShortDate = formatDate;
 
 // ─── Evidence Link Item ───
 
@@ -472,7 +470,7 @@ function HypothesisCard({
           {hypothesis.status !== 'open' && <StatusChip status={hypothesis.status} />}
           {suggestedCount > 0 && (
             <span className="text-[11px] text-yellow-800 bg-yellow-50 border border-yellow-200 px-2 py-0.5 rounded-full whitespace-nowrap">
-              {suggestedCount} to review
+              {formatNumber(suggestedCount)} to review
             </span>
           )}
           {isStale && (
@@ -638,7 +636,7 @@ function previewBand(
 }
 
 function matchSource(m: IntakeMatch): string {
-  return [m.company_name, m.contact_name, m.conversation_date].filter(Boolean).join(' · ');
+  return [m.company_name, m.contact_name, m.conversation_date ? formatDate(m.conversation_date) : null].filter(Boolean).join(' · ');
 }
 
 function IntakeMatchRow({

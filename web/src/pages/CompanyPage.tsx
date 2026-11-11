@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { formatDate } from '../utils/format';
 
 interface CompanyDetail {
   id: number;
@@ -89,7 +90,7 @@ export function CompanyPage() {
                     <p>"{event.quote}"</p>
                   )}
                   <time className="text-xs text-gray-400">
-                    {new Date(event.timestamp).toLocaleDateString()}
+                    {formatDate(event.timestamp)}
                   </time>
                 </div>
               </li>

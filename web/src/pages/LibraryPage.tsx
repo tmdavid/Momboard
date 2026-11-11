@@ -5,7 +5,7 @@ import { api, ConversationListItem } from '../api';
 import { NewConversationModal, NewConversationFormData } from '../components/NewConversationModal';
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { scoreBand, tagColor } from '../constants';
-import { formatDate } from '../utils/format';
+import { formatDate, formatNumber } from '../utils/format';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { ConversationPreviewPanel } from '../components/ConversationPreviewPanel';
 import { EmptyResults } from '../components/EmptyResults';
@@ -285,7 +285,7 @@ export function LibraryPage() {
           >
             Inbox
             {pendingCount > 0 && (
-              <span className="ml-1.5 bg-crit text-white text-[10.5px] font-bold rounded-full px-1.5 py-px">{pendingCount}</span>
+              <span className="ml-1.5 bg-crit text-white text-[10.5px] font-bold rounded-full px-1.5 py-px">{formatNumber(pendingCount)}</span>
             )}
           </button>
         </div>
@@ -304,7 +304,7 @@ export function LibraryPage() {
                   {isLoading ? (
                     <span role="status" aria-label="Loading conversations" className="inline-block w-3 h-3 align-middle border-2 border-hairline border-t-accent rounded-full animate-spin" />
                   ) : (
-                    <><span>({total})</span> conversation{total === 1 ? '' : 's'}</>
+                    <><span>({formatNumber(total)})</span> conversation{total === 1 ? '' : 's'}</>
                   )}
                 </span>
               </div>
@@ -477,7 +477,7 @@ export function LibraryPage() {
             {total > limit && (
               <div className="flex items-center justify-between mt-4 text-sm text-muted">
                 <span>
-                  Showing {offset + 1}–{Math.min(offset + limit, total)} of {total}
+                  Showing {formatNumber(offset + 1)}–{formatNumber(Math.min(offset + limit, total))} of {formatNumber(total)}
                 </span>
                 <div className="flex gap-2">
                   <button
@@ -681,7 +681,7 @@ function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
   const top = named.slice(0, 3);
   const shownCount = top.reduce((s, [, n]) => s + n, 0);
   const rest = total - shownCount;
-  const label = 'Signal mix: ' + sorted.map(([t, n]) => `${tax.name(t)} ${n}`).join(', ');
+  const label = 'Signal mix: ' + sorted.map(([t, n]) => `${tax.name(t)} ${formatNumber(n)}`).join(', ');
 
   return (
     <div className="flex flex-col gap-1.5 min-w-0">
@@ -691,7 +691,7 @@ function SignalChips({ tagCounts }: { tagCounts: Record<string, number> }) {
         ))}
       </div>
       <span className="trunc text-xs text-muted" title={label}>
-        {top.map(([t, n]) => `${tax.name(t)} ${n}`).join(' · ')}{top.length > 0 && rest > 0 ? '  ' : ''}{rest > 0 ? `+${rest} more` : ''}
+        {top.map(([t, n]) => `${tax.name(t)} ${formatNumber(n)}`).join(' · ')}{top.length > 0 && rest > 0 ? '  ' : ''}{rest > 0 ? `+${formatNumber(rest)} more` : ''}
       </span>
     </div>
   );

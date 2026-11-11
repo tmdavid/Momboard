@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatDate } from '../utils/format';
 
 type InboxStatus = 'pending_import' | 'parse_error' | 'imported' | 'ignored';
 
@@ -115,7 +116,7 @@ export function InboxPane() {
                   <SourceBadge source={item.source} />
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  {item.source_ref} · {new Date(item.created_at).toLocaleDateString()}
+                  {item.source_ref} · {formatDate(item.created_at)}
                 </p>
                 {item.parse_error && (
                   <p className="text-xs text-red-500 mt-1" data-testid="parse-error">
