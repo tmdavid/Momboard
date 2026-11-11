@@ -411,7 +411,7 @@ export interface paths {
         };
         /**
          * Get Decision
-         * @description Get a decision with its evidence.
+         * @description Get a decision with its evidence receipts.
          */
         get: operations["get_decision_api_decisions__decision_id__get"];
         put?: never;
@@ -1650,12 +1650,108 @@ export interface components {
             /** Title */
             title: string;
         };
-        /** DecisionTransitionRequest */
-        DecisionTransitionRequest: {
+        /** DecisionCreatedResponse */
+        DecisionCreatedResponse: {
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: number;
+            /** Integrity */
+            integrity: string;
+            status: components["schemas"]["DecisionStatus"];
+            /** Title */
+            title: string;
+        };
+        /** DecisionDetailResponse */
+        DecisionDetailResponse: {
+            /** Created At */
+            created_at?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Decided By */
+            decided_by?: number | null;
+            /** Evidence */
+            evidence: components["schemas"]["DecisionEvidenceReceipt"][];
+            /** Hypothesis Id */
+            hypothesis_id?: number | null;
+            /** Id */
+            id: number;
+            /** Integrity */
+            integrity: string;
+            /** Integrity Checked At */
+            integrity_checked_at?: string | null;
+            /** Integrity Reasons */
+            integrity_reasons?: components["schemas"]["IntegrityReason"][] | null;
+            /** Rationale Md */
+            rationale_md: string;
+            status: components["schemas"]["DecisionStatus"];
+            /** Superseded By */
+            superseded_by?: number | null;
+            /** Title */
+            title: string;
+        };
+        /** DecisionEvidenceReceipt */
+        DecisionEvidenceReceipt: {
+            /** Company Name */
+            company_name?: string | null;
+            /** Conversation Happened At */
+            conversation_happened_at?: string | null;
+            /** Conversation Id */
+            conversation_id?: number | null;
+            /** Conversation Title */
+            conversation_title?: string | null;
+            /** Highlight Id */
+            highlight_id?: number | null;
+            /** Invalid Reason */
+            invalid_reason?: string | null;
+            /** Quote */
+            quote?: string | null;
             /** Status */
             status: string;
+            /** Tag Key */
+            tag_key?: string | null;
+        };
+        /** DecisionListItem */
+        DecisionListItem: {
+            /** Created At */
+            created_at?: string | null;
+            /** Decided At */
+            decided_at?: string | null;
+            /** Id */
+            id: number;
+            /** Integrity */
+            integrity: string;
+            /** Integrity Checked At */
+            integrity_checked_at?: string | null;
+            status: components["schemas"]["DecisionStatus"];
+            /** Title */
+            title: string;
+        };
+        /** DecisionListResponse */
+        DecisionListResponse: {
+            /** Items */
+            items: components["schemas"]["DecisionListItem"][];
+            /** Total */
+            total: number;
+        };
+        /**
+         * DecisionStatus
+         * @enum {string}
+         */
+        DecisionStatus: "proposed" | "decided" | "superseded";
+        /** DecisionTransitionRequest */
+        DecisionTransitionRequest: {
+            status: components["schemas"]["DecisionStatus"];
             /** Superseded By Id */
             superseded_by_id?: number | null;
+        };
+        /** DecisionTransitionResponse */
+        DecisionTransitionResponse: {
+            /** Decided At */
+            decided_at?: string | null;
+            /** Id */
+            id: number;
+            status: components["schemas"]["DecisionStatus"];
         };
         /** DigestPreviewResponse */
         DigestPreviewResponse: {
@@ -2120,6 +2216,26 @@ export interface components {
             strong: boolean;
             /** Tag Key */
             tag_key: string;
+        };
+        /** IntegrityCheckResponse */
+        IntegrityCheckResponse: {
+            /** Decision Id */
+            decision_id: number;
+            /** Integrity */
+            integrity: string;
+            /** Integrity Checked At */
+            integrity_checked_at?: string | null;
+            /** Reasons */
+            reasons: components["schemas"]["IntegrityReason"][];
+        };
+        /** IntegrityReason */
+        IntegrityReason: {
+            /** Reason */
+            reason: string;
+            /** Source Id */
+            source_id: number;
+            /** Source Type */
+            source_type: string;
         };
         /** LLMStatus */
         LLMStatus: {
@@ -3242,7 +3358,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DecisionListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3275,7 +3391,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DecisionCreatedResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3306,7 +3422,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DecisionDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3337,7 +3453,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["IntegrityCheckResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3372,7 +3488,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DecisionTransitionResponse"];
                 };
             };
             /** @description Validation Error */

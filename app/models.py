@@ -473,6 +473,9 @@ class Decision(Base):
         String(20), default="ok", server_default="ok"
     )  # ok|undermined
     integrity_reasons: Mapped[dict | None] = mapped_column(nullable=True)  # JSON list of reason objects
+    integrity_checked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     hypothesis_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("hypotheses.id", ondelete="SET NULL"), nullable=True
     )
@@ -511,12 +514,26 @@ class DecisionEvidence(Base):
     decision_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("decisions.id", ondelete="CASCADE"), nullable=False
     )
-    highlight_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("highlights.id", ondelete="RESTRICT"), nullable=False
+    highlight_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("highlights.id", ondelete="SET NULL"), nullable=True
     )
+    # Snapshot captured at citation time so a receipt survives a Retag that
+    # replaces the live highlight. The highlight_id keeps the live deep-link.
+    quote_snapshot: Mapped[str | None] = mapped_column(Text, nullable=True)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    conversation_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    conversation_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cited_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+    # Null while the receipt still holds; set by the integrity hook (slice 2) to
+    # one of: tag_rejected | highlight_deleted | conversation_deleted.
+    invalid_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     decision: Mapped["Decision"] = relationship(back_populates="evidence")
-    highlight: Mapped["Highlight"] = relationship()
+    highlight: Mapped[Optional["Highlight"]] = relationship()
 
     __table_args__ = (
         Index("ix_decision_evidence_decision_id", "decision_id"),

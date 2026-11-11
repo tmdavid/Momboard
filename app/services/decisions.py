@@ -71,11 +71,23 @@ async def create_decision(
     db.add(decision)
     await db.flush()
 
-    # Create evidence links (all IDs validated above)
+    # Create evidence links with a snapshot captured now (survives a later Retag).
+    from app.models import Conversation
+
     for hid in evidence_highlight_ids:
+        h = await db.get(Highlight, hid)
+        convo = await db.get(Conversation, h.conversation_id) if h else None
+        company = None
+        if convo and convo.company_id:
+            from app.models import Company
+            company = await db.get(Company, convo.company_id)
         evidence = DecisionEvidence(
             decision_id=decision.id,
             highlight_id=hid,
+            quote_snapshot=h.quote if h else None,
+            company_name=company.name if company else None,
+            conversation_id=convo.id if convo else None,
+            conversation_date=convo.happened_at if convo else None,
         )
         db.add(evidence)
 
@@ -236,18 +248,20 @@ async def check_decision_integrity(
 
     undermined = len(reasons) > 0
 
-    # Update integrity status AND persist reasons
+    # Update integrity status AND persist reasons + checked timestamp
     if undermined:
         decision.integrity = "undermined"
         decision.integrity_reasons = {"reasons": reasons}  # type: ignore[assignment]
     else:
         decision.integrity = "ok"
         decision.integrity_reasons = None
+    decision.integrity_checked_at = utcnow()
     await db.flush()
 
     return {
         "decision_id": decision_id,
         "integrity": "undermined" if undermined else "ok",
+        "integrity_checked_at": decision.integrity_checked_at.isoformat(),
         "reasons": reasons,
     }
 
@@ -272,7 +286,13 @@ async def get_decision_evidence(
     db: AsyncSession,
     decision_id: int,
 ) -> list[dict[str, Any]]:
-    """Get evidence highlights for a decision with full conversation context for UI."""
+    """Get a decision's evidence receipts.
+
+    Served from the citation-time snapshot so a receipt survives a Retag that
+    replaced the live highlight. Falls back to the live highlight for pre-snapshot
+    rows. The live highlight (when it still exists) supplies the current status and
+    the deep-link; `invalid_reason` flags a receipt the integrity hook has broken.
+    """
     from app.models import Conversation
 
     ev_result = await db.execute(
@@ -283,18 +303,29 @@ async def get_decision_evidence(
 
     items = []
     for ev in evidence_items:
-        highlight = await db.get(Highlight, ev.highlight_id)
-        if highlight:
-            convo = await db.get(Conversation, highlight.conversation_id)
-            items.append({
-                "highlight_id": highlight.id,
-                "quote": highlight.quote,
-                "tag_key": highlight.tag_key,
-                "conversation_id": highlight.conversation_id,
-                "conversation_title": convo.title if convo else None,
-                "conversation_happened_at": (
-                    convo.happened_at.isoformat() if convo and convo.happened_at else None
-                ),
-                "status": highlight.status,
-            })
+        highlight = await db.get(Highlight, ev.highlight_id) if ev.highlight_id else None
+        # Prefer the snapshot; fall back to the live highlight for legacy rows.
+        quote = ev.quote_snapshot if ev.quote_snapshot is not None else (highlight.quote if highlight else None)
+        conv_id = ev.conversation_id if ev.conversation_id is not None else (highlight.conversation_id if highlight else None)
+        company_name = ev.company_name
+        conv_date = ev.conversation_date.isoformat() if ev.conversation_date else None
+        conv_title = None
+        if conv_id is not None:
+            convo = await db.get(Conversation, conv_id)
+            if convo:
+                conv_title = convo.title
+                if conv_date is None and convo.happened_at:
+                    conv_date = convo.happened_at.isoformat()
+        items.append({
+            "highlight_id": ev.highlight_id,
+            "quote": quote,
+            "tag_key": highlight.tag_key if highlight else None,
+            "company_name": company_name,
+            "conversation_id": conv_id,
+            "conversation_title": conv_title,
+            "conversation_happened_at": conv_date,
+            # Live highlight status when present; the receipt's own validity flag.
+            "status": highlight.status if highlight else "deleted",
+            "invalid_reason": ev.invalid_reason,
+        })
     return items
