@@ -15,6 +15,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models import ApiToken, User
 
@@ -140,7 +141,11 @@ async def revoke_token(db: AsyncSession, token: ApiToken) -> None:
 
 async def list_tokens(db: AsyncSession, viewer: User) -> list[ApiToken]:
     """A member sees their own tokens; an admin sees everyone's."""
-    stmt = select(ApiToken).order_by(ApiToken.created_at.desc(), ApiToken.id.desc())
+    stmt = (
+        select(ApiToken)
+        .options(selectinload(ApiToken.user))
+        .order_by(ApiToken.created_at.desc(), ApiToken.id.desc())
+    )
     if viewer.role != "admin":
         stmt = stmt.where(ApiToken.user_id == viewer.id)
     return list((await db.execute(stmt)).scalars().all())

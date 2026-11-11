@@ -41,8 +41,43 @@ def decode_session_token(token: str, secret: str, max_age: int = 86400 * 7) -> i
         return None
 
 
+SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+TOKEN_ADMIN_PREFIX = "/api/tokens"
+
+
+async def _user_from_bearer(request: Request, presented: str) -> User:
+    """Authenticate an API token (``Authorization: Bearer mb_...``).
+
+    Every failure is the same 401, so nothing reveals whether a token exists, was revoked or expired.
+    The token acts with its owner's permissions and nothing more: a read token may only use safe
+    methods, and no token may manage tokens (so a leaked one cannot mint others).
+    """
+    from app.services.api_tokens import has_scope, verify_token
+
+    async with request.app.state.session_factory() as db:
+        verified = await verify_token(db, presented)
+        if verified is None:
+            raise HTTPException(status_code=401, detail="Not authenticated")
+        await db.commit()  # persists last_used_at when it was refreshed
+        token, user = verified.token, verified.user
+
+    if request.url.path.startswith(TOKEN_ADMIN_PREFIX):
+        raise HTTPException(status_code=403, detail="API tokens cannot manage tokens. Sign in to MomBoard to do that.")
+    if request.method not in SAFE_METHODS and not has_scope(token, "write"):
+        raise HTTPException(status_code=403, detail="This token is read-only.")
+    request.state.api_token = token
+    return user
+
+
 async def get_current_user(request: Request) -> User:
-    """Dependency: extract user from session cookie."""
+    """Dependency: the signed-in user, from an API token (bearer) or the session cookie.
+
+    A bearer header that is present but wrong is refused outright; it never falls back to a cookie.
+    """
+    scheme, _, credential = request.headers.get("authorization", "").partition(" ")
+    if scheme.lower() == "bearer":
+        return await _user_from_bearer(request, credential.strip())
+
     session_token = request.cookies.get("session")
     if not session_token:
         raise HTTPException(status_code=401, detail="Not authenticated")

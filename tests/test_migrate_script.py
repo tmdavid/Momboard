@@ -41,12 +41,23 @@ def test_a_fully_migrated_database_verifies_clean(tmp_path, capsys):
 def test_a_database_one_revision_behind_is_flagged(tmp_path):
     db = tmp_path / "m.db"
     alembic(db, "upgrade", "head")
-    alembic(db, "downgrade", "-1")
+    alembic(db, "downgrade", "010_hypothesis_history_questions")     # two behind head: 011 and 012 are gone
     script = load_script()
     problems = script.verify_schema(db, 0, script.expected_head(ROOT))
     assert any("alembic revision" in p for p in problems)
-    # the 011 columns are gone too, and the checker says which
+    # the 011 columns and the 012 tables are gone too, and the checker says which
     assert any("min_confidence" in p or "taxonomy_version" in p or "app_settings" in p for p in problems)
+    assert any("api_tokens" in p or "mcp_calls" in p for p in problems)
+
+
+def test_a_database_one_revision_behind_names_the_new_tables(tmp_path):
+    db = tmp_path / "m.db"
+    alembic(db, "upgrade", "head")
+    alembic(db, "downgrade", "-1")                                   # only 012 is gone
+    script = load_script()
+    problems = script.verify_schema(db, 0, script.expected_head(ROOT))
+    assert any("alembic revision" in p for p in problems)
+    assert any("api_tokens" in p for p in problems) and not any("min_confidence" in p for p in problems)
 
 
 def test_the_script_is_self_contained_so_it_can_be_piped_into_a_container():

@@ -44,7 +44,7 @@ from pathlib import Path
 
 # Used only if the alembic/versions files cannot be found (for example when this file is piped into a
 # container whose working directory is not the repo). Normally the head is read from those files.
-FALLBACK_HEAD_REVISION = "011_v05_tagging"
+FALLBACK_HEAD_REVISION = "012_api_tokens_mcp_audit"
 
 # table -> columns that must exist after the v0.4 migrations
 REQUIRED_COLUMNS: dict[str, set[str]] = {
@@ -66,6 +66,15 @@ REQUIRED_COLUMNS: dict[str, set[str]] = {
     # 011 tagging quality + settings (v0.5)
     "app_settings": {"id", "key", "value"},
     "conversations": {"taxonomy_version", "tagged_at"},
+    # 012 API tokens and the MCP audit log (v0.5)
+    "api_tokens": {
+        "id", "user_id", "name", "prefix", "token_hash", "scopes",
+        "created_at", "expires_at", "last_used_at", "revoked_at",
+    },
+    "mcp_calls": {
+        "id", "token_id", "token_prefix", "tool", "args_summary",
+        "status", "duration_ms", "result_count", "created_at",
+    },
 }
 
 # columns that 011 adds to a table which an earlier entry above already lists

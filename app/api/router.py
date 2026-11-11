@@ -22,6 +22,7 @@ from app.api.settings import router as settings_router
 from app.api.simulator import router as simulator_router
 from app.api.syntheses import router as syntheses_router
 from app.api.taxonomy import router as taxonomy_router
+from app.api.tokens import router as tokens_router
 from app.api.users import router as users_router
 from app.api.vexa import router as vexa_router
 from app.auth import get_current_user
@@ -50,6 +51,7 @@ api_router.include_router(vexa_router, prefix="/vexa", tags=["vexa"])
 api_router.include_router(settings_router, tags=["settings"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(taxonomy_router, prefix="/taxonomy", tags=["taxonomy"])
+api_router.include_router(tokens_router, prefix="/tokens", tags=["tokens"])
 api_router.include_router(admin_router, tags=["admin"])
 
 
