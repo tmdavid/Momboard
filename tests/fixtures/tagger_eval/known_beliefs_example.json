@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "SYNTHETIC example of the known-beliefs format. Keep the real list (it names real calls) OUTSIDE the repo; see docs/matching-evaluation.md.",
+  "description": "SYNTHETIC example of the known-beliefs format. Keep the real list (it names real calls) OUTSIDE the repo; see documentation/guides/matching-evaluation.md.",
   "beliefs": [
     {
       "belief": "Law firms won't buy an annual plan without a pilot first",

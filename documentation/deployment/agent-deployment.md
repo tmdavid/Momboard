@@ -1,6 +1,6 @@
 # Coding-Agent Deployment Runbook
 
-This is the canonical runbook for a coding agent that must turn a fresh MomBoard checkout into a verified deployment. Use it instead of inferring commands from individual configuration files. `README.md` is the short human entry point; `DEPLOY.md` contains the Fly.io operations detail.
+This is the canonical runbook for a coding agent that must turn a fresh MomBoard checkout into a verified deployment. Use it instead of inferring commands from individual configuration files. `README.md` is the short human entry point; `deploy.md` contains the Fly.io operations detail.
 
 ## Operating contract
 
@@ -279,7 +279,7 @@ Docker image tests skip automatically when no daemon is available. Report skips;
 
 ## Mode C: Fly.io production
 
-Read `DEPLOY.md` before proceeding. A coding agent must obtain explicit approval before any command that creates or changes Fly applications, volumes, secrets, machines, scale, or production data.
+Read `deploy.md` before proceeding. A coding agent must obtain explicit approval before any command that creates or changes Fly applications, volumes, secrets, machines, scale, or production data.
 
 Before requesting approval, run the local quality gate, a Docker build, and configuration validation:
 
@@ -348,7 +348,7 @@ Confirm that `LLM_BASE_URL` is `http://ollama:11434` inside Compose and `http://
 
 ### Rollback or restore
 
-Rollback and restore are destructive/high-risk operations. Follow `DEPLOY.md`, state exactly which release/database/backup will be affected, and wait for explicit approval. Never run `fly volumes destroy`, remove `data/`, or replace a live database as an automatic recovery step.
+Rollback and restore are destructive/high-risk operations. Follow `deploy.md`, state exactly which release/database/backup will be affected, and wait for explicit approval. Never run `fly volumes destroy`, remove `data/`, or replace a live database as an automatic recovery step.
 
 ## Completion report
 

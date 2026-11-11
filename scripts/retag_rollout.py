@@ -10,7 +10,7 @@
 
 Needs your SSH tunnel (or an https URL) and an ADMIN login: it prompts for your password (hidden)
 and never takes it from the command line. Every command except `batch --yes` and `run --yes`
-changes nothing. See docs/retag-rollout.md for the gates between the steps.
+changes nothing. See documentation/guides/retag-rollout.md for the gates between the steps.
 
 Resumable by design: only calls not yet on the current taxonomy are picked up, newest first, so
 after a failure just run it again. Each call spends LLM tokens: run the pilot first and read the

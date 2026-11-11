@@ -2,7 +2,7 @@
 
 A self-contained guide for standing up MomBoard as an **internal demo** on SQLite and
 getting customer-conversation data into it. For the full deployment contract see
-[`agent-deployment.md`](agent-deployment.md); for Fly.io operations see [`DEPLOY.md`](DEPLOY.md);
+[`agent-deployment.md`](agent-deployment.md); for Fly.io operations see [`deploy.md`](deploy.md);
 for local LLM hosting see [`local-llm.md`](local-llm.md).
 
 This guide assumes: single node, SQLite, one application process.
@@ -82,7 +82,7 @@ internal reverse proxy / Tailscale. Avoid exposing it raw to the public internet
   ```
 
 - **Fly.io** — `fly.toml` is pre-configured (Paris `cdg`, persistent `momboard_data`
-  volume). Use this only if you want a hosted URL. See [`DEPLOY.md`](DEPLOY.md).
+  volume). Use this only if you want a hosted URL. See [`deploy.md`](deploy.md).
 
 ---
 

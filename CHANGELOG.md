@@ -10,7 +10,7 @@ quotes nobody tagged, a staged way to retag the whole library, and a round of in
 Migration **011** (run automatically by the container; for a from-source install use
 `python scripts/migrate_db.py`, which replaces `scripts/migrate_v04.py` and now reads the expected
 revision from the migration files). **Retagging is a separate, deliberate step** — see
-[`docs/retag-rollout.md`](docs/retag-rollout.md); nothing is retagged automatically.
+[`documentation/guides/retag-rollout.md`](documentation/guides/retag-rollout.md); nothing is retagged automatically.
 
 **Tagging quality**
 - **Your company** (Settings): name, aliases and email domains. Speakers matching them are marked
@@ -25,7 +25,7 @@ revision from the migration files). **Retagging is a separate, deliberate step**
   highlights always show. Explore sorts strongest first, shows at most 3 quotes per call, and has
   a "Show low-confidence" switch.
 - **Measuring the tagger**: `scripts/eval_tagger.py` scores the tagger against a hand-tagged test
-  set and exits non-zero below the gate ([`docs/tagger-evaluation.md`](docs/tagger-evaluation.md)).
+  set and exits non-zero below the gate ([`documentation/guides/tagger-evaluation.md`](documentation/guides/tagger-evaluation.md)).
 - **Taxonomy versioning**: each call records the taxonomy version and when it was tagged; adding
   or reactivating a tag bumps the version, and Library / Explore say when results are partial
   because calls have not been retagged yet. `GET /api/taxonomy/status` and `/stale`.
@@ -37,7 +37,7 @@ revision from the migration files). **Retagging is a separate, deliberate step**
   opposite). Untagged quotes you confirm are saved as accepted `context` highlights so they can
   back the belief. *This uses keyword retrieval, not embeddings: the app has no embedding model.*
 - `scripts/eval_matching.py` checks matching against a list of beliefs you know are in the data
-  ([`docs/matching-evaluation.md`](docs/matching-evaluation.md)).
+  ([`documentation/guides/matching-evaluation.md`](documentation/guides/matching-evaluation.md)).
 
 **Retagging the library**
 - `POST /api/taxonomy/retag` (admin only, dry run supported) queues calls in batches; the Settings
@@ -164,7 +164,12 @@ from-source install use `python scripts/migrate_v04.py`).
 
 The corpus becomes a grounded boundary: it **feeds other tools** (insights over MCP)
 and **gates what enters it** (hand-entered beliefs must cite call evidence or be
-flagged as hunches). See [`V0.3.md`](V0.3.md) and [`docs/design/`](docs/design/).
+flagged as hunches). Design notes: [`documentation/design/`](documentation/design/).
+
+The bet: MomBoard does not try to *be* a design or planning tool. It is the **evidence layer**
+those tools stand on, so everything a reviewer needs to trust an AI-drafted epic (the quote, the
+call, the hypothesis it supports) is reachable by the agent doing the drafting. The principles
+behind this are in [`documentation/design/principles.md`](documentation/design/principles.md).
 
 Shipped:
 
@@ -192,9 +197,16 @@ Shipped:
   (migration 007); the filters group them as Core and Custom with categories, and Settings
   lets you reorder them.
 
+Not built in v0.3: Zoom ingestion (T37, no demand yet) and a model evaluation harness (T33; users
+already choose models per agent). The original T26 idea of MomBoard generating concept mockups was
+replaced on purpose by exposing evidence over MCP, so external design tools do the mockups.
+
 ## v0.2 — "From archive to advisor"
 
-Made the repository talk back — prep before calls, nudges, cited answers, practice.
+Made the repository talk back — prep before calls, nudges, cited answers, practice. Where v0.1
+answered "what did customers say?", v0.2 answers "what should I do next?": before the call
+(briefs), in practice (simulator), after it (hypotheses, decisions) and continuously
+(staleness, digest, chat).
 
 - **T34 Staging inbox** — pending_import/ignored/imported/parse_error lifecycle, source_ref dedupe
 - **T29/T30 Contact memory + drift** — timelines, drift detection, contact/company detail API

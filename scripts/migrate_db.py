@@ -110,7 +110,7 @@ def sqlite_path_from_url(url: str) -> Path:
     if not url.startswith("sqlite"):
         raise SystemExit(
             "DATABASE_URL is not SQLite. This script only supports the SQLite deployment "
-            "(see DEPLOY.md for PostgreSQL)."
+            "(see documentation/deployment/deploy.md for PostgreSQL)."
         )
     marker = ":///"
     return Path(url.split(marker, 1)[1])

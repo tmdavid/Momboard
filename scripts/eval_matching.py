@@ -8,7 +8,7 @@ in DATABASE_URL, and checks that the known call appears in the top 5 and that at
 matches is a call you labelled unrelated. Exit code 0 = passed, 1 = failed, 2 = bad input.
 
 Read-only: the database is opened read-only and the preview never saves. It does spend LLM calls
-(roughly 10-20 per belief). Format and advice: docs/matching-evaluation.md. The real list names
+(roughly 10-20 per belief). Format and advice: documentation/guides/matching-evaluation.md. The real list names
 real calls, so keep it out of the repository.
 """
 

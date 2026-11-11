@@ -1,6 +1,6 @@
 # MomBoard — Deployment Runbook
 
-> Coding agents: read [`docs/agent-deployment.md`](docs/agent-deployment.md) first. This file covers Fly.io operations after local installation and verification. Creating or changing applications, volumes, secrets, machines, scaling, restores, rollbacks, and production data requires explicit operator approval.
+> Coding agents: read [`agent-deployment.md`](agent-deployment.md) first. This file covers Fly.io operations after local installation and verification. Creating or changing applications, volumes, secrets, machines, scaling, restores, rollbacks, and production data requires explicit operator approval.
 
 ## Pre-deploy gate
 

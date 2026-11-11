@@ -4,13 +4,13 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 
 ## Status
 
-**v0.5** — tags that no longer mistake our own reps for customers, hypothesis matching that finds quotes nobody tagged, a staged retag rollout, and interface fixes. v0.4's redesigned interface, Hypotheses board and Decisions page, and v0.3's evidence layer (insights over MCP, evidence-gated intake, custom taxonomy) is complete. The full history is in [`CHANGELOG.md`](CHANGELOG.md); the v0.3 release definition is in [`V0.3.md`](V0.3.md) with design docs under [`docs/design/`](docs/design/).
+**v0.5** — tags that no longer mistake our own reps for customers, hypothesis matching that finds quotes nobody tagged, a staged retag rollout, and interface fixes. v0.4's redesigned interface, Hypotheses board and Decisions page, and v0.3's evidence layer (insights over MCP, evidence-gated intake, custom taxonomy) is complete. The full history is in [`CHANGELOG.md`](CHANGELOG.md); guides, runbooks and design notes are indexed in [`documentation/`](documentation/README.md).
 
 ### Latest additions (v0.5)
 
-- **Tagging you can measure** — a "Your company" setting marks our own speakers, evidence tags apply to customer turns only, every tag has a confidence floor, a "don't tag when" hint and an example, and `scripts/eval_tagger.py` scores the tagger against a hand-tagged set. See [`docs/tagger-evaluation.md`](docs/tagger-evaluation.md).
-- **Hypothesis matching that reads everything** — candidates come from all customer speech (tagged or not), then a strict judge with a verification pass; confirmed untagged quotes become accepted highlights. See [`docs/matching-evaluation.md`](docs/matching-evaluation.md).
-- **A staged retag rollout** — taxonomy versioning, resumable batches with a dry run, protection for highlights that decisions and confirmed beliefs rely on, and before/after snapshots. See [`docs/retag-rollout.md`](docs/retag-rollout.md). Nothing is retagged automatically.
+- **Tagging you can measure** — a "Your company" setting marks our own speakers, evidence tags apply to customer turns only, every tag has a confidence floor, a "don't tag when" hint and an example, and `scripts/eval_tagger.py` scores the tagger against a hand-tagged set. See [`documentation/guides/tagger-evaluation.md`](documentation/guides/tagger-evaluation.md).
+- **Hypothesis matching that reads everything** — candidates come from all customer speech (tagged or not), then a strict judge with a verification pass; confirmed untagged quotes become accepted highlights. See [`documentation/guides/matching-evaluation.md`](documentation/guides/matching-evaluation.md).
+- **A staged retag rollout** — taxonomy versioning, resumable batches with a dry run, protection for highlights that decisions and confirmed beliefs rely on, and before/after snapshots. See [`documentation/guides/retag-rollout.md`](documentation/guides/retag-rollout.md). Nothing is retagged automatically.
 - **Interface** — a Library preview panel, rows grouped by day, headline cards, a single review bar with inline Accept / Reject, weekly Insights trends, a Custom-tags flyout that reads properly, and numbers and dates formatted the same way everywhere.
 
 ### Earlier additions (v0.4)
@@ -47,7 +47,7 @@ For the full per-release feature history, see [`CHANGELOG.md`](CHANGELOG.md).
 
 ## Coding-agent deployment
 
-If you are a coding agent crawling this repository, start with [`agent-deployment.md`](agent-deployment.md) and treat it as the deployment contract: preserve existing `.env` and data, choose exactly one runtime mode, install from the project pins and npm lockfile, run Alembic then the idempotent taxonomy seed, build and verify the generated OpenAPI types and SPA, create an admin only from credentials supplied out of band, keep SQLite to one application process, and do not declare success until the health, OpenAPI, SPA, authentication, test, migration, and backup gates in that runbook pass. Production mutations and destructive recovery actions require explicit approval; report sanitized results and remaining warnings rather than guessing past a failure.
+If you are a coding agent crawling this repository, start with [`documentation/deployment/agent-deployment.md`](documentation/deployment/agent-deployment.md) and treat it as the deployment contract: preserve existing `.env` and data, choose exactly one runtime mode, install from the project pins and npm lockfile, run Alembic then the idempotent taxonomy seed, build and verify the generated OpenAPI types and SPA, create an admin only from credentials supplied out of band, keep SQLite to one application process, and do not declare success until the health, OpenAPI, SPA, authentication, test, migration, and backup gates in that runbook pass. Production mutations and destructive recovery actions require explicit approval; report sanitized results and remaining warnings rather than guessing past a failure.
 
 ## Local setup
 
@@ -143,7 +143,7 @@ Use `LLM_BASE_URL=http://ollama:11434` only when the MomBoard application itself
 
 > **Current Compose caveat:** `docker-compose.yml` still hardcodes the relative three-slash URL `sqlite+aiosqlite:///data/momboard.db`. Before starting the full application through Compose, change it to the absolute volume URL `sqlite+aiosqlite:////data/momboard.db`; otherwise it does not target the mounted `/data` database. The standalone Docker/Fly image already uses the correct absolute URL.
 
-See [`local-llm.md`](local-llm.md) for configuration, model overrides, resource requirements, and backend switching.
+See [`documentation/deployment/local-llm.md`](documentation/deployment/local-llm.md) for configuration, model overrides, resource requirements, and backend switching.
 
 ### AWS Bedrock (compliant in-cloud inference)
 
@@ -203,7 +203,7 @@ Copy `.env.example` to `.env`. Important variables:
 | `HYPOTHESIS_CONTESTED_MIN_EACH` | Contested needs this many confirmed quotes on each side (default 2) |
 | `HYPOTHESIS_REFUTED_MIN_CONTRADICT` / `_RATIO` | Refuted needs this many contradicting quotes, and more than ratio × the supporting ones (defaults 3, 2) |
 
-See `.env.example` for the complete list and `DEPLOY.md` for production setup, backups, restore, rollback, and PostgreSQL migration.
+See `.env.example` for the complete list and [`documentation/deployment/deploy.md`](documentation/deployment/deploy.md) for production setup, backups, restore, rollback, and PostgreSQL migration.
 
 ## Validation
 
@@ -228,7 +228,7 @@ Docker smoke tests automatically skip when a Docker daemon is unavailable.
 
 ## Production
 
-Follow [`agent-deployment.md`](agent-deployment.md) for the deployment gates and `DEPLOY.md` for Fly.io-specific creation, backup, restore, and rollback operations. The production image:
+Follow [`documentation/deployment/agent-deployment.md`](documentation/deployment/agent-deployment.md) for the deployment gates and [`documentation/deployment/deploy.md`](documentation/deployment/deploy.md) for Fly.io-specific creation, backup, restore, and rollback operations. The production image:
 
 - Builds the React SPA in a Node stage
 - Runs FastAPI on Python 3.11 as a non-root user
@@ -242,7 +242,7 @@ Do not run multiple application processes against the same SQLite file. Move to 
 
 v0.5 adds migration 011 (additive: a settings table, tag floor/hint/example columns and per-call taxonomy stamps). The production container applies it on start; it does **not** run the taxonomy seed or retag anything. From source, stop the app and run `python scripts/migrate_db.py` (it backs the database up, runs `alembic upgrade head`, verifies the schema, and reads the expected revision from `alembic/versions`; `--dry-run` previews and `--verify-only` checks a running container with `docker exec -i <container> python - --verify-only < scripts/migrate_db.py`). Then rebuild the frontend.
 
-After upgrading: open **Settings → Your company** and fill it in, review your tags' floors and hints, and only then follow [`docs/retag-rollout.md`](docs/retag-rollout.md). Until calls are retagged, old and new tagging sit side by side and Library/Explore say so.
+After upgrading: open **Settings → Your company** and fill it in, review your tags' floors and hints, and only then follow [`documentation/guides/retag-rollout.md`](documentation/guides/retag-rollout.md). Until calls are retagged, old and new tagging sit side by side and Library/Explore say so.
 
 ### Upgrading to v0.4
 

@@ -13,8 +13,6 @@ env/
 
 # Tests (not needed in production image)
 tests/
-prototypes/
-tasks/
 
 # IDE
 .idea/
@@ -55,7 +53,8 @@ Dockerfile
 
 # Docs
 *.md
-!DEPLOY.md
+documentation/
+docs/
 
 # CI
 .github/

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "description": "SYNTHETIC example of the hand-tagged test-set format. Replace with ~20 real calls kept OUTSIDE the repo (see docs/tagger-evaluation.md).",
+  "description": "SYNTHETIC example of the hand-tagged test-set format. Replace with ~20 real calls kept OUTSIDE the repo (see documentation/guides/tagger-evaluation.md).",
   "calls": [
     {
       "id": "example-01",

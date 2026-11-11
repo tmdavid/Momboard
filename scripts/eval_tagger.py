@@ -14,7 +14,7 @@ never reads or writes your real data. The test set itself is read-only.
 
 Custom tags: the throwaway database only has the core taxonomy. To evaluate your custom tags,
 export your tags once (``GET /api/tags`` while logged in) into a JSON file and pass --tags-json.
-The test-set format is documented in docs/tagger-evaluation.md; real test sets contain customer
+The test-set format is documented in documentation/guides/tagger-evaluation.md; real test sets contain customer
 text, so keep them out of the repository.
 """
 
