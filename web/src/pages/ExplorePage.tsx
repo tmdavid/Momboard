@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, HighlightWithContext } from '../api';
+import { RetagNotice } from '../components/RetagNotice';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { tagColor } from '../constants';
@@ -12,6 +13,9 @@ export function ExplorePage() {
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set(['pain', 'workaround']));
   const [companyId, setCompanyId] = useState<number | undefined>();
   const [statusFilter, setStatusFilter] = useState<string>('');
+  // v0.5 D4: by default show the strongest quotes above each tag's floor, at most 3 per call per
+  // tag, so one long call cannot fill the first screen. This switch shows everything.
+  const [showLow, setShowLow] = useState(false);
 
   const { data: companies } = useQuery({
     queryKey: ['companies', 'active'],
@@ -19,12 +23,14 @@ export function ExplorePage() {
   });
 
   const { data, isLoading } = useQuery({
-    queryKey: ['explore-highlights', { tags: Array.from(activeTags), companyId, statusFilter }],
+    queryKey: ['explore-highlights', { tags: Array.from(activeTags), companyId, statusFilter, showLow }],
     queryFn: () =>
       api.listHighlights({
         tag: activeTags.size > 0 ? Array.from(activeTags) : undefined,
         company_id: companyId,
         status: statusFilter || undefined,
+        sort: 'confidence',
+        ...(showLow ? {} : { floor: true, per_call_cap: 3 }),
         limit: 200,
       }),
   });
@@ -88,6 +94,11 @@ export function ExplorePage() {
           <button onClick={clearAll} data-testid="clear-all-filters" className="text-[13px] text-accent bg-transparent border-none cursor-pointer">Clear all</button>
         )}
 
+        <label className="flex items-center gap-1.5 text-[13px] text-ink-2 cursor-pointer">
+          <input type="checkbox" checked={showLow} onChange={(e) => setShowLow(e.target.checked)} />
+          Show low-confidence
+        </label>
+
         <span className="ml-auto text-[13px] text-muted">{filteredItems.length} highlights · {companiesInResults.size} companies</span>
 
         {synthDisabled && !synthesisMutation.isPending ? (
@@ -136,9 +147,17 @@ export function ExplorePage() {
 
       {isLoading && <div className="flex justify-center py-12"><div className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin-slow" /></div>}
 
+      {!showLow && (
+        <p className="m-0 text-xs text-muted">
+          Strongest first. Suggestions below each tag's confidence floor are hidden, and each call shows at most 3 per tag.
+        </p>
+      )}
+      <RetagNotice tagKeys={Array.from(activeTags)} />
+
       {!isLoading && filteredItems.length === 0 && (
         <div className="text-center text-muted py-12">
           No highlights match these filters.{' '}
+          {!showLow ? 'Low-confidence suggestions are hidden; tick “Show low-confidence” to see them. ' : ''}
           {activeTags.size > 1 ? 'Try removing a tag,' : activeTags.size === 1 ? 'Try a different tag,' : ''}{' '}
           {companyId ? 'widen the company filter,' : ''}{' '}
           {statusFilter ? 'or switch to Accepted + suggested.' : 'or loosen a filter.'}

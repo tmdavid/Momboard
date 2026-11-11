@@ -409,6 +409,11 @@ export const api = {
     company_id?: number;
     status?: string;
     q?: string;
+    /** Hide suggestions below their tag's confidence floor (accepted ones always show). */
+    floor?: boolean;
+    sort?: 'recent' | 'confidence';
+    /** At most this many highlights per call per tag (0/undefined = no cap). */
+    per_call_cap?: number;
     date_from?: string;
     date_to?: string;
     limit?: number;
