@@ -1903,3 +1903,265 @@ class TestHypothesisIntegrityHook:
         await auth_client.patch(f"/api/highlights/{h2}", json={"status": "rejected"})
         after = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
         assert after["rollup"]["grounding"] == "grounded"
+
+
+# ===========================================================================
+# P1: persisted validation questions, band history, segments, review audit
+# ===========================================================================
+
+
+class TestHypothesisQuestions:
+    @pytest.mark.asyncio
+    async def test_commit_persists_questions_and_detail_returns_them(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        r = await auth_client.post(
+            "/api/hypotheses/intake/commit",
+            json={
+                "statement": "Questions are persisted at commit time ok",
+                "validation_questions": ["When did you last export?", "  ", "Who cleans it up?"],
+            },
+        )
+        assert r.status_code == 201
+        detail = (await auth_client.get(f"/api/hypotheses/{r.json()['id']}")).json()
+        texts = [q["text"] for q in detail["questions"]]
+        assert texts == ["When did you last export?", "Who cleans it up?"]
+        assert all(q["asked_at"] is None for q in detail["questions"])
+
+    @pytest.mark.asyncio
+    async def test_patch_question_marks_asked_and_unasks(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        r = await auth_client.post(
+            "/api/hypotheses/intake/commit",
+            json={"statement": "Asked toggling works on questions ok", "validation_questions": ["Q one?"]},
+        )
+        hid = r.json()["id"]
+        qid = (await auth_client.get(f"/api/hypotheses/{hid}")).json()["questions"][0]["id"]
+
+        p = await auth_client.patch(
+            f"/api/hypotheses/{hid}/questions/{qid}", json={"asked": True}
+        )
+        assert p.status_code == 200 and p.json()["asked_at"] is not None
+        q = (await auth_client.get(f"/api/hypotheses/{hid}")).json()["questions"][0]
+        assert q["asked_at"] is not None
+
+        p = await auth_client.patch(
+            f"/api/hypotheses/{hid}/questions/{qid}", json={"asked": False}
+        )
+        assert p.json()["asked_at"] is None
+
+    @pytest.mark.asyncio
+    async def test_patch_question_wrong_hypothesis_404(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        a = await _mk_hyp(auth_client, "Hypothesis A for question scoping ok")
+        r = await auth_client.post(
+            "/api/hypotheses/intake/commit",
+            json={"statement": "Hypothesis B for question scoping ok", "validation_questions": ["Q?"]},
+        )
+        qid = (await auth_client.get(f"/api/hypotheses/{r.json()['id']}")).json()["questions"][0]["id"]
+        p = await auth_client.patch(f"/api/hypotheses/{a}/questions/{qid}", json={"asked": True})
+        assert p.status_code == 404
+
+
+class TestHypothesisHistory:
+    @pytest.mark.asyncio
+    async def test_history_records_creation_and_band_changes_with_cause(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        hid = await _mk_hyp(auth_client, "History records band changes properly ok")
+        # hunch -> candidate (suggested link), -> grounded (confirmed), -> contested
+        l1 = (await auth_client.post(
+            f"/api/hypotheses/{hid}/links", json={"highlight_id": h1, "stance": "supports"}
+        )).json()["id"]
+        await auth_client.patch(f"/api/hypothesis-links/{l1}", json={"status": "confirmed"})
+        l2 = (await auth_client.post(
+            f"/api/hypotheses/{hid}/links", json={"highlight_id": h2, "stance": "contradicts"}
+        )).json()["id"]
+        await auth_client.patch(f"/api/hypothesis-links/{l2}", json={"status": "confirmed"})
+
+        hist = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
+        # newest first
+        assert [(e["from_band"], e["to_band"]) for e in hist] == [
+            ("grounded", "contested"),
+            ("candidate", "grounded"),
+            ("hunch", "candidate"),
+            (None, "hunch"),
+        ]
+        assert hist[0]["cause_link_id"] == l2
+        assert hist[0]["cause_quote"]  # human-readable cause for the UI
+        assert hist[0]["cause_stance"] == "contradicts"
+
+    @pytest.mark.asyncio
+    async def test_no_event_when_band_unchanged(self, auth_client: AsyncClient, hyp_seeded: dict):
+        h1 = hyp_seeded["highlight1"].id
+        hid = await _mk_hyp(
+            auth_client, "No event when the band is unchanged ok",
+            links=[(h1, "supports", "confirmed")],
+        )
+        before = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
+        # Rejecting an already-rejected-equivalent change: reject then reject again.
+        lid = (await auth_client.get(f"/api/hypotheses/{hid}")).json()["links"][0]["id"]
+        await auth_client.patch(f"/api/hypothesis-links/{lid}", json={"status": "confirmed"})
+        after = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
+        assert len(after) == len(before)
+
+    @pytest.mark.asyncio
+    async def test_integrity_invalidation_records_an_event(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        h1 = hyp_seeded["highlight1"].id
+        hid = await _mk_hyp(
+            auth_client, "Integrity invalidation shows in history ok",
+            links=[(h1, "supports", "confirmed")],
+        )
+        await auth_client.patch(f"/api/highlights/{h1}", json={"status": "rejected"})
+        hist = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
+        assert (hist[0]["from_band"], hist[0]["to_band"]) == ("grounded", "hunch")
+
+    @pytest.mark.asyncio
+    async def test_history_unknown_hypothesis_404(self, auth_client: AsyncClient, hyp_seeded: dict):
+        assert (await auth_client.get("/api/hypotheses/99999/history")).status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_review_audit_sets_reviewed_at(self, auth_client: AsyncClient, hyp_seeded: dict):
+        h1 = hyp_seeded["highlight1"].id
+        hid = await _mk_hyp(
+            auth_client, "Review audit stamps who and when ok",
+            links=[(h1, "supports", "confirmed")],
+        )
+        link = (await auth_client.get(f"/api/hypotheses/{hid}")).json()["links"][0]
+        assert link["reviewed_at"] is not None and link["reviewed_by"] is not None
+
+
+class TestHypothesisSegments:
+    @pytest.mark.asyncio
+    async def test_segments_distinct_sorted_and_excludes_archived(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        await _mk_hyp(auth_client, "Segment list one hypothesis here ok", segment="SMB")
+        await _mk_hyp(auth_client, "Segment list two hypothesis here ok", segment="Enterprise")
+        await _mk_hyp(auth_client, "Segment list three hypothesis here", segment="SMB")
+        await _mk_hyp(auth_client, "Segment list four hypothesis here ok")
+        gone = await _mk_hyp(auth_client, "Segment list five hypothesis here ok", segment="Legacy")
+        await auth_client.patch(f"/api/hypotheses/{gone}", json={"status": "archived"})
+        r = await auth_client.get("/api/hypotheses/segments")
+        assert r.status_code == 200
+        assert r.json()["items"] == ["Enterprise", "SMB"]
+
+
+class TestLinkerHardening:
+    """P1: the auto-link job doesn't spam — no dupes, a confidence floor, customer turns only."""
+
+    async def _hyp(self, session) -> int:
+        from app.models import Hypothesis
+
+        hyp = Hypothesis(statement="Auto link hardening hypothesis statement", status="open")
+        session.add(hyp)
+        await session.flush()
+        return hyp.id
+
+    @staticmethod
+    def _llm(hyp_id: int, *links: tuple[int, float]) -> FakeLLMClient:
+        return FakeLLMClient(fixtures={"hypothesis_linker": {"links": [
+            {"hypothesis_id": hyp_id, "highlight_id": hid, "stance": "supports",
+             "confidence": conf, "rationale": "r"}
+            for hid, conf in links
+        ]}})
+
+    @pytest.mark.asyncio
+    async def test_existing_pair_is_not_resuggested_even_if_rejected(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.llm.linker import run_hypothesis_link
+        from app.models import HypothesisLink
+
+        hl = hyp_seeded["highlight1"]
+        async with session_factory() as session:
+            hyp_id = await self._hyp(session)
+            session.add(HypothesisLink(
+                hypothesis_id=hyp_id, highlight_id=hl.id, stance="supports",
+                origin="ai", status="rejected",
+            ))
+            await session.flush()
+            await run_hypothesis_link(
+                session, hyp_seeded["conversation1"].id, llm=self._llm(hyp_id, (hl.id, 0.9), (hl.id, 0.9))
+            )
+            await session.commit()
+            rows = (await session.execute(
+                select(HypothesisLink).where(HypothesisLink.hypothesis_id == hyp_id)
+            )).scalars().all()
+            assert len(rows) == 1 and rows[0].status == "rejected"
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_links_are_dropped(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.llm.linker import run_hypothesis_link
+        from app.models import HypothesisLink
+
+        hl = hyp_seeded["highlight1"]
+        async with session_factory() as session:
+            hyp_id = await self._hyp(session)
+            await run_hypothesis_link(
+                session, hyp_seeded["conversation1"].id, llm=self._llm(hyp_id, (hl.id, 0.4))
+            )
+            await session.commit()
+            rows = (await session.execute(
+                select(HypothesisLink).where(HypothesisLink.hypothesis_id == hyp_id)
+            )).scalars().all()
+            assert rows == []
+
+    @pytest.mark.asyncio
+    async def test_our_side_highlights_are_not_sent_to_the_llm(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.llm.linker import run_hypothesis_link
+
+        hl1 = hyp_seeded["highlight1"]
+        async with session_factory() as session:
+            utt = Utterance(
+                conversation_id=hl1.conversation_id, idx=77, speaker_label="Rep",
+                speaker_side="us", text="Our pitch line",
+            )
+            session.add(utt)
+            await session.flush()
+            ours = Highlight(
+                conversation_id=hl1.conversation_id, utterance_id=utt.id, tag_key="pain",
+                quote="Our pitch line", status="accepted", origin="ai",
+            )
+            session.add(ours)
+            await session.flush()
+            hyp_id = await self._hyp(session)
+
+            seen: dict = {}
+            llm = self._llm(hyp_id)
+            original = llm.structured
+
+            async def spy(*args, **kwargs):
+                seen.update(kwargs["input_data"])
+                return await original(*args, **kwargs)
+
+            llm.structured = spy  # type: ignore[method-assign]
+            await run_hypothesis_link(session, hl1.conversation_id, llm=llm)
+            sent_ids = {h["id"] for h in seen["highlights"]}
+            assert ours.id not in sent_ids and hl1.id in sent_ids
+
+    @pytest.mark.asyncio
+    async def test_suggested_link_records_hunch_to_candidate_event(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.llm.linker import run_hypothesis_link
+        from app.services.hypothesis_history import list_band_events
+
+        hl = hyp_seeded["highlight1"]
+        async with session_factory() as session:
+            hyp_id = await self._hyp(session)
+            await run_hypothesis_link(
+                session, hyp_seeded["conversation1"].id, llm=self._llm(hyp_id, (hl.id, 0.9))
+            )
+            await session.commit()
+            events = await list_band_events(session, hyp_id)
+            assert [(e.from_band, e.to_band) for e in events] == [("hunch", "candidate")]

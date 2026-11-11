@@ -6,7 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from app.api.schemas import HypothesisLinkResponse, HypothesisLinkUpdate
 from app.auth import get_current_user
-from app.models import HypothesisLink, User
+from app.models import HypothesisLink, User, utcnow
+from app.services.hypothesis_history import current_band, record_band_change
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,11 @@ async def update_hypothesis_link(
         if link is None:
             raise HTTPException(status_code=404, detail="Hypothesis link not found")
 
+        before = await current_band(db, link.hypothesis_id)
         link.status = body.status
+        link.reviewed_by = user.id
+        link.reviewed_at = utcnow()
+        await record_band_change(db, link.hypothesis_id, before, cause_link_id=link.id)
         await db.commit()
         await db.refresh(link)
         return link

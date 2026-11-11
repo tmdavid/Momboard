@@ -298,7 +298,7 @@ class Hypothesis(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     segment: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")  # open|supported|refuted|parked
+    status: Mapped[str] = mapped_column(String(20), default="open", server_default="open")  # open|supported|refuted|parked|archived
     origin: Mapped[str] = mapped_column(String(20), default="ai", server_default="ai")  # ai|human|import (T48)
     created_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -327,10 +327,12 @@ class HypothesisLink(Base):
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     rationale: Mapped[str | None] = mapped_column(Text, nullable=True)
     origin: Mapped[str] = mapped_column(String(20), default="ai", server_default="ai")  # ai|human
-    status: Mapped[str] = mapped_column(String(20), default="suggested", server_default="suggested")  # suggested|confirmed|rejected
+    status: Mapped[str] = mapped_column(String(20), default="suggested", server_default="suggested")  # suggested|confirmed|rejected|invalid
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, server_default=func.now()
     )
+    reviewed_by: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     hypothesis: Mapped["Hypothesis"] = relationship(back_populates="links")
     highlight: Mapped["Highlight"] = relationship(back_populates="hypothesis_links")
@@ -343,6 +345,45 @@ class HypothesisLink(Base):
             name="ck_hypothesis_links_stance",
         ),
     )
+
+
+class HypothesisBandEvent(Base):
+    """A change in a hypothesis's grounding band, with the link that caused it (v0.4)."""
+
+    __tablename__ = "hypothesis_band_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hypothesis_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("hypotheses.id", ondelete="CASCADE"), nullable=False
+    )
+    from_band: Mapped[str | None] = mapped_column(String(20), nullable=True)  # null = creation
+    to_band: Mapped[str] = mapped_column(String(20), nullable=False)
+    cause_link_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("hypothesis_links.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    __table_args__ = (Index("ix_hypothesis_band_events_hypothesis_id", "hypothesis_id"),)
+
+
+class HypothesisQuestion(Base):
+    """A validation question saved at intake; asked_at is null until someone asks it (v0.4)."""
+
+    __tablename__ = "hypothesis_questions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    hypothesis_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("hypotheses.id", ondelete="CASCADE"), nullable=False
+    )
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    asked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
+
+    __table_args__ = (Index("ix_hypothesis_questions_hypothesis_id", "hypothesis_id"),)
 
 
 # --- Staging Inbox (T34) ---

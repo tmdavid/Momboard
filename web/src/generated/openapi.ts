@@ -707,6 +707,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/hypotheses/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Hypothesis Segments
+         * @description Distinct segments in use on non-archived hypotheses (composer suggestions + board filter).
+         */
+        get: operations["list_hypothesis_segments_api_hypotheses_segments_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hypotheses/{hypothesis_id}": {
         parameters: {
             query?: never;
@@ -731,6 +751,26 @@ export interface paths {
         patch: operations["update_hypothesis_api_hypotheses__hypothesis_id__patch"];
         trace?: never;
     };
+    "/api/hypotheses/{hypothesis_id}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Hypothesis History
+         * @description Band changes, newest first, each with the link (and quote) that caused it.
+         */
+        get: operations["get_hypothesis_history_api_hypotheses__hypothesis_id__history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/hypotheses/{hypothesis_id}/links": {
         parameters: {
             query?: never;
@@ -749,6 +789,26 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/hypotheses/{hypothesis_id}/questions/{question_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Hypothesis Question
+         * @description Mark a validation question as asked (or un-ask it).
+         */
+        patch: operations["update_hypothesis_question_api_hypotheses__hypothesis_id__questions__question_id__patch"];
         trace?: never;
     };
     "/api/hypothesis-links/{link_id}": {
@@ -1939,6 +1999,26 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** HypothesisBandEventResponse */
+        HypothesisBandEventResponse: {
+            /** Cause Link Id */
+            cause_link_id?: number | null;
+            /** Cause Quote */
+            cause_quote?: string | null;
+            /** Cause Stance */
+            cause_stance?: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** From Band */
+            from_band?: string | null;
+            /** Id */
+            id: number;
+            /** To Band */
+            to_band: string;
+        };
         /** HypothesisCreate */
         HypothesisCreate: {
             /** Segment */
@@ -1978,6 +2058,8 @@ export interface components {
             last_evidence_at?: string | null;
             /** Links */
             links?: components["schemas"]["HypothesisLinkResponse"][];
+            /** Questions */
+            questions?: components["schemas"]["HypothesisQuestionResponse"][];
             rollup?: components["schemas"]["HypothesisRollup"];
             /** Segment */
             segment?: string | null;
@@ -2028,6 +2110,11 @@ export interface components {
             contradicts?: components["schemas"]["HypothesisEvidenceItemResponse"][];
             /** Supports */
             supports?: components["schemas"]["HypothesisEvidenceItemResponse"][];
+        };
+        /** HypothesisHistoryResponse */
+        HypothesisHistoryResponse: {
+            /** Items */
+            items?: components["schemas"]["HypothesisBandEventResponse"][];
         };
         /**
          * HypothesisIntakeCommit
@@ -2103,6 +2190,10 @@ export interface components {
             origin: string;
             /** Rationale */
             rationale?: string | null;
+            /** Reviewed At */
+            reviewed_at?: string | null;
+            /** Reviewed By */
+            reviewed_by?: number | null;
             /** Stance */
             stance: string;
             /** Status */
@@ -2151,6 +2242,22 @@ export interface components {
              * @default 0
              */
             total: number;
+        };
+        /** HypothesisQuestionResponse */
+        HypothesisQuestionResponse: {
+            /** Asked At */
+            asked_at?: string | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Id */
+            id: number;
+            /** Text */
+            text: string;
+        };
+        /** HypothesisQuestionUpdate */
+        HypothesisQuestionUpdate: {
+            /** Asked */
+            asked: boolean;
         };
         /** HypothesisResponse */
         HypothesisResponse: {
@@ -2216,6 +2323,11 @@ export interface components {
             supports?: {
                 [key: string]: number;
             };
+        };
+        /** HypothesisSegmentsResponse */
+        HypothesisSegmentsResponse: {
+            /** Items */
+            items?: string[];
         };
         /** HypothesisUpdate */
         HypothesisUpdate: {
@@ -4073,6 +4185,26 @@ export interface operations {
             };
         };
     };
+    list_hypothesis_segments_api_hypotheses_segments_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisSegmentsResponse"];
+                };
+            };
+        };
+    };
     get_hypothesis_detail_api_hypotheses__hypothesis_id__get: {
         parameters: {
             query?: never;
@@ -4139,6 +4271,37 @@ export interface operations {
             };
         };
     };
+    get_hypothesis_history_api_hypotheses__hypothesis_id__history_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hypothesis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_hypothesis_link_api_hypotheses__hypothesis_id__links_post: {
         parameters: {
             query?: never;
@@ -4161,6 +4324,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HypothesisLinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_hypothesis_question_api_hypotheses__hypothesis_id__questions__question_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                hypothesis_id: number;
+                question_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["HypothesisQuestionUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HypothesisQuestionResponse"];
                 };
             };
             /** @description Validation Error */

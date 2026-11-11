@@ -9,8 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.llm.client import LLMClient
 from app.llm.schemas import LinkerOutput
 from app.models import Highlight, Hypothesis, HypothesisLink
+from app.services.hypothesis_history import current_band, record_band_change
+from app.services.hypothesis_intake import _is_customer_evidence
 
 logger = logging.getLogger(__name__)
+
+# Below this the model is guessing; a suggestion nobody should have to review.
+LINKER_MIN_CONFIDENCE = 0.6
 
 
 async def run_hypothesis_link(
@@ -45,7 +50,11 @@ async def run_hypothesis_link(
             Highlight.status != "rejected",
         )
     )
-    highlights = highlights_result.scalars().all()
+    # Only customer turns can evidence a belief about customers: drop our reps' speech
+    # and compliment-tagged highlights before the model ever sees them.
+    candidates = list(highlights_result.scalars().all())
+    highlights = [h for h in candidates if await _is_customer_evidence(db, h)]
+    withheld_ids = {h.id for h in candidates} - {h.id for h in highlights}
 
     if not highlights:
         logger.info("No non-rejected highlights for conversation %d", conversation_id)
@@ -83,6 +92,17 @@ async def run_hypothesis_link(
         schema=LinkerOutput,
     )
 
+    # Pairs that already have a link in ANY status (incl. rejected/invalid) are never
+    # re-suggested: a human decision must stick, and re-runs must not pile up duplicates.
+    existing_rows = await db.execute(
+        select(HypothesisLink.hypothesis_id, HypothesisLink.highlight_id).where(
+            HypothesisLink.hypothesis_id.in_(valid_hypothesis_ids)
+        )
+    )
+    seen_pairs: set[tuple[int, int]] = {(row[0], row[1]) for row in existing_rows.all()}
+    before_band = {hid: await current_band(db, hid) for hid in valid_hypothesis_ids}
+    first_cause: dict[int, int] = {}
+
     # Persist valid links, stripping any with invalid IDs
     for link_data in result.links:
         if link_data.hypothesis_id not in valid_hypothesis_ids:
@@ -95,11 +115,22 @@ async def run_hypothesis_link(
                 "Stripping link with invalid highlight_id=%d", link_data.highlight_id
             )
             continue
+        if link_data.highlight_id in withheld_ids:
+            logger.warning(
+                "Stripping link to withheld (non-customer) highlight %d", link_data.highlight_id
+            )
+            continue
         if link_data.stance not in ("supports", "contradicts"):
             logger.warning(
                 "Stripping link with invalid stance=%r", link_data.stance
             )
             continue
+        if link_data.confidence < LINKER_MIN_CONFIDENCE:
+            continue
+        pair = (link_data.hypothesis_id, link_data.highlight_id)
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
 
         db_link = HypothesisLink(
             hypothesis_id=link_data.hypothesis_id,
@@ -111,5 +142,10 @@ async def run_hypothesis_link(
             status="suggested",
         )
         db.add(db_link)
+        await db.flush()
+        first_cause.setdefault(link_data.hypothesis_id, db_link.id)
 
     await db.flush()
+    # Suggested links only ever move hunch -> candidate, but that is still history.
+    for hyp_id, cause_id in first_cause.items():
+        await record_band_change(db, hyp_id, before_band[hyp_id], cause_link_id=cause_id)

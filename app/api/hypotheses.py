@@ -9,16 +9,21 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import (
+    HypothesisBandEventResponse,
     HypothesisCreate,
     HypothesisDetailResponse,
+    HypothesisHistoryResponse,
     HypothesisIntakeCommit,
     HypothesisIntakeRequest,
     HypothesisIntakeResponse,
     HypothesisLinkCreate,
     HypothesisLinkResponse,
     HypothesisListResponse,
+    HypothesisQuestionResponse,
+    HypothesisQuestionUpdate,
     HypothesisResponse,
     HypothesisRollup,
+    HypothesisSegmentsResponse,
     HypothesisUpdate,
 )
 from app.auth import get_current_user
@@ -30,8 +35,14 @@ from app.models import (
     Highlight,
     Hypothesis,
     HypothesisLink,
+    HypothesisQuestion,
     User,
     utcnow,
+)
+from app.services.hypothesis_history import (
+    current_band,
+    list_band_events,
+    record_band_change,
 )
 
 logger = logging.getLogger(__name__)
@@ -46,6 +57,10 @@ VALID_STANCES: set[str] = {"supports", "contradicts"}
 # ---------------------------------------------------------------------------
 # Shared rollup logic — used by both list and detail
 # ---------------------------------------------------------------------------
+
+
+def _cmp_key(value: datetime) -> datetime:
+    return value.replace(tzinfo=None) if value.tzinfo is not None else value
 
 
 async def _build_rollup(db: AsyncSession, hypothesis_id: int) -> tuple[
@@ -69,7 +84,9 @@ async def _build_rollup(db: AsyncSession, hypothesis_id: int) -> tuple[
     for link in links:
         bucket = supports if link.stance == "supports" else contradicts
         bucket[link.status] = bucket.get(link.status, 0) + 1
-        if last_evidence_at is None or link.created_at > last_evidence_at:
+        # Compare on a tz-normalised key: SQLite returns naive datetimes while a row
+        # created earlier in the same session still holds an aware one.
+        if last_evidence_at is None or _cmp_key(link.created_at) > _cmp_key(last_evidence_at):
             last_evidence_at = link.created_at
 
     # Count distinct confirmed-supporting companies
@@ -320,6 +337,27 @@ async def list_hypotheses(
         return {"items": items[offset : offset + limit], "total": len(items)}
 
 
+@router.get("/segments", response_model=HypothesisSegmentsResponse)
+async def list_hypothesis_segments(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Distinct segments in use on non-archived hypotheses (composer suggestions + board filter)."""
+    session_factory = request.app.state.session_factory
+    async with session_factory() as db:
+        rows = await db.execute(
+            select(Hypothesis.segment)
+            .where(Hypothesis.segment.isnot(None), Hypothesis.status != "archived")
+            .distinct()
+        )
+        seen: dict[str, str] = {}
+        for (value,) in rows.all():
+            cleaned = (value or "").strip()
+            if cleaned:
+                seen.setdefault(cleaned.lower(), cleaned)
+        return {"items": sorted(seen.values(), key=str.lower)}
+
+
 @router.post("", response_model=HypothesisResponse, status_code=201)
 async def create_hypothesis(
     body: HypothesisCreate,
@@ -336,6 +374,8 @@ async def create_hypothesis(
             created_by=user.id,
         )
         db.add(hyp)
+        await db.flush()
+        await record_band_change(db, hyp.id, None)
         await db.commit()
         await db.refresh(hyp)
         return hyp
@@ -409,8 +449,16 @@ async def commit_hypothesis_intake(
                     stance=item.stance,
                     origin="human",
                     status="confirmed",
+                    reviewed_by=user.id,
+                    reviewed_at=utcnow(),
                 )
             )
+        for question in body.validation_questions:
+            text = question.strip()
+            if text:
+                db.add(HypothesisQuestion(hypothesis_id=hyp.id, text=text))
+        await db.flush()
+        await record_band_change(db, hyp.id, None)
         await db.commit()
         await db.refresh(hyp)
         return hyp
@@ -482,6 +530,14 @@ async def get_hypothesis_detail(
                 "rationale": link.rationale,
             })
 
+        questions = (
+            await db.execute(
+                select(HypothesisQuestion)
+                .where(HypothesisQuestion.hypothesis_id == hypothesis_id)
+                .order_by(HypothesisQuestion.id)
+            )
+        ).scalars().all()
+
         link_responses = [
             HypothesisLinkResponse(
                 id=link.id,
@@ -493,6 +549,8 @@ async def get_hypothesis_detail(
                 origin=link.origin,
                 status=link.status,
                 created_at=link.created_at,
+                reviewed_by=link.reviewed_by,
+                reviewed_at=link.reviewed_at,
             )
             for link in links
         ]
@@ -521,6 +579,7 @@ async def get_hypothesis_detail(
             "last_evidence_at": last_ev,
             "verdict_hint": verdict_hint,
             "links": link_responses,
+            "questions": [HypothesisQuestionResponse.model_validate(q) for q in questions],
         }
 
 
@@ -573,6 +632,69 @@ async def update_hypothesis(
         return hyp
 
 
+@router.get("/{hypothesis_id}/history", response_model=HypothesisHistoryResponse)
+async def get_hypothesis_history(
+    hypothesis_id: int,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Band changes, newest first, each with the link (and quote) that caused it."""
+    session_factory = request.app.state.session_factory
+    async with session_factory() as db:
+        if await db.get(Hypothesis, hypothesis_id) is None:
+            raise HTTPException(status_code=404, detail="Hypothesis not found")
+        events = await list_band_events(db, hypothesis_id)
+        items = []
+        for event in events:
+            quote: str | None = None
+            stance: str | None = None
+            if event.cause_link_id is not None:
+                row = (
+                    await db.execute(
+                        select(HypothesisLink.stance, Highlight.quote)
+                        .join(Highlight, HypothesisLink.highlight_id == Highlight.id)
+                        .where(HypothesisLink.id == event.cause_link_id)
+                    )
+                ).first()
+                if row is not None:
+                    stance, quote = row
+            items.append(
+                HypothesisBandEventResponse(
+                    id=event.id,
+                    from_band=event.from_band,
+                    to_band=event.to_band,
+                    cause_link_id=event.cause_link_id,
+                    cause_quote=quote,
+                    cause_stance=stance,
+                    created_at=event.created_at,
+                )
+            )
+        return {"items": items}
+
+
+@router.patch(
+    "/{hypothesis_id}/questions/{question_id}",
+    response_model=HypothesisQuestionResponse,
+)
+async def update_hypothesis_question(
+    hypothesis_id: int,
+    question_id: int,
+    body: HypothesisQuestionUpdate,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> HypothesisQuestion:
+    """Mark a validation question as asked (or un-ask it)."""
+    session_factory = request.app.state.session_factory
+    async with session_factory() as db:
+        question: HypothesisQuestion | None = await db.get(HypothesisQuestion, question_id)
+        if question is None or question.hypothesis_id != hypothesis_id:
+            raise HTTPException(status_code=404, detail="Question not found")
+        question.asked_at = utcnow() if body.asked else None
+        await db.commit()
+        await db.refresh(question)
+        return question
+
+
 @router.post(
     "/{hypothesis_id}/links",
     response_model=HypothesisLinkResponse,
@@ -595,6 +717,7 @@ async def create_hypothesis_link(
         if highlight is None:
             raise HTTPException(status_code=404, detail="Highlight not found")
 
+        before = await current_band(db, hypothesis_id)
         link = HypothesisLink(
             hypothesis_id=hypothesis_id,
             highlight_id=body.highlight_id,
@@ -603,6 +726,8 @@ async def create_hypothesis_link(
             status="suggested",
         )
         db.add(link)
+        await db.flush()
+        await record_band_change(db, hypothesis_id, before, cause_link_id=link.id)
         await db.commit()
         await db.refresh(link)
         return link

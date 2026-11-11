@@ -417,6 +417,37 @@ class HypothesisListItemResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class HypothesisQuestionResponse(BaseModel):
+    id: int
+    text: str
+    asked_at: datetime | None = None
+    created_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class HypothesisQuestionUpdate(BaseModel):
+    asked: bool
+
+
+class HypothesisBandEventResponse(BaseModel):
+    id: int
+    from_band: str | None = None  # null = the hypothesis was created
+    to_band: str
+    cause_link_id: int | None = None
+    cause_quote: str | None = None
+    cause_stance: str | None = None
+    created_at: datetime
+
+
+class HypothesisHistoryResponse(BaseModel):
+    items: list[HypothesisBandEventResponse] = Field(default_factory=list)
+
+
+class HypothesisSegmentsResponse(BaseModel):
+    items: list[str] = Field(default_factory=list)
+
+
 class HypothesisListResponse(BaseModel):
     """Paged hypothesis list: the page of items plus the total matching the filters."""
 
@@ -451,6 +482,8 @@ class HypothesisLinkResponse(BaseModel):
     origin: str
     status: str
     created_at: datetime
+    reviewed_by: int | None = None
+    reviewed_at: datetime | None = None
 
     model_config = {"from_attributes": True}
 
@@ -499,5 +532,6 @@ class HypothesisDetailResponse(BaseModel):
     last_evidence_at: datetime | None = None
     verdict_hint: str | None = None
     links: list[HypothesisLinkResponse] = Field(default_factory=list)
+    questions: list[HypothesisQuestionResponse] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

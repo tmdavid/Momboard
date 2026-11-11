@@ -11,10 +11,11 @@ sound until its underlying tag was withdrawn, and it stays for audit.
 
 from collections.abc import Iterable
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import HypothesisLink
+from app.services.hypothesis_history import current_band, record_band_change
 
 LINK_INVALID = "invalid"
 _LIVE_STATUSES = ("suggested", "confirmed")
@@ -31,6 +32,23 @@ async def invalidate_hypothesis_links_for_highlights(
     ids = list(highlight_ids)
     if not ids:
         return 0
+
+    # Which live links (and hypotheses) are about to change — to record band events.
+    live = (
+        await db.execute(
+            select(HypothesisLink.id, HypothesisLink.hypothesis_id).where(
+                HypothesisLink.highlight_id.in_(ids),
+                HypothesisLink.status.in_(_LIVE_STATUSES),
+            )
+        )
+    ).all()
+    if not live:
+        return 0
+    cause_by_hyp: dict[int, int] = {}
+    for link_id, hyp_id in live:
+        cause_by_hyp.setdefault(hyp_id, link_id)
+    before = {hyp_id: await current_band(db, hyp_id) for hyp_id in cause_by_hyp}
+
     result = await db.execute(
         update(HypothesisLink)
         .where(
@@ -39,4 +57,6 @@ async def invalidate_hypothesis_links_for_highlights(
         )
         .values(status=LINK_INVALID)
     )
+    for hyp_id, link_id in cause_by_hyp.items():
+        await record_band_change(db, hyp_id, before[hyp_id], cause_link_id=link_id)
     return int(result.rowcount or 0)  # type: ignore[attr-defined]
