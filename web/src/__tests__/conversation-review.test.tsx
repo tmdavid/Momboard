@@ -32,7 +32,7 @@ describe('T17 — Keyboard review navigation', () => {
     renderConversation();
 
     await waitFor(() => {
-      expect(screen.getByText(/Review mode/)).toBeInTheDocument();
+      expect(screen.getByText(/Review AI tags/)).toBeInTheDocument();
     });
 
     // Press j to move to the first suggested highlight
@@ -52,7 +52,7 @@ describe('T17 — Keyboard review navigation', () => {
     renderConversation();
 
     await waitFor(() => {
-      expect(screen.getByText(/Review mode/)).toBeInTheDocument();
+      expect(screen.getByText(/Review AI tags/)).toBeInTheDocument();
     });
 
     // Move forward twice
@@ -90,7 +90,7 @@ describe('T17 — Keyboard review navigation', () => {
     renderConversation();
 
     await waitFor(() => {
-      expect(screen.getByText(/Review mode/)).toBeInTheDocument();
+      expect(screen.getByText(/Review AI tags/)).toBeInTheDocument();
     });
 
     // Focus first suggested
@@ -128,7 +128,7 @@ describe('T17 — Keyboard review navigation', () => {
     renderConversation();
 
     await waitFor(() => {
-      expect(screen.getByText(/Review mode/)).toBeInTheDocument();
+      expect(screen.getByText(/Review AI tags/)).toBeInTheDocument();
     });
 
     // Focus first suggested
@@ -152,7 +152,7 @@ describe('T17 — Keyboard review navigation', () => {
     renderConversation();
 
     await waitFor(() => {
-      expect(screen.getByText(/Review mode/)).toBeInTheDocument();
+      expect(screen.getByText(/Review AI tags/)).toBeInTheDocument();
     });
 
     // Focus the notes textarea (if it opens)
@@ -193,9 +193,9 @@ describe('T17 — Optimistic mutation on accept/reject', () => {
 
     // Accept from popover
     await waitFor(() => {
-      expect(screen.getByText(/Accept/)).toBeInTheDocument();
+      expect(screen.getByText(/^✓ Accept \(a\)$/)).toBeInTheDocument();
     });
-    await user.click(screen.getByText(/Accept/));
+    await user.click(screen.getByText(/^✓ Accept \(a\)$/));
 
     // Immediately (optimistically), the chip should switch from dashed to solid
     await waitFor(() => {
@@ -225,9 +225,9 @@ describe('T17 — Optimistic mutation on accept/reject', () => {
     await user.click(suggestedChip!);
 
     await waitFor(() => {
-      expect(screen.getByText(/Reject/)).toBeInTheDocument();
+      expect(screen.getByText(/^✕ Reject \(x\)$/)).toBeInTheDocument();
     });
-    await user.click(screen.getByText(/Reject/));
+    await user.click(screen.getByText(/^✕ Reject \(x\)$/));
 
     // The rejected chip should disappear immediately
     await waitFor(() => {

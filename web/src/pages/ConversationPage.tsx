@@ -343,65 +343,50 @@ export function ConversationPage() {
       <div className="flex-1 flex min-h-0">
         {/* Transcript */}
         <section ref={transcriptRef} className="flex-1 overflow-y-auto px-8 py-6 pb-32" onMouseUp={handleTextSelect}>
-          {/* #24: Review banner — sticky, solid surface/background with border and shadow */}
+          {/* v0.5 U6: one review bar - how many are left, progress, the keys, and one bulk action. */}
           {suggestedHighlights.length > 0 && (
-            <div className="sticky top-0 z-10 flex flex-col gap-2 bg-surface border border-[#bcd7f5] rounded-xl px-3.5 py-2.5 mb-5 text-[13px] shadow-sm">
-              <div className="flex gap-2.5 items-center flex-wrap">
-                <b>Review mode</b> — {suggestedHighlights.length} suggestions left ·
-                <span>
-                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">j</kbd>/
-                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">k</kbd> next/prev ·{' '}
-                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">a</kbd> accept ·{' '}
-                  <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">x</kbd> reject
-                </span>
+            <section
+              role="region"
+              aria-label="Review AI tags"
+              className="sticky top-0 z-10 flex flex-wrap items-center gap-x-4 gap-y-2 bg-surface border border-[#bcd7f5] rounded-xl px-3.5 py-2.5 mb-5 text-[13px] shadow-sm"
+            >
+              <b>Review AI tags · {suggestedHighlights.length} left</b>
+              <div
+                className="h-1.5 w-32 rounded-full bg-sub overflow-hidden"
+                role="progressbar"
+                aria-label="Review progress"
+                aria-valuemin={0}
+                aria-valuemax={highlights.length}
+                aria-valuenow={highlights.length - suggestedHighlights.length}
+              >
+                <span className="block h-full bg-accent" style={{ width: `${((highlights.length - suggestedHighlights.length) / Math.max(1, highlights.length)) * 100}%` }} />
               </div>
-              {/* #14: remaining-by-tag counts */}
-              <div className="flex gap-1.5 flex-wrap items-center" data-testid="remaining-by-tag">
-                <span className="text-muted text-xs">Remaining:</span>
-                {Object.entries(
-                  suggestedHighlights.reduce((acc, h) => {
-                    acc[h.tag_key] = (acc[h.tag_key] || 0) + 1;
-                    return acc;
-                  }, {} as Record<string, number>),
-                ).map(([tag, count]) => (
+              <span className="text-muted">
+                <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">j</kbd>/
+                <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">k</kbd> next/prev ·{' '}
+                <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">a</kbd> accept ·{' '}
+                <kbd className="bg-page border border-hairline border-b-2 rounded px-1.5 font-mono text-xs">x</kbd> reject
+              </span>
+              {(() => {
+                const highConf = suggestedHighlights.filter((h) => (h.confidence ?? 0) >= 0.9).length;
+                return (
                   <button
-                    key={tag}
-                    className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-hairline bg-page text-ink-2 hover:border-accent hover:text-accent"
-                    title={`Accept all ${count} suggested "${tax.name(tag)}"`}
+                    className="ml-auto text-xs font-semibold px-2.5 py-1 rounded-lg bg-accent text-white hover:bg-[#1c5cab] disabled:opacity-40"
+                    disabled={highConf === 0 || bulkAcceptMutation.isPending}
                     onClick={() => {
-                      const n = suggestedHighlights.filter((h) => h.tag_key === tag).length;
-                      if (window.confirm(`Accept all ${n} suggested "${tax.name(tag)}" highlights?`)) {
-                        bulkAcceptMutation.mutate({ tag_key: tag, conversation_id: conversationId });
+                      if (window.confirm(`Accept all ${highConf} high-confidence (≥ 0.9) suggestions?`)) {
+                        bulkAcceptMutation.mutate({ min_confidence: 0.9, conversation_id: conversationId });
                       }
                     }}
                   >
-                    {tax.emoji(tag)} <span className="font-semibold">{count}</span>
+                    Accept all ≥ 0.9 ({highConf})
                   </button>
-                ))}
-              </div>
-              {/* #14: Accept all >= 0.9 with count preview + confirmation */}
-              <div className="flex gap-2 items-center">
-                {(() => {
-                  const highConf = suggestedHighlights.filter((h) => (h.confidence ?? 0) >= 0.9).length;
-                  return (
-                    <button
-                      className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-accent text-white hover:bg-[#1c5cab] disabled:opacity-40"
-                      disabled={highConf === 0 || bulkAcceptMutation.isPending}
-                      onClick={() => {
-                        if (window.confirm(`Accept all ${highConf} high-confidence (≥ 0.9) suggestions?`)) {
-                          bulkAcceptMutation.mutate({ min_confidence: 0.9, conversation_id: conversationId });
-                        }
-                      }}
-                    >
-                      Bulk ≥ 0.9 ({highConf})
-                    </button>
-                  );
-                })()}
-                {bulkAcceptMutation.isError && (
-                  <span className="text-xs text-crit" role="alert">Bulk accept failed — no changes applied.</span>
-                )}
-              </div>
-            </div>
+                );
+              })()}
+              {bulkAcceptMutation.isError && (
+                <span className="text-xs text-crit" role="alert">Bulk accept failed — no changes applied.</span>
+              )}
+            </section>
           )}
 
           {/* Utterances */}
@@ -417,7 +402,7 @@ export function ConversationPage() {
               <div
                 key={utt.id}
                 data-utterance-id={utt.id}
-                className={`flex gap-3 px-2.5 py-1.5 rounded-xl max-w-[760px] transition-all ${
+                className={`flex gap-3 px-2.5 py-1.5 rounded-xl transition-all ${
                   hasHighlights ? 'bg-[#fdf9ee]' : ''
                 } ${isFocused ? 'outline outline-2 outline-accent -outline-offset-2' : ''} ${
                   isFlashing ? 'ring-2 ring-accent ring-offset-2' : ''
@@ -431,26 +416,54 @@ export function ConversationPage() {
                   {utt.speaker_label}
                 </div>
                 <div className="flex-1">
-                  <p className={utt.speaker_side === 'us' ? 'text-ink-2' : 'text-ink'} data-raw-text="true">
+                  <p className={`max-w-[80ch] ${utt.speaker_side === 'us' ? 'text-ink-2' : 'text-ink'}`} data-raw-text="true">
                     {utt.text}
                   </p>
                   {uttHighlights.length > 0 && !selectionAffordance?.showTagSelector && (
                     <div className="flex gap-1.5 mt-1.5 flex-wrap">
                       {uttHighlights.map((h) => (
-                        <button
+                        <span
                           key={h.id}
-                          onClick={(e) => handleChipClick(h, e)}
-                          className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full cursor-pointer ${
+                          data-status={h.status}
+                          className={`inline-flex items-center gap-1 text-xs rounded-full ${
                             h.status === 'suggested'
                               ? 'border border-dashed border-[#c9a227] bg-[#fdf6e0] text-ink-2'
                               : 'border border-[#9ec5f4] bg-accent-soft text-[#1c5cab] font-semibold'
                           }`}
                         >
-                          {tax.emoji(h.tag_key)} {tax.name(h.tag_key)}
-                          {h.status === 'suggested' && h.confidence != null && (
-                            <span className="text-muted font-normal ml-1">{h.confidence.toFixed(2)}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => handleChipClick(h, e)}
+                            className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-transparent border-none cursor-pointer text-inherit font-inherit"
+                          >
+                            {tax.emoji(h.tag_key)} {tax.name(h.tag_key)}
+                            {h.status === 'suggested' && h.confidence != null && (
+                              <span className="text-muted font-normal ml-1">{h.confidence.toFixed(2)}</span>
+                            )}
+                          </button>
+                          {h.status === 'suggested' && (
+                            <>
+                              <button
+                                type="button"
+                                aria-label={`Accept ${tax.name(h.tag_key)}`}
+                                title="Accept (a)"
+                                onClick={() => updateHighlightMutation.mutate({ highlightId: h.id, body: { status: 'accepted' } })}
+                                className="px-1.5 py-0.5 bg-transparent border-none cursor-pointer text-good-text hover:bg-good-soft rounded-full"
+                              >
+                                ✓
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Reject ${tax.name(h.tag_key)}`}
+                                title="Reject (x)"
+                                onClick={() => updateHighlightMutation.mutate({ highlightId: h.id, body: { status: 'rejected' } })}
+                                className="pl-0.5 pr-2 py-0.5 bg-transparent border-none cursor-pointer text-crit hover:bg-warn-soft rounded-full"
+                              >
+                                ✕
+                              </button>
+                            </>
                           )}
-                        </button>
+                        </span>
                       ))}
                     </div>
                   )}

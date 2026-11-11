@@ -69,8 +69,8 @@ describe('Conversation page', () => {
     }
 
     await waitFor(() => {
-      expect(screen.getByText(/Accept/)).toBeInTheDocument();
-      expect(screen.getByText(/Reject/)).toBeInTheDocument();
+      expect(screen.getByText(/^✓ Accept \(a\)$/)).toBeInTheDocument();
+      expect(screen.getByText(/^✕ Reject \(x\)$/)).toBeInTheDocument();
     });
   });
 
@@ -108,10 +108,10 @@ describe('Conversation page', () => {
     renderConversation();
 
     await waitFor(() => {
-      expect(screen.getByText(/Review mode/)).toBeInTheDocument();
+      expect(screen.getByText(/Review AI tags/)).toBeInTheDocument();
     });
 
-    expect(screen.getByText(/suggestions left/)).toBeInTheDocument();
+    expect(screen.getByText(/\d+ left/)).toBeInTheDocument();
   });
 
   test('cancelling deletion keeps the conversation and does not call the API', async () => {
