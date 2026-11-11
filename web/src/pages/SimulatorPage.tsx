@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { scoreBand } from '../constants';
 
 interface PersonaResult {
   id: number;
@@ -187,7 +188,7 @@ export function SimulatorPage() {
   if (!persona) {
     return (
       <div className="max-w-2xl mx-auto p-6">
-        <h1 className="text-xl font-bold tracking-tight mb-4">🎯 Interview Flight Simulator</h1>
+        <h1 className="text-2xl font-bold text-ink mb-1">Practice interview</h1>
         <p className="text-sm text-muted mb-6">
           Practice your interview skills with an AI persona built from your evidence corpus.
         </p>
@@ -294,7 +295,7 @@ export function SimulatorPage() {
     const p = persona.result;
     return (
       <div className="max-w-2xl mx-auto p-6">
-        <h1 className="text-xl font-bold tracking-tight mb-4">🎯 Interview Flight Simulator</h1>
+        <h1 className="text-2xl font-bold text-ink mb-1">Practice interview</h1>
 
         <div className="bg-surface rounded-xl border border-hairline p-4 mb-4">
           <h2 className="font-semibold text-lg text-ink-2">{p.name}</h2>
@@ -329,7 +330,7 @@ export function SimulatorPage() {
   // Phase 3: Chat / scoring / result display
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-xl font-bold tracking-tight mb-4">🎯 Interview Flight Simulator</h1>
+      <h1 className="text-2xl font-bold text-ink mb-1">Practice interview</h1>
 
       {/* Show session link if we have an ended session */}
       {endedSessionId && (
@@ -356,7 +357,7 @@ export function SimulatorPage() {
           {sessionResult.analysis?.result?.mom_test_critique ? (
             <div>
               <div className="flex items-center gap-3 mb-3">
-                <span className="text-3xl font-bold text-accent">
+                <span className="text-4xl font-bold" style={{ color: scoreBand(sessionResult.analysis.result.mom_test_critique.score).fg }}>
                   {sessionResult.analysis.result.mom_test_critique.score}/10
                 </span>
                 <span className="text-muted">Mom Test Score</span>
@@ -419,12 +420,12 @@ export function SimulatorPage() {
             {turns.map((turn, i) => (
               <div
                 key={i}
-                className={`mb-3 ${turn.role === 'user' ? 'text-right' : 'text-left'}`}
+                className={`mb-3 flex ${turn.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <span className={`inline-block px-3 py-2 rounded-lg text-sm ${
+                <span className={`inline-block max-w-[78%] px-3.5 py-2.5 rounded-xl text-sm ${
                   turn.role === 'user'
-                    ? 'bg-accent-soft text-accent'
-                    : 'bg-page text-ink-2'
+                    ? 'bg-accent text-white rounded-br-[4px]'
+                    : 'bg-sub text-ink rounded-bl-[4px]'
                 }`}>
                   {turn.text}
                 </span>
@@ -438,7 +439,7 @@ export function SimulatorPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder="Ask a question..."
+              placeholder="Ask about past behaviour, not the future…"
               className="flex-1 border border-hairline rounded-lg px-3 py-2 bg-page"
               aria-label="Message input"
             />
