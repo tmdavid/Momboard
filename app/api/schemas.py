@@ -197,6 +197,29 @@ class ConversationDetail(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class PreviewPain(BaseModel):
+    pain: str
+    severity: str = "medium"
+
+
+class ConversationPreview(BaseModel):
+    """A light summary of one call for the Library preview panel (v0.5 U5)."""
+
+    id: int
+    title: str
+    happened_at: datetime | None = None
+    status: str
+    company_id: int | None = None
+    company_name: str | None = None
+    summary: str | None = None
+    top_pains: list[PreviewPain] = Field(default_factory=list)
+    score: int | None = None
+    followups: list[str] = Field(default_factory=list)
+    # AI suggestions still waiting for a person to accept or reject them (includes ones below
+    # the confidence floor: judging those is exactly what review is for).
+    suggestions_to_review: int = 0
+
+
 class ConversationListResponse(BaseModel):
     items: list[ConversationListItem]
     total: int

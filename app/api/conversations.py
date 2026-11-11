@@ -21,6 +21,7 @@ from app.api.schemas import (
     ConversationDetail,
     ConversationListItem,
     ConversationListResponse,
+    ConversationPreview,
     ConversationStatusResponse,
     ConversationUpdate,
     HighlightResponse,
@@ -349,6 +350,63 @@ async def list_conversations(
         )
 
     return ConversationListResponse(items=items, total=total, limit=limit, offset=offset)
+
+
+@router.get("/{conversation_id}/preview", response_model=ConversationPreview)
+async def conversation_preview(
+    conversation_id: int,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """Summary, top pains, score, follow-ups and the review backlog, without the transcript."""
+    convo = await db.get(Conversation, conversation_id)
+    if convo is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    company = await db.get(Company, convo.company_id) if convo.company_id else None
+
+    result = (
+        await db.execute(
+            select(Analysis.result)
+            .where(Analysis.conversation_id == conversation_id, Analysis.kind == "conversation")
+            .order_by(Analysis.created_at.desc())
+            .limit(1)
+        )
+    ).scalar_one_or_none()
+    analysis: dict = result if isinstance(result, dict) else {}
+
+    # The analysis is model output: read every field defensively.
+    summary = analysis.get("summary")
+    pains = []
+    raw_pains = analysis.get("top_pains")
+    for item in raw_pains if isinstance(raw_pains, list) else []:
+        if isinstance(item, dict) and isinstance(item.get("pain"), str) and item["pain"].strip():
+            severity = item.get("severity")
+            pains.append({"pain": item["pain"].strip(), "severity": severity if isinstance(severity, str) else "medium"})
+    critique = analysis.get("mom_test_critique")
+    score = critique.get("score") if isinstance(critique, dict) else None
+    raw_followups = analysis.get("suggested_followups")
+    followups = [f.strip() for f in raw_followups if isinstance(f, str) and f.strip()] if isinstance(raw_followups, list) else []
+
+    to_review = (
+        await db.execute(
+            select(func.count(Highlight.id)).where(
+                Highlight.conversation_id == conversation_id, Highlight.status == "suggested"
+            )
+        )
+    ).scalar_one()
+    return {
+        "id": convo.id,
+        "title": convo.title,
+        "happened_at": convo.happened_at,
+        "status": convo.status,
+        "company_id": convo.company_id,
+        "company_name": company.name if company else None,
+        "summary": summary if isinstance(summary, str) and summary.strip() else None,
+        "top_pains": pains[:3],
+        "score": score if isinstance(score, int) and not isinstance(score, bool) else None,
+        "followups": followups[:5],
+        "suggestions_to_review": to_review,
+    }
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetail)

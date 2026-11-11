@@ -358,6 +358,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/conversations/{conversation_id}/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversation Preview
+         * @description Summary, top pains, score, follow-ups and the review backlog, without the transcript.
+         */
+        get: operations["conversation_preview_api_conversations__conversation_id__preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations/{conversation_id}/reprocess": {
         parameters: {
             query?: never;
@@ -1945,6 +1965,37 @@ export interface components {
             /** Total */
             total: number;
         };
+        /**
+         * ConversationPreview
+         * @description A light summary of one call for the Library preview panel (v0.5 U5).
+         */
+        ConversationPreview: {
+            /** Company Id */
+            company_id?: number | null;
+            /** Company Name */
+            company_name?: string | null;
+            /** Followups */
+            followups?: string[];
+            /** Happened At */
+            happened_at?: string | null;
+            /** Id */
+            id: number;
+            /** Score */
+            score?: number | null;
+            /** Status */
+            status: string;
+            /**
+             * Suggestions To Review
+             * @default 0
+             */
+            suggestions_to_review: number;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title: string;
+            /** Top Pains */
+            top_pains?: components["schemas"]["PreviewPain"][];
+        };
         /** ConversationStatusResponse */
         ConversationStatusResponse: {
             /** Id */
@@ -2851,6 +2902,16 @@ export interface components {
             filters?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /** PreviewPain */
+        PreviewPain: {
+            /** Pain */
+            pain: string;
+            /**
+             * Severity
+             * @default medium
+             */
+            severity: string;
         };
         /** RetagRequest */
         RetagRequest: {
@@ -3942,6 +4003,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversation_preview_api_conversations__conversation_id__preview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationPreview"];
                 };
             };
             /** @description Validation Error */

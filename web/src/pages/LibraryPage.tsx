@@ -1,20 +1,29 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { api, ConversationListItem } from '../api';
 import { NewConversationModal, NewConversationFormData } from '../components/NewConversationModal';
 import { useConversationEvents } from '../hooks/useConversationEvents';
 import { scoreBand, tagColor } from '../constants';
+import { formatDate } from '../utils/format';
 import { useTaxonomy } from '../hooks/useTaxonomy';
+import { ConversationPreviewPanel } from '../components/ConversationPreviewPanel';
 import { EmptyResults } from '../components/EmptyResults';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { InboxPane } from './InboxPage';
 
 export function LibraryPage() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const [modalOpen, setModalOpen] = useState(false);
+  const [previewId, setPreviewId] = useState<number | null>(null);
+  const rowRefs = useRef<Record<number, HTMLTableRowElement | null>>({});
+  const closePreview = useCallback(() => {
+    setPreviewId((current) => {
+      if (current != null) setTimeout(() => rowRefs.current[current]?.focus(), 0);
+      return null;
+    });
+  }, []);
   const [searchInput, setSearchInput] = useState(searchParams.get('q') || '');
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
@@ -458,7 +467,8 @@ export function LibraryPage() {
               </thead>
               <tbody>
                 {conversations.map((c) => (
-                  <ConversationRow key={c.id} conversation={c} onClick={() => navigate(`/conversations/${c.id}`)} />
+                  <ConversationRow key={c.id} conversation={c} selected={previewId === c.id}
+                    rowRef={(el) => { rowRefs.current[c.id] = el; }} onClick={() => setPreviewId(c.id)} />
                 ))}
               </tbody>
             </table>
@@ -502,6 +512,8 @@ export function LibraryPage() {
         </>
         )}
       </div>
+
+      {previewId != null && !modalOpen && <ConversationPreviewPanel id={previewId} onClose={closePreview} />}
 
       {modalOpen && (
         <NewConversationModal
@@ -581,16 +593,35 @@ function SseTracker({
   return null;
 }
 
-function ConversationRow({ conversation: c, onClick }: { conversation: ConversationListItem; onClick: () => void }) {
-  const dateStr = c.happened_at
-    ? new Date(c.happened_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-    : '—';
+function ConversationRow({ conversation: c, onClick, selected, rowRef }: {
+  conversation: ConversationListItem; onClick: () => void; selected: boolean; rowRef: (el: HTMLTableRowElement | null) => void;
+}) {
+  const dateStr = formatDate(c.happened_at);
 
   return (
-    <tr className="cursor-pointer hover:bg-page border-b border-hairline last:border-b-0" onClick={onClick}>
+    <tr
+      ref={rowRef}
+      tabIndex={0}
+      aria-selected={selected}
+      className={`cursor-pointer hover:bg-page border-b border-hairline last:border-b-0 ${selected ? 'bg-accent-soft' : ''}`}
+      onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+    >
       <td className="px-3.5 py-3 text-muted whitespace-nowrap">{dateStr}</td>
       <td className="px-3.5 py-3">
-        <div className="font-semibold">{c.company?.name || '—'}</div>
+        <div className="font-semibold">
+          {c.company ? (
+            // The company name opens the company page; it must not also open the preview.
+            <Link to={`/companies/${c.company.id}`} onClick={(e) => e.stopPropagation()} className="text-inherit hover:underline">
+              {c.company.name}
+            </Link>
+          ) : '—'}
+        </div>
         <div className="text-muted text-xs">
           {c.contacts.map((ct) => `${ct.name}${ct.role ? `: ${ct.role}` : ''}`).join(', ') || '—'}
         </div>

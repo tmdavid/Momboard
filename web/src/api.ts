@@ -141,6 +141,8 @@ export interface StatsResponse {
 
 // ─── v0.5 types ───
 
+export type ConversationPreview = Schemas['ConversationPreview'];
+
 export interface CompanyProfile {
   name: string;
   aliases: string[];
@@ -491,6 +493,10 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body),
     });
+  },
+
+  conversationPreview(id: number) {
+    return apiFetch<ConversationPreview>(`/api/conversations/${id}/preview`);
   },
 
   // ─── v0.5: your company, taxonomy rollout ───
