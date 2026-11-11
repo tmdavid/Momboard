@@ -198,11 +198,29 @@ export interface HypothesisEvidenceLink {
   rationale: string | null;
 }
 
+export interface HypothesisQuestion {
+  id: number;
+  text: string;
+  asked_at: string | null;
+  created_at?: string | null;
+}
+
+export interface HypothesisBandEvent {
+  id: number;
+  from_band: string | null;
+  to_band: string;
+  cause_link_id: number | null;
+  cause_quote: string | null;
+  cause_stance: string | null;
+  created_at: string;
+}
+
 export interface HypothesisDetail extends HypothesisListItem {
   evidence: {
     supports: HypothesisEvidenceLink[];
     contradicts: HypothesisEvidenceLink[];
   };
+  questions?: HypothesisQuestion[];
 }
 
 // ─── API Error ───
@@ -353,6 +371,7 @@ export const api = {
     tag?: string | string[];
     company_id?: number;
     status?: string;
+    q?: string;
     date_from?: string;
     date_to?: string;
     limit?: number;
@@ -539,6 +558,32 @@ export const api = {
   updateHypothesis(id: number, body: { status?: string; statement?: string; segment?: string }) {
     return apiFetch<Schemas['HypothesisResponse']>(`/api/hypotheses/${id}`, {
       method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+  },
+
+  hypothesisHistory(id: number) {
+    return apiFetch<{ items: HypothesisBandEvent[] }>(`/api/hypotheses/${id}/history`);
+  },
+
+  hypothesisSegments() {
+    return apiFetch<{ items: string[] }>('/api/hypotheses/segments');
+  },
+
+  setHypothesisQuestionAsked(hypothesisId: number, questionId: number, asked: boolean) {
+    return apiFetch<HypothesisQuestion>(
+      `/api/hypotheses/${hypothesisId}/questions/${questionId}`,
+      { method: 'PATCH', body: JSON.stringify({ asked }) },
+    );
+  },
+
+  /** Attach a quote to a hypothesis. confirm=true counts it as evidence immediately. */
+  addHypothesisLink(
+    hypothesisId: number,
+    body: { highlight_id: number; stance: 'supports' | 'contradicts'; confirm?: boolean },
+  ) {
+    return apiFetch<{ id: number; status: string }>(`/api/hypotheses/${hypothesisId}/links`, {
+      method: 'POST',
       body: JSON.stringify(body),
     });
   },

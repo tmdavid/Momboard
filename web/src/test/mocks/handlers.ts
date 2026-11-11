@@ -531,6 +531,10 @@ export const handlers = [
     });
   }),
 
+  // Hypotheses side-requests (defaults; individual tests override as needed)
+  http.get('/api/hypotheses/segments', () => HttpResponse.json({ items: [] })),
+  http.get('/api/hypotheses/:id/history', () => HttpResponse.json({ items: [] })),
+
   // Bulk accept (#14)
   http.post('/api/highlights/bulk-accept', async () => {
     return HttpResponse.json({ accepted_count: 0, accepted_ids: [] });

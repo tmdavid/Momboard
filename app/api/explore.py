@@ -31,6 +31,7 @@ async def list_highlights(
     tag: list[str] = Query(default=[]),
     company_id: int | None = None,
     status: str | None = None,
+    q: str | None = Query(default=None, description="Case-insensitive text search in the quote"),
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     limit: int = Query(default=100, le=500),
@@ -61,6 +62,9 @@ async def list_highlights(
             tag_keys.extend(part.strip() for part in t.split(",") if part.strip())
         # OR logic: highlight must belong to one of the requested tags
         query = query.where(Highlight.tag_key.in_(tag_keys))
+    if q and q.strip():
+        needle = q.strip().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        query = query.where(Highlight.quote.ilike(f"%{needle}%", escape="\\"))
     if company_id:
         query = query.where(Conversation.company_id == company_id)
     if date_from:

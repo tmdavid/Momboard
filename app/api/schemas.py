@@ -470,6 +470,9 @@ class HypothesisResponse(BaseModel):
 class HypothesisLinkCreate(BaseModel):
     highlight_id: int
     stance: Literal["supports", "contradicts"]
+    # A human deliberately attaching a quote can confirm it in the same step.
+    # Default False keeps the legacy "suggested, then review" flow.
+    confirm: bool = False
 
 
 class HypothesisLinkResponse(BaseModel):

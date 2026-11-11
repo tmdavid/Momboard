@@ -2163,6 +2163,11 @@ export interface components {
         };
         /** HypothesisLinkCreate */
         HypothesisLinkCreate: {
+            /**
+             * Confirm
+             * @default false
+             */
+            confirm: boolean;
             /** Highlight Id */
             highlight_id: number;
             /**
@@ -3848,6 +3853,8 @@ export interface operations {
                 tag?: string[];
                 company_id?: number | null;
                 status?: string | null;
+                /** @description Case-insensitive text search in the quote */
+                q?: string | null;
                 date_from?: string | null;
                 date_to?: string | null;
                 limit?: number;

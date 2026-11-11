@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, HighlightWithContext } from '../api';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { useTaxonomy } from '../hooks/useTaxonomy';
@@ -154,6 +154,7 @@ export function ExplorePage() {
 
 function QuoteCard({ item }: { item: HighlightWithContext }) {
   const navigate = useNavigate();
+  const [linking, setLinking] = useState(false);
   const tax = useTaxonomy();
   const color = tagColor(item.tag_key);
   const href = item.utterance_id
@@ -185,8 +186,75 @@ function QuoteCard({ item }: { item: HighlightWithContext }) {
       </div>
       <div className="flex gap-3 pt-2 border-t border-sub text-[13px]">
         <button onClick={() => navigate(href)} className="bg-transparent border-none p-0 text-accent cursor-pointer">Open in transcript</button>
+        <button onClick={() => setLinking((v) => !v)} aria-expanded={linking} className="bg-transparent border-none p-0 text-accent cursor-pointer">Link to hypothesis</button>
         <Link to={`/decisions?highlight_id=${item.id}`} className="ml-auto">Cite in decision</Link>
       </div>
+      {linking && <LinkToHypothesis highlightId={item.id} onDone={() => setLinking(false)} />}
     </article>
+  );
+}
+
+function LinkToHypothesis({ highlightId, onDone }: { highlightId: number; onDone: () => void }) {
+  const queryClient = useQueryClient();
+  const [hypothesisId, setHypothesisId] = useState('');
+  const [done, setDone] = useState(false);
+  const { data } = useQuery({
+    queryKey: ['hypotheses'],
+    queryFn: () => api.listHypotheses(),
+  });
+  const link = useMutation({
+    mutationFn: (stance: 'supports' | 'contradicts') =>
+      api.addHypothesisLink(parseInt(hypothesisId, 10), { highlight_id: highlightId, stance, confirm: true }),
+    onSuccess: () => {
+      setDone(true);
+      queryClient.invalidateQueries({ queryKey: ['hypotheses'] });
+      queryClient.invalidateQueries({ queryKey: ['hypothesis'] });
+      queryClient.invalidateQueries({ queryKey: ['hypothesis-history'] });
+      setTimeout(onDone, 1200);
+    },
+  });
+  const items = data ?? [];
+
+  if (done) return <p role="status" className="text-xs text-good-text">Linked as confirmed evidence.</p>;
+  if (items.length === 0) {
+    return <p className="text-xs text-muted">No hypotheses yet — add one on the Hypotheses page first.</p>;
+  }
+  return (
+    <div className="flex flex-col gap-2 pt-2 border-t border-sub" role="group" aria-label="Link to hypothesis">
+      <select
+        value={hypothesisId}
+        onChange={(e) => setHypothesisId(e.target.value)}
+        aria-label="Hypothesis"
+        className="h-8 px-2 border border-hairline rounded-lg bg-surface text-sm text-ink"
+      >
+        <option value="">Choose a hypothesis…</option>
+        {items.map((h) => (
+          <option key={h.id} value={h.id}>{h.statement}</option>
+        ))}
+      </select>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          disabled={!hypothesisId || link.isPending}
+          onClick={() => link.mutate('supports')}
+          className="text-xs font-semibold px-2.5 py-1 rounded bg-green-100 text-green-800 disabled:opacity-50"
+        >
+          Supports
+        </button>
+        <button
+          type="button"
+          disabled={!hypothesisId || link.isPending}
+          onClick={() => link.mutate('contradicts')}
+          className="text-xs font-semibold px-2.5 py-1 rounded bg-red-100 text-red-800 disabled:opacity-50"
+        >
+          Contradicts
+        </button>
+      </div>
+      {link.isError && (
+        <p role="alert" className="text-xs text-red-600">
+          {(link.error as Error).message || 'Could not link this quote.'}
+        </p>
+      )}
+    </div>
   );
 }

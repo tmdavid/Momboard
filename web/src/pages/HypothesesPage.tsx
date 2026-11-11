@@ -11,6 +11,8 @@
  */
 import { useState, useRef, FormEvent, KeyboardEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import { InlineEdit, QuestionsList, BandHistory, AddEvidence } from '../components/HypothesisDetailParts';
 import {
   api,
   HypothesisListItem,
@@ -248,6 +250,7 @@ function EvidenceSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['hypotheses'] });
       queryClient.invalidateQueries({ queryKey: ['hypothesis'] });
+      queryClient.invalidateQueries({ queryKey: ['hypothesis-history'] });
     },
   });
 
@@ -509,6 +512,12 @@ function HypothesisDetailPanel({
     queryFn: () => api.getHypothesis(hypothesis.id),
   });
 
+  const allEvidence = [...(detail?.evidence.supports ?? []), ...(detail?.evidence.contradicts ?? [])];
+  const linkedIds = new Set(allEvidence.map((e) => e.highlight_id));
+  const confirmedHighlightIds = (detail?.evidence.supports ?? [])
+    .filter((e) => e.status === 'confirmed')
+    .map((e) => e.highlight_id);
+
   const statusMutation = useMutation({
     mutationFn: (newStatus: string) => api.updateHypothesis(hypothesis.id, { status: newStatus }),
     onSuccess: (data) => {
@@ -562,12 +571,41 @@ function HypothesisDetailPanel({
           {hypothesis.rollup.grounding_reason}
         </p>
       )}
-      {detail && (
-        <EvidenceSection
-          evidence={detail.evidence}
-          hypothesisStatus={hypothesis.status}
-          onStatusChange={(status) => statusMutation.mutate(status)}
+      <div className="mt-1">
+        <InlineEdit
+          id={hypothesis.id}
+          statement={hypothesis.statement}
+          segment={hypothesis.segment}
+          hasEvidenceLinks={(detail?.evidence.supports.length ?? 0) + (detail?.evidence.contradicts.length ?? 0) > 0}
         />
+      </div>
+      {detail && (
+        <>
+          <EvidenceSection
+            evidence={detail.evidence}
+            hypothesisStatus={hypothesis.status}
+            onStatusChange={(status) => statusMutation.mutate(status)}
+          />
+          <AddEvidence hypothesisId={hypothesis.id} linkedHighlightIds={linkedIds} />
+          <QuestionsList hypothesisId={hypothesis.id} questions={detail.questions ?? []} />
+          <BandHistory hypothesisId={hypothesis.id} />
+          <div className="mt-4 border-t border-hairline pt-3">
+            {confirmedHighlightIds.length > 0 ? (
+              <Link
+                to={`/decisions?hypothesis_id=${hypothesis.id}${confirmedHighlightIds
+                  .map((id) => `&highlight_id=${id}`)
+                  .join('')}`}
+                className="text-sm font-semibold"
+              >
+                Cite in decision
+              </Link>
+            ) : (
+              <span className="text-xs text-muted">
+                Confirm at least one quote to cite this hypothesis in a decision.
+              </span>
+            )}
+          </div>
+        </>
       )}
     </div>
   );
@@ -640,11 +678,13 @@ function HypothesisComposer() {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Segment suggestions: segments already used on saved hypotheses.
-  const known = queryClient.getQueryData<HypothesisListItem[]>(['hypotheses']) ?? [];
-  const segmentSuggestions = Array.from(
-    new Set(known.map((h) => h.segment).filter((x): x is string => !!x)),
-  ).sort();
+  // Segment suggestions: segments already in use (server-side distinct list).
+  const { data: segmentData } = useQuery({
+    queryKey: ['hypothesis-segments'],
+    queryFn: () => api.hypothesisSegments(),
+    staleTime: 60_000,
+  });
+  const segmentSuggestions = segmentData?.items ?? [];
 
   // T48: evidence-gated intake — preview matches, confirm per-quote, then commit.
   const [preview, setPreview] = useState<HypothesisIntakeResponse | null>(null);
@@ -674,6 +714,7 @@ function HypothesisComposer() {
     onSuccess: () => {
       resetComposer();
       queryClient.invalidateQueries({ queryKey: ['hypotheses'] });
+      queryClient.invalidateQueries({ queryKey: ['hypothesis-segments'] });
     },
   });
 

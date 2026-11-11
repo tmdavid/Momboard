@@ -717,13 +717,29 @@ async def create_hypothesis_link(
         if highlight is None:
             raise HTTPException(status_code=404, detail="Highlight not found")
 
+        duplicate = (
+            await db.execute(
+                select(HypothesisLink.id).where(
+                    HypothesisLink.hypothesis_id == hypothesis_id,
+                    HypothesisLink.highlight_id == body.highlight_id,
+                    HypothesisLink.status.in_(("suggested", "confirmed")),
+                )
+            )
+        ).first()
+        if duplicate is not None:
+            raise HTTPException(
+                status_code=409, detail="This quote is already linked to the hypothesis"
+            )
+
         before = await current_band(db, hypothesis_id)
         link = HypothesisLink(
             hypothesis_id=hypothesis_id,
             highlight_id=body.highlight_id,
             stance=body.stance,
             origin="human",
-            status="suggested",
+            status="confirmed" if body.confirm else "suggested",
+            reviewed_by=user.id if body.confirm else None,
+            reviewed_at=utcnow() if body.confirm else None,
         )
         db.add(link)
         await db.flush()

@@ -1381,6 +1381,24 @@ class TestInvalidStanceRejection:
 # ===========================================================================
 
 
+async def _three_northwind_highlights(session_factory, hyp_seeded: dict) -> list[int]:
+    """Three DISTINCT accepted highlights from one company (Northwind)."""
+    conv_id = hyp_seeded["highlight2"].conversation_id
+    ids = [hyp_seeded["highlight2"].id]
+    async with session_factory() as db:
+        for n in range(2):
+            h = Highlight(
+                conversation_id=conv_id, tag_key="pain",
+                quote=f"Another Northwind pain point number {n}",
+                status="accepted", origin="ai",
+            )
+            db.add(h)
+            await db.flush()
+            ids.append(h.id)
+        await db.commit()
+    return ids
+
+
 class TestRefutationRegression:
     """Refutation hint uses distinct companies, not raw link count.
 
@@ -1391,7 +1409,8 @@ class TestRefutationRegression:
 
     @pytest.mark.asyncio
     async def test_one_company_many_contradicting_links_no_refuted_hint(
-        self, auth_client: AsyncClient, hyp_seeded: dict
+        self, auth_client: AsyncClient, hyp_seeded: dict,
+        session_factory: async_sessionmaker[AsyncSession],
     ):
         """3 contradicting links from 1 company should NOT yield 'leaning-refuted'.
 
@@ -1403,14 +1422,11 @@ class TestRefutationRegression:
         )
         hyp_id = create.json()["id"]
 
-        # Create and confirm 3 contradicting links — all from highlight2 (Northwind, same company)
-        for _ in range(3):
+        # Create and confirm 3 contradicting links — 3 distinct quotes, same company (Northwind)
+        for highlight_id in await _three_northwind_highlights(session_factory, hyp_seeded):
             link = await auth_client.post(
                 f"/api/hypotheses/{hyp_id}/links",
-                json={
-                    "highlight_id": hyp_seeded["highlight2"].id,
-                    "stance": "contradicts",
-                },
+                json={"highlight_id": highlight_id, "stance": "contradicts"},
             )
             await auth_client.patch(
                 f"/api/hypothesis-links/{link.json()['id']}",
@@ -1427,7 +1443,8 @@ class TestRefutationRegression:
 
     @pytest.mark.asyncio
     async def test_list_also_reflects_no_false_refuted_hint(
-        self, auth_client: AsyncClient, hyp_seeded: dict
+        self, auth_client: AsyncClient, hyp_seeded: dict,
+        session_factory: async_sessionmaker[AsyncSession],
     ):
         """List endpoint also computes verdict_hint correctly (no false refutation)."""
         create = await auth_client.post(
@@ -1436,13 +1453,10 @@ class TestRefutationRegression:
         )
         hyp_id = create.json()["id"]
 
-        for _ in range(3):
+        for highlight_id in await _three_northwind_highlights(session_factory, hyp_seeded):
             link = await auth_client.post(
                 f"/api/hypotheses/{hyp_id}/links",
-                json={
-                    "highlight_id": hyp_seeded["highlight2"].id,
-                    "stance": "contradicts",
-                },
+                json={"highlight_id": highlight_id, "stance": "contradicts"},
             )
             await auth_client.patch(
                 f"/api/hypothesis-links/{link.json()['id']}",
@@ -2165,3 +2179,66 @@ class TestLinkerHardening:
             await session.commit()
             events = await list_band_events(session, hyp_id)
             assert [(e.from_band, e.to_band) for e in events] == [("hunch", "candidate")]
+
+
+class TestEvidencePickerSupport:
+    """Backend support for the detail view's 'Add evidence' + Explore 'Link to hypothesis'."""
+
+    @pytest.mark.asyncio
+    async def test_highlights_list_supports_text_search_q(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        r = await auth_client.get("/api/highlights", params={"q": "nine takedown templates"})
+        assert r.status_code == 200
+        quotes = [i["quote"] for i in r.json()["items"]]
+        assert quotes and all("takedown templates" in q.lower() for q in quotes)
+        none = await auth_client.get("/api/highlights", params={"q": "zzz-no-such-text"})
+        assert none.json()["items"] == [] and none.json()["total"] == 0
+
+    @pytest.mark.asyncio
+    async def test_q_treats_percent_literally(self, auth_client: AsyncClient, hyp_seeded: dict):
+        r = await auth_client.get("/api/highlights", params={"q": "%"})
+        assert r.json()["total"] == 0  # no quote contains a literal percent sign
+
+    @pytest.mark.asyncio
+    async def test_create_link_with_confirm_is_confirmed_and_audited(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        hid = await _mk_hyp(auth_client, "Confirm flag on manual link creation ok")
+        h1 = hyp_seeded["highlight1"].id
+        r = await auth_client.post(
+            f"/api/hypotheses/{hid}/links",
+            json={"highlight_id": h1, "stance": "supports", "confirm": True},
+        )
+        assert r.status_code == 201
+        assert r.json()["status"] == "confirmed" and r.json()["reviewed_at"] is not None
+        detail = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
+        assert detail["rollup"]["grounding"] == "grounded"
+        hist = (await auth_client.get(f"/api/hypotheses/{hid}/history")).json()["items"]
+        # one jump hunch -> grounded, caused by this link (no intermediate 'candidate')
+        assert (hist[0]["from_band"], hist[0]["to_band"]) == ("hunch", "grounded")
+
+    @pytest.mark.asyncio
+    async def test_create_link_default_stays_suggested(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        hid = await _mk_hyp(auth_client, "Default manual link stays suggested ok")
+        r = await auth_client.post(
+            f"/api/hypotheses/{hid}/links",
+            json={"highlight_id": hyp_seeded["highlight1"].id, "stance": "supports"},
+        )
+        assert r.json()["status"] == "suggested"
+
+    @pytest.mark.asyncio
+    async def test_duplicate_link_for_same_highlight_is_409(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        hid = await _mk_hyp(
+            auth_client, "Duplicate manual links are rejected ok",
+            links=[(hyp_seeded["highlight1"].id, "supports", "confirmed")],
+        )
+        r = await auth_client.post(
+            f"/api/hypotheses/{hid}/links",
+            json={"highlight_id": hyp_seeded["highlight1"].id, "stance": "supports"},
+        )
+        assert r.status_code == 409

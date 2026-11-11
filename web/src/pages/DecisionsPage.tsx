@@ -62,10 +62,18 @@ export function DecisionsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [tab, setTab] = useState<Tab>('all');
 
-  const preselectedHighlightId = searchParams.get('highlight_id');
+  // Prefill from elsewhere in the app: ?highlight_id=1&highlight_id=2 and/or ?hypothesis_id=3.
+  const preselectedHighlightIds = searchParams
+    .getAll('highlight_id')
+    .map((v) => parseInt(v, 10))
+    .filter((n) => !Number.isNaN(n));
+  const hypothesisIdParam = searchParams.get('hypothesis_id');
+  const preselectedHypothesisId = hypothesisIdParam ? parseInt(hypothesisIdParam, 10) : undefined;
+  const hasPrefill = preselectedHighlightIds.length > 0 || preselectedHypothesisId !== undefined;
+  const prefillKey = `${preselectedHighlightIds.join(',')}|${preselectedHypothesisId ?? ''}`;
   useEffect(() => {
-    if (preselectedHighlightId) setShowCreate(true);
-  }, [preselectedHighlightId]);
+    if (prefillKey !== '|') setShowCreate(true);
+  }, [prefillKey]);
 
   const { data: listData, isLoading } = useQuery({
     queryKey: ['decisions'],
@@ -222,10 +230,11 @@ export function DecisionsPage() {
 
       {showCreate && (
         <CreateDecisionModal
-          preselectedHighlightId={preselectedHighlightId ? parseInt(preselectedHighlightId) : undefined}
+          preselectedHighlightIds={preselectedHighlightIds}
+          hypothesisId={Number.isNaN(preselectedHypothesisId ?? 0) ? undefined : preselectedHypothesisId}
           onClose={() => {
             setShowCreate(false);
-            if (preselectedHighlightId) setSearchParams({}, { replace: true });
+            if (hasPrefill) setSearchParams({}, { replace: true });
             queryClient.invalidateQueries({ queryKey: ['decisions'] });
           }}
         />
@@ -258,10 +267,17 @@ function SupersedeButton({ currentId, allDecisions, onSupersede }: {
   );
 }
 
-function CreateDecisionModal({ onClose, preselectedHighlightId }: { onClose: () => void; preselectedHighlightId?: number }) {
+function CreateDecisionModal({ onClose, preselectedHighlightIds = [], hypothesisId }: { onClose: () => void; preselectedHighlightIds?: number[]; hypothesisId?: number }) {
   const [title, setTitle] = useState('');
   const [rationale, setRationale] = useState('');
-  const [selectedHighlights, setSelectedHighlights] = useState<number[]>(preselectedHighlightId ? [preselectedHighlightId] : []);
+  const [selectedHighlights, setSelectedHighlights] = useState<number[]>(preselectedHighlightIds);
+
+  // When opened from a hypothesis, show which belief this decision is about.
+  const { data: linkedHypothesis } = useQuery({
+    queryKey: ['hypothesis', hypothesisId],
+    queryFn: () => api.getHypothesis(hypothesisId as number),
+    enabled: hypothesisId !== undefined,
+  });
   const [searchQuery, setSearchQuery] = useState('');
 
   const { data: highlightsData } = useQuery({
@@ -285,7 +301,12 @@ function CreateDecisionModal({ onClose, preselectedHighlightId }: { onClose: () 
       const r = await fetch('/api/decisions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, rationale_md: rationale, evidence: selectedHighlights }),
+        body: JSON.stringify({
+          title,
+          rationale_md: rationale,
+          evidence: selectedHighlights,
+          ...(hypothesisId !== undefined ? { hypothesis_id: hypothesisId } : {}),
+        }),
       });
       if (!r.ok) { const err = await r.json(); throw new Error(err.detail || 'Failed'); }
       return r.json();
@@ -297,6 +318,11 @@ function CreateDecisionModal({ onClose, preselectedHighlightId }: { onClose: () 
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50" role="dialog" aria-label="Create decision">
       <div className="bg-surface rounded-xl p-6 w-full max-w-lg max-h-[80vh] overflow-hidden flex flex-col border border-hairline">
         <h2 className="text-lg font-bold mb-4 text-ink">New decision</h2>
+        {hypothesisId !== undefined && (
+          <p className="text-xs text-muted mb-3" data-testid="linked-hypothesis">
+            About hypothesis: <b className="text-ink-2">{linkedHypothesis?.statement ?? `#${hypothesisId}`}</b>
+          </p>
+        )}
         <input type="text" placeholder="Decision title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full border border-hairline rounded-lg px-3 py-2 mb-3" />
         <textarea placeholder="Rationale (why this decision)" value={rationale} onChange={(e) => setRationale(e.target.value)} className="w-full border border-hairline rounded-lg px-3 py-2 mb-3 h-20" />
         <div className="mb-3 flex-1 min-h-0 flex flex-col">

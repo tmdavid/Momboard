@@ -248,6 +248,9 @@ const hypothesesHandlers = [
     return HttpResponse.json({ ...link, status: body.status });
   }),
 
+  http.get('/api/hypotheses/segments', () => HttpResponse.json({ items: [] })),
+  http.get('/api/hypotheses/:id/history', () => HttpResponse.json({ items: [] })),
+
   // T48: evidence-gated intake
   http.post('/api/hypotheses/intake', async ({ request }) => {
     const body = (await request.json()) as { statement: string };
@@ -1495,5 +1498,164 @@ describe('Hypotheses PRD C2/C3: grounding-band board', () => {
     await user.click(within(detail).getByRole('button', { name: /archive/i }));
     await waitFor(() => expect(screen.queryByText(/Delta hunch/)).not.toBeInTheDocument());
     expect(patched).toMatchObject({ status: 'archived' });
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Hypotheses PRD: detail panel — edit, questions, history, add evidence, cite
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Hypotheses PRD: detail panel features', () => {
+  const baseItem = (over: Record<string, unknown> = {}) => ({
+    id: 21,
+    statement: 'Foxtrot belief about renewal timing patterns',
+    segment: 'SMB',
+    status: 'open',
+    created_by: 1,
+    created_at: '2026-08-01T00:00:00Z',
+    decided_at: null,
+    rollup: {
+      supports: { confirmed: 1, suggested: 0 },
+      contradicts: { confirmed: 0, suggested: 0 },
+      companies_supporting: 1,
+      companies_contradicting: 0,
+      last_evidence_at: null,
+      freshness: 'fresh',
+      newest_evidence_at: '2026-07-30',
+      grounding: 'grounded',
+      pending_count: 0,
+      grounding_reason: '1 supporting quote from 1 company, 0 contradicting.',
+    },
+    verdict_hint: null,
+    ...over,
+  });
+
+  const evidenceLink = {
+    link_id: 301, highlight_id: 77, quote: 'We renew only after the pilot', conversation_id: 1,
+    conversation_title: 'Call', utterance_id: 3, company_name: 'Acme', contact_name: 'Maria',
+    confidence: 0.9, origin: 'ai', status: 'confirmed', rationale: null,
+  };
+
+  const setup = (detailOver: Record<string, unknown> = {}) => {
+    const calls: Record<string, unknown[]> = { patch: [], question: [], link: [] };
+    server.use(
+      http.get('/api/hypotheses', () => HttpResponse.json({ items: [baseItem()], total: 1 })),
+      http.get('/api/hypotheses/segments', () => HttpResponse.json({ items: ['Enterprise', 'SMB'] })),
+      http.get('/api/hypotheses/21', () =>
+        HttpResponse.json({
+          ...baseItem(),
+          evidence: { supports: [evidenceLink], contradicts: [] },
+          questions: [
+            { id: 1, text: 'When did you last renew?', asked_at: null },
+            { id: 2, text: 'Who signs off?', asked_at: '2026-08-02T00:00:00Z' },
+          ],
+          ...detailOver,
+        }),
+      ),
+      http.get('/api/hypotheses/21/history', () =>
+        HttpResponse.json({
+          items: [
+            { id: 2, from_band: 'candidate', to_band: 'grounded', cause_link_id: 301, cause_quote: 'We renew only after the pilot', cause_stance: 'supports', created_at: '2026-08-03T00:00:00Z' },
+            { id: 1, from_band: null, to_band: 'hunch', cause_link_id: null, cause_quote: null, cause_stance: null, created_at: '2026-08-01T00:00:00Z' },
+          ],
+        }),
+      ),
+      http.patch('/api/hypotheses/21', async ({ request }) => {
+        calls.patch.push(await request.json());
+        return HttpResponse.json({ ...baseItem(), segment: 'Mid-market' });
+      }),
+      http.patch('/api/hypotheses/21/questions/:qid', async ({ request, params }) => {
+        calls.question.push({ qid: params.qid, ...((await request.json()) as object) });
+        return HttpResponse.json({ id: Number(params.qid), text: 'x', asked_at: '2026-08-04T00:00:00Z' });
+      }),
+      http.get('/api/highlights', ({ request }) => {
+        const q = new URL(request.url).searchParams.get('q') ?? '';
+        const all = [
+          { id: 77, conversation_id: 1, utterance_id: 3, tag_key: 'pain', quote: 'We renew only after the pilot', confidence: 0.9, status: 'accepted', origin: 'ai', conversation_title: 'Call', conversation_happened_at: null, company_name: 'Acme', contact_names: ['Maria'] },
+          { id: 88, conversation_id: 2, utterance_id: 4, tag_key: 'pain', quote: 'Renewals slip because of procurement', confidence: 0.8, status: 'accepted', origin: 'ai', conversation_title: 'Call 2', conversation_happened_at: null, company_name: 'Globex', contact_names: ['Sam'] },
+        ].filter((h) => h.quote.toLowerCase().includes(q.toLowerCase()));
+        return HttpResponse.json({ items: all, total: all.length, limit: 8, offset: 0 });
+      }),
+      http.post('/api/hypotheses/21/links', async ({ request }) => {
+        calls.link.push(await request.json());
+        return HttpResponse.json({ id: 999, status: 'confirmed' }, { status: 201 });
+      }),
+    );
+    return calls;
+  };
+
+  const open = async (user: ReturnType<typeof userEvent.setup>) => {
+    renderWithProviders(<App />, { route: '/hypotheses' });
+    await user.click(await screen.findByText(/Foxtrot belief/));
+    return screen.findByTestId('hypothesis-detail');
+  };
+
+  test('shows validation questions with asked state and toggles via the API', async () => {
+    const calls = setup();
+    const user = userEvent.setup();
+    const detail = await open(user);
+    const q1 = await within(detail).findByRole('checkbox', { name: /mark asked: when did you last renew/i });
+    expect(q1).not.toBeChecked();
+    expect(within(detail).getByRole('checkbox', { name: /mark asked: who signs off/i })).toBeChecked();
+    await user.click(q1);
+    await waitFor(() => expect(calls.question).toEqual([{ qid: '1', asked: true }]));
+  });
+
+  test('shows band history with the quote that caused each change', async () => {
+    setup();
+    const user = userEvent.setup();
+    const detail = await open(user);
+    const history = await within(detail).findByRole('region', { name: /band history/i });
+    expect(within(history).getByText(/added as/i)).toBeInTheDocument();
+    expect(within(history).getByText(/supported by/i)).toHaveTextContent(/We renew only after the pilot/);
+  });
+
+  test('inline edit saves a changed segment; statement is locked once evidence is linked', async () => {
+    const calls = setup();
+    const user = userEvent.setup();
+    const detail = await open(user);
+    await within(detail).findByRole('button', { name: /^edit$/i });
+    await user.click(within(detail).getByRole('button', { name: /^edit$/i }));
+    const form = within(detail).getByRole('form', { name: /edit hypothesis/i });
+    expect(within(form).getByLabelText(/^belief$/i)).toBeDisabled();
+    const seg = within(form).getByLabelText(/^segment$/i);
+    await user.clear(seg);
+    await user.type(seg, 'Mid-market');
+    await user.click(within(form).getByRole('button', { name: /save changes/i }));
+    await waitFor(() => expect(calls.patch).toEqual([{ segment: 'Mid-market' }]));
+  });
+
+  test('Add evidence searches quotes, hides already-linked ones, and links with a stance', async () => {
+    const calls = setup();
+    const user = userEvent.setup();
+    const detail = await open(user);
+    await user.click(await within(detail).findByRole('button', { name: /^add evidence$/i }));
+    await user.type(within(detail).getByLabelText(/search quotes/i), 'renew');
+    // 77 is already linked -> only 88 is offered
+    await within(detail).findByText(/Renewals slip because of procurement/);
+    expect(within(detail).queryByText(/We renew only after the pilot.*Supports/)).not.toBeInTheDocument();
+    await user.click(within(detail).getByRole('button', { name: /link as contradicts: renewals slip/i }));
+    await waitFor(() =>
+      expect(calls.link).toEqual([{ highlight_id: 88, stance: 'contradicts', confirm: true }]),
+    );
+  });
+
+  test('Cite in decision links to Decisions prefilled with the hypothesis and confirmed quotes', async () => {
+    setup();
+    const user = userEvent.setup();
+    const detail = await open(user);
+    const link = await within(detail).findByRole('link', { name: /cite in decision/i });
+    expect(link).toHaveAttribute('href', '/decisions?hypothesis_id=21&highlight_id=77');
+  });
+
+  test('composer segment suggestions come from /hypotheses/segments', async () => {
+    setup();
+    renderWithProviders(<App />, { route: '/hypotheses' });
+    await screen.findByText(/Foxtrot belief/);
+    await waitFor(() => {
+      const options = Array.from(document.querySelectorAll('#hypothesis-segments option')).map((o) => o.getAttribute('value'));
+      expect(options).toEqual(['Enterprise', 'SMB']);
+    });
   });
 });
