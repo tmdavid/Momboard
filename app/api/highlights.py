@@ -125,6 +125,10 @@ async def update_highlight(
         await invalidate_decision_evidence_for_highlights(
             db, [highlight_id], reason=INVALID_TAG_REJECTED,
         )
+        from app.services.hypothesis_integrity import (
+            invalidate_hypothesis_links_for_highlights,
+        )
+        await invalidate_hypothesis_links_for_highlights(db, [highlight_id])
 
     return HighlightResponse.model_validate(highlight)
 

@@ -1861,3 +1861,45 @@ class TestHypothesisArchive:
         await auth_client.patch(f"/api/hypotheses/{hid}", json={"status": "open"})
         ids = [i["id"] for i in (await auth_client.get("/api/hypotheses")).json()["items"]]
         assert hid in ids
+
+
+class TestHypothesisIntegrityHook:
+    """P1: rejecting a highlight's tag invalidates its hypothesis links and re-derives the band."""
+
+    @pytest.mark.asyncio
+    async def test_rejecting_highlight_invalidates_links_and_drops_band(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        hid = await _mk_hyp(
+            auth_client, "Integrity hook hypothesis grounded then undermined",
+            links=[(h1, "supports", "confirmed"), (h2, "supports", "suggested")],
+        )
+        before = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
+        assert before["rollup"]["grounding"] == "grounded"
+
+        r = await auth_client.patch(f"/api/highlights/{h1}", json={"status": "rejected"})
+        assert r.status_code == 200
+
+        after = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
+        # The confirmed support is gone; only the still-suggested link remains.
+        assert after["rollup"]["supports"]["confirmed"] == 0
+        assert after["rollup"]["grounding"] == "candidate"
+        statuses = {link["highlight_id"]: link["status"] for link in after["links"]}
+        assert statuses[h1] == "invalid"
+        assert statuses[h2] == "suggested"
+        # Invalid links are not renderable evidence on the board.
+        assert all(e["highlight_id"] != h1 for e in after["evidence"]["supports"])
+
+    @pytest.mark.asyncio
+    async def test_rejecting_unrelated_highlight_changes_nothing(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        hid = await _mk_hyp(
+            auth_client, "Integrity hook hypothesis unaffected case",
+            links=[(h1, "supports", "confirmed")],
+        )
+        await auth_client.patch(f"/api/highlights/{h2}", json={"status": "rejected"})
+        after = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
+        assert after["rollup"]["grounding"] == "grounded"

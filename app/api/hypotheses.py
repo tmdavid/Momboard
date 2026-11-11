@@ -465,7 +465,7 @@ async def get_hypothesis_detail(
         for link, highlight, conversation, company in context_rows:
             # Rejected suggestions are retained in the legacy links field for
             # auditability, but are not renderable evidence on the board.
-            if link.status == "rejected":
+            if link.status in ("rejected", "invalid"):
                 continue
             evidence[link.stance].append({
                 "link_id": link.id,
