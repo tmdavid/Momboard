@@ -1,6 +1,6 @@
 """T41: Evidence freshness/staleness — computed read-time, integrated into hypotheses/stats/digest/briefs."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -13,6 +13,12 @@ from app.models import (
     HypothesisLink,
     utcnow,
 )
+
+
+def _as_utc(value: datetime) -> datetime:
+    """Treat a naive datetime as UTC. SQLite returns naive datetimes even for
+    timezone-aware columns, while utcnow() is aware; comparing the two raises TypeError."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 def _get_thresholds() -> tuple[int, int]:
@@ -38,7 +44,7 @@ def compute_freshness_band(newest_evidence_at: Any, now: Any = None) -> str:
         now = utcnow()
 
     fresh_days, aging_days = _get_thresholds()
-    age = now - newest_evidence_at
+    age = _as_utc(now) - _as_utc(newest_evidence_at)
     if age < timedelta(days=fresh_days):
         return "fresh"
     elif age < timedelta(days=aging_days):
@@ -109,7 +115,7 @@ async def get_stale_hypotheses(
         )
         newest = result.scalar_one_or_none()
 
-        if newest is None or newest < stale_cutoff:
+        if newest is None or _as_utc(newest) < _as_utc(stale_cutoff):
             stale_items.append({
                 "id": hyp.id,
                 "statement": hyp.statement,

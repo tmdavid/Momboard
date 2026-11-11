@@ -2473,3 +2473,71 @@ class TestIntakeSegmentAndConversationRules:
             hyp_seeded["highlight2"].id, hyp_seeded["highlight1"].id
         ]
         assert all(m["in_segment"] is None for m in out["matches"])
+
+
+class TestFreshnessWithRealDates:
+    """Regression: SQLite returns naive datetimes, utcnow() is aware. A confirmed supporting
+    quote from a DATED conversation used to crash the hypotheses list/detail (500)."""
+
+    @staticmethod
+    async def _dated_hypothesis(auth_client, session_factory, hyp_seeded, days_ago: int) -> int:
+        from datetime import timedelta
+
+        from app.models import Conversation, utcnow
+
+        async with session_factory() as db:
+            convo = await db.get(Conversation, hyp_seeded["highlight1"].conversation_id)
+            convo.happened_at = utcnow() - timedelta(days=days_ago)
+            await db.commit()
+        return await _mk_hyp(
+            auth_client, "Freshness with a dated conversation works ok",
+            links=[(hyp_seeded["highlight1"].id, "supports", "confirmed")],
+        )
+
+    @pytest.mark.asyncio
+    async def test_list_and_detail_survive_dated_evidence_and_report_fresh(
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
+    ):
+        hid = await self._dated_hypothesis(auth_client, session_factory, hyp_seeded, days_ago=10)
+        listing = await auth_client.get("/api/hypotheses")
+        assert listing.status_code == 200
+        item = next(i for i in listing.json()["items"] if i["id"] == hid)
+        assert item["rollup"]["freshness"] == "fresh"
+        assert item["rollup"]["newest_evidence_at"]
+        detail = await auth_client.get(f"/api/hypotheses/{hid}")
+        assert detail.status_code == 200 and detail.json()["rollup"]["freshness"] == "fresh"
+
+    @pytest.mark.asyncio
+    async def test_old_evidence_is_stale(
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
+    ):
+        hid = await self._dated_hypothesis(auth_client, session_factory, hyp_seeded, days_ago=400)
+        item = next(
+            i for i in (await auth_client.get("/api/hypotheses")).json()["items"] if i["id"] == hid
+        )
+        assert item["rollup"]["freshness"] == "stale"
+
+    @pytest.mark.asyncio
+    async def test_stale_hypotheses_helper_handles_dated_evidence(
+        self, auth_client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict,
+    ):
+        from app.services.staleness import get_stale_hypotheses
+
+        old = await self._dated_hypothesis(auth_client, session_factory, hyp_seeded, days_ago=400)
+        async with session_factory() as db:
+            stale = await get_stale_hypotheses(db)
+        assert old in [s["id"] for s in stale]
+
+    def test_freshness_band_accepts_naive_and_aware_datetimes(self):
+        from datetime import UTC, datetime, timedelta
+
+        from app.services.staleness import compute_freshness_band
+
+        aware_recent = datetime.now(UTC) - timedelta(days=5)
+        assert compute_freshness_band(aware_recent) == "fresh"
+        assert compute_freshness_band(aware_recent.replace(tzinfo=None)) == "fresh"
+        old = (datetime.now(UTC) - timedelta(days=500)).replace(tzinfo=None)
+        assert compute_freshness_band(old) == "stale"

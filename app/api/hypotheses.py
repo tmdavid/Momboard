@@ -264,8 +264,10 @@ async def list_hypotheses(
 
         if sort == "evidence":
             items.sort(
-                key=lambda i: (i["rollup"].last_evidence_at is not None,
-                               i["rollup"].last_evidence_at or datetime.min),
+                key=lambda i: (
+                    i["rollup"].last_evidence_at is not None,
+                    _cmp_key(i["rollup"].last_evidence_at) if i["rollup"].last_evidence_at else datetime.min,
+                ),
                 reverse=True,
             )
         elif sort == "support":
