@@ -36,7 +36,7 @@ Humans stay in the loop: every AI highlight can be accepted, edited, rejected, o
 | `commitment` | 🤝 | Commitment | Gave up time, reputation, or money (advancement) | very strong |
 | `compliment` | 🎈 | Compliment / fluff | "Sounds great, I'd totally use it" — zero signal | **anti-signal** |
 
-The last two are additions beyond the book's note symbols but core to its thesis (commitment & advancement; compliments are lies). The taxonomy lives in a `tags` DB table seeded from this list, so you can extend it (e.g., Red Points–specific tags like `competitor_mention`) without code changes.
+The last two are additions beyond the book's note symbols but core to its thesis (commitment & advancement; compliments are lies). The taxonomy lives in a `tags` DB table seeded from this list, so you can extend it (e.g., company-specific tags like `competitor_mention`) without code changes.
 
 ---
 
@@ -254,7 +254,7 @@ Migration day: spin up Postgres, `alembic upgrade head`, copy rows preserving ID
 ## 9. Config, security, deployment
 
 - **Config:** pydantic-settings; `.env` for `DATABASE_URL`, `OPENAI_API_KEY`, `SESSION_SECRET`, model names, prompt versions.
-- **Auth:** email + password (argon2), server-side session cookie, `admin` can manage users/tags. No self-signup. That's enough for ≤5 trusted users; add SSO only if Red Points IT ever asks.
+- **Auth:** email + password (argon2), server-side session cookie, `admin` can manage users/tags. No self-signup. That's enough for ≤5 trusted users; add SSO only if your IT team ever asks.
 - **Privacy:** transcripts are customer data — deploy in EU region (Fly.io `ams`/`cdg`), volume-encrypted, and use OpenAI API (not consumer ChatGPT) so data isn't trained on; consider their EU data residency options.
 - **Deploy:** single Dockerfile (multi-stage: build SPA → copy into Python image). Fly.io with a 1GB volume mounted at `/data` for the SQLite file + uploads. `fly deploy` is the whole CD story. Nightly `sqlite3 .backup` to the volume + optional object-storage upload.
 
