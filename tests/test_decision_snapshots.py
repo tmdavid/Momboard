@@ -2,7 +2,7 @@
 import pytest
 from sqlalchemy import delete
 
-from app.models import Company, Conversation, DecisionEvidence, Highlight
+from app.models import Company, Conversation, Decision, DecisionEvidence, Highlight
 
 
 async def _convo_with_highlight(db, *, company_name="Acme Co", quote="Six hours every Monday"):
@@ -122,3 +122,74 @@ async def test_list_returns_integrity_and_checked_at(auth_client, seeded_db):
     assert row["integrity"] == "ok"
     assert row["integrity_checked_at"] is not None
     assert row["status"] == "proposed"
+
+
+@pytest.mark.asyncio
+async def test_rejecting_cited_highlight_tag_undermines_decision(auth_client, seeded_db):
+    """PATCH a cited highlight to status=rejected flags the receipt + undermines the decision."""
+    from app.services.decisions import create_decision
+
+    _convo, h, _company = await _convo_with_highlight(seeded_db, quote="Rejectable")
+    decision = await create_decision(
+        seeded_db, title="D", rationale_md="R", evidence_highlight_ids=[h.id],
+    )
+    await seeded_db.commit()
+
+    resp = await auth_client.patch(f"/api/highlights/{h.id}", json={"status": "rejected"})
+    assert resp.status_code == 200
+
+    # Assert through the API (avoids cross-session lazy-load on the in-memory DB).
+    detail = (await auth_client.get(f"/api/decisions/{decision.id}")).json()
+    assert detail["evidence"][0]["invalid_reason"] == "tag_rejected"
+    assert detail["integrity"] == "undermined"
+
+
+@pytest.mark.asyncio
+async def test_deleting_cited_conversation_undermines_decision(seeded_db):
+    """Deleting a conversation flags receipts snapshotting it (via the service hook)."""
+    from app.services.decisions import (
+        create_decision,
+        get_decision_evidence,
+        invalidate_decision_evidence_for_conversation,
+    )
+
+    convo, h, _company = await _convo_with_highlight(seeded_db, quote="Conv quote")
+    decision = await create_decision(
+        seeded_db, title="D", rationale_md="R", evidence_highlight_ids=[h.id],
+    )
+    await seeded_db.flush()
+
+    affected = await invalidate_decision_evidence_for_conversation(seeded_db, convo.id)
+    assert decision.id in affected
+
+    evidence = await get_decision_evidence(seeded_db, decision.id)
+    assert evidence[0]["invalid_reason"] == "conversation_deleted"
+    # Snapshot still readable after the receipt is flagged.
+    assert evidence[0]["quote"] == "Conv quote"
+    from sqlalchemy import select
+    integ = (await seeded_db.execute(select(Decision.integrity).where(Decision.id == decision.id))).scalar_one()
+    assert integ == "undermined"
+
+
+@pytest.mark.asyncio
+async def test_invalidation_is_idempotent(seeded_db):
+    """Re-flagging the same receipt with the same reason doesn't duplicate reasons."""
+    from app.services.decisions import (
+        INVALID_TAG_REJECTED,
+        check_decision_integrity,
+        create_decision,
+        invalidate_decision_evidence_for_highlights,
+    )
+
+    _convo, h, _company = await _convo_with_highlight(seeded_db)
+    decision = await create_decision(
+        seeded_db, title="D", rationale_md="R", evidence_highlight_ids=[h.id],
+    )
+    await seeded_db.flush()
+
+    await invalidate_decision_evidence_for_highlights(seeded_db, [h.id], reason=INVALID_TAG_REJECTED)
+    await invalidate_decision_evidence_for_highlights(seeded_db, [h.id], reason=INVALID_TAG_REJECTED)
+    result = await check_decision_integrity(seeded_db, decision.id)
+    # One receipt → exactly one invalidation reason, not two.
+    tag_reasons = [r for r in result["reasons"] if r["source_type"] == "tag_rejected"]
+    assert len(tag_reasons) == 1

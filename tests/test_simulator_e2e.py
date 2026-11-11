@@ -173,8 +173,13 @@ async def test_simulator_exclusion_from_explore_highlights(auth_client, seeded_d
 
 
 @pytest.mark.asyncio
-async def test_highlight_deletion_returns_409_when_cited(auth_client, seeded_db):
-    """DELETE /api/highlights/:id returns 409 when cited by a decision."""
+async def test_cited_highlight_deletion_invalidates_receipt(auth_client, seeded_db):
+    """DELETE /api/highlights/:id now succeeds when cited, invalidating the receipt.
+
+    v0.4 (Decisions PRD): receipts keep their citation-time snapshot, so deleting a
+    cited highlight no longer 409s — it flags the receipt `highlight_deleted` and
+    recomputes the decision's integrity to 'undermined'.
+    """
     from app.services.decisions import create_decision
 
     convo = Conversation(title="T", status="ready", source="upload")
@@ -188,18 +193,22 @@ async def test_highlight_deletion_returns_409_when_cited(auth_client, seeded_db)
     seeded_db.add(h)
     await seeded_db.flush()
 
-    # Cite in a decision
-    await create_decision(
+    decision = await create_decision(
         seeded_db, title="Decision X", rationale_md="Because",
         evidence_highlight_ids=[h.id],
     )
     await seeded_db.commit()
 
-    # Try to delete — should get 409
+    # Delete now succeeds (snapshot preserves the evidence).
     r = await auth_client.delete(f"/api/highlights/{h.id}")
-    assert r.status_code == 409
-    body = r.json()["detail"]
-    assert "citing_decision_ids" in body
+    assert r.status_code == 204
+
+    # Receipt kept its snapshot but is flagged; the decision is undermined (via API).
+    detail = (await auth_client.get(f"/api/decisions/{decision.id}")).json()
+    assert len(detail["evidence"]) == 1
+    assert detail["evidence"][0]["quote"] == "Critical evidence"
+    assert detail["evidence"][0]["invalid_reason"] == "highlight_deleted"
+    assert detail["integrity"] == "undermined"
 
 
 @pytest.mark.asyncio

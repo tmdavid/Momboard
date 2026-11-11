@@ -114,6 +114,18 @@ async def update_highlight(
         setattr(highlight, key, value)
 
     await db.flush()
+
+    # Reactive integrity: if this highlight was just rejected, any decision citing
+    # it has evidence that no longer holds.
+    if update_data.get("status") == "rejected":
+        from app.services.decisions import (
+            INVALID_TAG_REJECTED,
+            invalidate_decision_evidence_for_highlights,
+        )
+        await invalidate_decision_evidence_for_highlights(
+            db, [highlight_id], reason=INVALID_TAG_REJECTED,
+        )
+
     return HighlightResponse.model_validate(highlight)
 
 
@@ -125,24 +137,24 @@ async def delete_highlight(
 ):
     """Delete a highlight.
 
-    Returns 409 if the highlight is cited by any decision (evidence cannot be destroyed).
+    If the highlight is cited by any decision, the receipts keep their citation-time
+    snapshot (so the evidence is not lost) but are flagged `highlight_deleted` and the
+    owning decisions' integrity is recomputed.
     """
-    from app.services.decisions import check_highlight_cited
+    from app.services.decisions import (
+        INVALID_HIGHLIGHT_DELETED,
+        invalidate_decision_evidence_for_highlights,
+    )
 
     highlight = await db.get(Highlight, highlight_id)
     if highlight is None:
         raise HTTPException(status_code=404, detail="Highlight not found")
 
-    # Check if cited by decisions — block deletion (T40 requirement)
-    citing_decisions = await check_highlight_cited(db, highlight_id)
-    if citing_decisions:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": f"Cannot delete highlight {highlight_id}: cited by decisions",
-                "citing_decision_ids": citing_decisions,
-            },
-        )
+    # Flag any citing receipts before the row goes away (FK is SET NULL, so the
+    # link would otherwise clear with no trace).
+    await invalidate_decision_evidence_for_highlights(
+        db, [highlight_id], reason=INVALID_HIGHLIGHT_DELETED,
+    )
 
     await db.delete(highlight)
     await db.flush()

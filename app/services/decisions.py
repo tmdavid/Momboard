@@ -202,14 +202,30 @@ async def check_decision_integrity(
     if decision is None:
         raise ValueError(f"Decision {decision_id} not found")
 
-    # Get all cited highlight IDs
+    # Load the full evidence rows so we can read invalidation flags.
     ev_result = await db.execute(
-        select(DecisionEvidence.highlight_id)
+        select(DecisionEvidence)
         .where(DecisionEvidence.decision_id == decision_id)
     )
-    cited_highlight_ids = [r[0] for r in ev_result.all()]
+    evidence_rows = list(ev_result.scalars().all())
+    cited_highlight_ids = [e.highlight_id for e in evidence_rows if e.highlight_id is not None]
 
     reasons: list[dict[str, Any]] = []
+
+    # Check 0: receipts invalidated by a reactive change (tag rejected, highlight or
+    # conversation deleted). These are set by invalidate_decision_evidence().
+    reason_text = {
+        "tag_rejected": "A cited highlight's tag was rejected in review",
+        "highlight_deleted": "A cited highlight was deleted",
+        "conversation_deleted": "A cited conversation was deleted",
+    }
+    for e in evidence_rows:
+        if e.invalid_reason:
+            reasons.append({
+                "reason": reason_text.get(e.invalid_reason, e.invalid_reason),
+                "source_type": e.invalid_reason,
+                "source_id": e.id,
+            })
 
     # Check 1: Contradicting hypothesis links on cited highlights
     if cited_highlight_ids:
@@ -329,3 +345,73 @@ async def get_decision_evidence(
             "invalid_reason": ev.invalid_reason,
         })
     return items
+
+
+# --- Reactive integrity hook (Decisions PRD P0 slice 2) ---------------------
+#
+# When a cited highlight's tag is rejected, the highlight is deleted, or its
+# conversation is deleted/retagged, the decision receipts that cite it are
+# flagged invalid and the owning decisions' integrity is recomputed. Built as
+# plain helpers so the hypotheses board can reuse the same pattern later
+# (PRD: "build it once for both").
+
+INVALID_TAG_REJECTED = "tag_rejected"
+INVALID_HIGHLIGHT_DELETED = "highlight_deleted"
+INVALID_CONVERSATION_DELETED = "conversation_deleted"
+
+
+async def _recompute_decisions(db: AsyncSession, decision_ids: set[int]) -> None:
+    for did in decision_ids:
+        await check_decision_integrity(db, did)
+
+
+async def invalidate_decision_evidence_for_highlights(
+    db: AsyncSession,
+    highlight_ids: list[int],
+    *,
+    reason: str,
+) -> set[int]:
+    """Flag receipts citing the given highlights invalid, recompute integrity.
+
+    Returns the set of affected decision IDs. Idempotent: re-flagging with the
+    same reason is a no-op. Does not change decision status (human decision).
+    """
+    if not highlight_ids:
+        return set()
+    result = await db.execute(
+        select(DecisionEvidence).where(DecisionEvidence.highlight_id.in_(highlight_ids))
+    )
+    rows = list(result.scalars().all())
+    affected: set[int] = set()
+    for ev in rows:
+        if ev.invalid_reason != reason:
+            ev.invalid_reason = reason
+        affected.add(ev.decision_id)
+    await db.flush()
+    await _recompute_decisions(db, affected)
+    return affected
+
+
+async def invalidate_decision_evidence_for_conversation(
+    db: AsyncSession,
+    conversation_id: int,
+    *,
+    reason: str = INVALID_CONVERSATION_DELETED,
+) -> set[int]:
+    """Flag receipts whose snapshot points at the conversation, recompute integrity.
+
+    Uses the receipt's snapshot `conversation_id` so it still works after the
+    conversation (and its highlights) are gone.
+    """
+    result = await db.execute(
+        select(DecisionEvidence).where(DecisionEvidence.conversation_id == conversation_id)
+    )
+    rows = list(result.scalars().all())
+    affected: set[int] = set()
+    for ev in rows:
+        if ev.invalid_reason != reason:
+            ev.invalid_reason = reason
+        affected.add(ev.decision_id)
+    await db.flush()
+    await _recompute_decisions(db, affected)
+    return affected

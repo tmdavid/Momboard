@@ -422,6 +422,10 @@ async def delete_conversation(
     convo = await db.get(Conversation, conversation_id)
     if convo is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    # Reactive integrity: flag any decision receipts snapshotting this conversation
+    # before the cascade removes its highlights.
+    from app.services.decisions import invalidate_decision_evidence_for_conversation
+    await invalidate_decision_evidence_for_conversation(db, conversation_id)
     await db.delete(convo)
     await db.flush()
 
