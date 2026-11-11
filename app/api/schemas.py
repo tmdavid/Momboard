@@ -352,6 +352,7 @@ class IntakeMatchResponse(BaseModel):
     company_name: str | None = None
     contact_name: str | None = None
     conversation_date: str | None = None
+    in_segment: str | None = None  # yes|no|unknown when the belief names a segment
     relation: str  # supports|contradicts
     confidence: float
     rationale: str = ""

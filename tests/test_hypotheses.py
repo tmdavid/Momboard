@@ -1462,8 +1462,10 @@ class _StubIntakeLLM:
 
     def __init__(self, output):
         self._output = output
+        self.prompts: list[str] = []
 
     async def generate(self, *, prompt, schema, model="default"):  # noqa: ARG002
+        self.prompts.append(prompt)
         return self._output
 
     async def close(self):
@@ -2368,3 +2370,106 @@ class TestBandRulesEndpoint:
     @pytest.mark.asyncio
     async def test_band_rules_requires_auth(self, client: AsyncClient):
         assert (await client.get("/api/hypotheses/band-rules")).status_code == 401
+
+
+class TestIntakeSegmentAndConversationRules:
+    """PRD matching rules: segment-first ranking, and at most one match per conversation."""
+
+    @staticmethod
+    def _out(*matches):
+        from app.llm.schemas import IntakeMatch, IntakeMatchOutput
+
+        return IntakeMatchOutput(
+            matches=[IntakeMatch(**m) for m in matches], suggested_questions=[]
+        )
+
+    @pytest.mark.asyncio
+    async def test_one_match_per_conversation_keeps_the_best(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.services.hypothesis_intake import preview_intake
+
+        conv = hyp_seeded["highlight1"].conversation_id
+        extra = await _more_highlights(session_factory, conv, 1, "Same call")
+        stub = _StubIntakeLLM(self._out(
+            {"highlight_id": hyp_seeded["highlight1"].id, "relation": "supports", "confidence": 0.7},
+            {"highlight_id": extra[0], "relation": "supports", "confidence": 0.95},
+        ))
+        async with session_factory() as db:
+            out = await preview_intake(db, "Customers rely on manual exports weekly", llm=stub)
+        assert [m["highlight_id"] for m in out["matches"]] == [extra[0]]
+
+    @pytest.mark.asyncio
+    async def test_second_match_in_a_conversation_kept_when_it_says_the_opposite(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.services.hypothesis_intake import preview_intake
+
+        conv = hyp_seeded["highlight1"].conversation_id
+        extra = await _more_highlights(session_factory, conv, 2, "Same call")
+        stub = _StubIntakeLLM(self._out(
+            {"highlight_id": hyp_seeded["highlight1"].id, "relation": "supports", "confidence": 0.9},
+            {"highlight_id": extra[0], "relation": "supports", "confidence": 0.8},      # dup stance
+            {"highlight_id": extra[1], "relation": "contradicts", "confidence": 0.75},  # differs
+        ))
+        async with session_factory() as db:
+            out = await preview_intake(db, "Customers rely on manual exports weekly", llm=stub)
+        kept = {m["highlight_id"]: m["relation"] for m in out["matches"]}
+        assert kept == {hyp_seeded["highlight1"].id: "supports", extra[1]: "contradicts"}
+
+    @pytest.mark.asyncio
+    async def test_segment_ranks_in_segment_matches_first_and_flags_outside(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.services.hypothesis_intake import preview_intake
+
+        acme, northwind = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        stub = _StubIntakeLLM(self._out(
+            {"highlight_id": acme, "relation": "supports", "confidence": 0.95,
+             "rationale": "Direct.", "in_segment": "no"},
+            {"highlight_id": northwind, "relation": "supports", "confidence": 0.7,
+             "rationale": "Direct.", "in_segment": "yes"},
+        ))
+        async with session_factory() as db:
+            out = await preview_intake(
+                db, "Mid-market teams rely on manual exports", llm=stub, segment="Mid-market"
+            )
+        assert [m["highlight_id"] for m in out["matches"]] == [northwind, acme]
+        assert [m["in_segment"] for m in out["matches"]] == ["yes", "no"]
+        assert "outside the mid-market segment" in out["matches"][1]["rationale"].lower()
+        # The segment prompt carried company info for the model to judge with.
+        assert any("Acme Watches" in call for call in stub.prompts)
+
+    @pytest.mark.asyncio
+    async def test_outside_segment_matches_do_not_count_toward_the_preview_band(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.services.hypothesis_intake import preview_intake
+
+        stub = _StubIntakeLLM(self._out(
+            {"highlight_id": hyp_seeded["highlight1"].id, "relation": "supports",
+             "confidence": 0.95, "in_segment": "no"},
+        ))
+        async with session_factory() as db:
+            out = await preview_intake(
+                db, "Mid-market teams rely on manual exports", llm=stub, segment="Mid-market"
+            )
+        assert out["matches"][0]["in_segment"] == "no"
+        assert out["grounding_preview"] == "hunch"
+
+    @pytest.mark.asyncio
+    async def test_without_a_segment_nothing_is_flagged_and_order_is_by_confidence(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.services.hypothesis_intake import preview_intake
+
+        stub = _StubIntakeLLM(self._out(
+            {"highlight_id": hyp_seeded["highlight1"].id, "relation": "supports", "confidence": 0.7},
+            {"highlight_id": hyp_seeded["highlight2"].id, "relation": "supports", "confidence": 0.9},
+        ))
+        async with session_factory() as db:
+            out = await preview_intake(db, "Customers rely on manual exports weekly", llm=stub)
+        assert [m["highlight_id"] for m in out["matches"]] == [
+            hyp_seeded["highlight2"].id, hyp_seeded["highlight1"].id
+        ]
+        assert all(m["in_segment"] is None for m in out["matches"])

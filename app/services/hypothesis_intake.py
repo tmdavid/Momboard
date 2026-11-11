@@ -69,11 +69,25 @@ async def preview_intake(
             "suggested_questions": questions,
         }
 
-    # Stage 2: LLM scores the provided candidates only.
-    candidate_data = [
-        {"id": h.id, "tag": h.tag_key, "quote": h.quote}
-        for h in candidates[:30]
-    ]
+    # Stage 2: LLM scores the provided candidates only. When the belief names a segment,
+    # each candidate also carries its company (name + notes) so the model can judge
+    # whether it belongs to that segment — there is no structured segment field to filter on.
+    candidate_data: list[dict[str, Any]] = []
+    for h in candidates[:30]:
+        item: dict[str, Any] = {"id": h.id, "tag": h.tag_key, "quote": h.quote}
+        if segment:
+            info = await _company_info(db, h)
+            item["company"] = info["name"]
+            if info["notes"]:
+                item["company_notes"] = info["notes"]
+        candidate_data.append(item)
+    segment_rule = (
+        f"- The belief targets the segment '{segment}'. For each match set in_segment to 'yes' "
+        "if the quote's company clearly belongs to that segment, 'no' if it clearly does not, "
+        "and 'unknown' if the company info doesn't say. Do not guess.\n"
+        if segment
+        else ""
+    )
     prompt = (
         "A user proposes this belief about customers:\n"
         f'  "{statement}"\n\n'
@@ -84,7 +98,8 @@ async def preview_intake(
         "- relation must be 'supports', 'contradicts', or 'unrelated'.\n"
         "- Do NOT invent evidence or sentiment beyond the quotes.\n"
         "- Also propose up to 3 PAST-BEHAVIOR questions to validate the belief "
-        "(what they did/how they handle it today). Never use 'would you'/'will you'.\n\n"
+        "(what they did/how they handle it today). Never use 'would you'/'will you'.\n"
+        f"{segment_rule}\n"
         f"CANDIDATES:\n{candidate_data}"
     )
     result: IntakeMatchOutput = await llm.generate(
@@ -94,8 +109,6 @@ async def preview_intake(
     # Validate: keep only relevant matches that reference real candidate IDs and
     # score at or above min_confidence.
     matches: list[dict[str, Any]] = []
-    strong_supports = 0
-    strong_contradicts = 0
     for m in result.matches:
         if m.relation == "unrelated":
             continue
@@ -110,6 +123,11 @@ async def preview_intake(
             logger.info("Intake verification dropped highlight_id=%s", hl.id)
             continue
         source = await _source_for(db, hl)
+        in_segment = (m.in_segment or "unknown") if segment else None
+        rationale = m.rationale
+        if in_segment == "no":
+            note = f"Outside the {segment} segment."
+            rationale = f"{rationale} {note}".strip()
         matches.append({
             "highlight_id": hl.id,
             "quote": hl.quote,
@@ -119,23 +137,26 @@ async def preview_intake(
             "company_name": source["company_name"],
             "contact_name": source["contact_name"],
             "conversation_date": source["conversation_date"],
+            "in_segment": in_segment,
             "relation": m.relation,
             "confidence": m.confidence,
-            "rationale": m.rationale,
-            "strong": m.confidence >= STRONG_CONFIDENCE,
+            "rationale": rationale,
+            # Strong = direct, confident, and not known to be outside the named segment.
+            "strong": m.confidence >= STRONG_CONFIDENCE and in_segment != "no",
         })
-        if m.confidence >= STRONG_CONFIDENCE:
-            if m.relation == "supports":
-                strong_supports += 1
-            else:
-                strong_contradicts += 1
+
+    matches = _one_per_conversation(matches)
+    matches.sort(key=lambda x: (_SEGMENT_RANK.get(x["in_segment"] or "", 0), -x["confidence"]))
+
+    strong_supports = sum(1 for x in matches if x["strong"] and x["relation"] == "supports")
+    strong_contradicts = sum(1 for x in matches if x["strong"] and x["relation"] == "contradicts")
 
     # Grounding PREVIEW: the band the hypothesis would have if the human confirms the
     # strong matches. Weaker matches don't count (suggested evidence never moves a band).
     strong_support_companies = {
-        m["company_name"]
-        for m in matches
-        if m["strong"] and m["relation"] == "supports" and m.get("company_name")
+        x["company_name"]
+        for x in matches
+        if x["strong"] and x["relation"] == "supports" and x.get("company_name")
     }
     grounding_preview = compute_band(
         {"confirmed": strong_supports},
@@ -159,6 +180,39 @@ async def preview_intake(
 
 
 COMPLIMENT_TAGS = {"compliment"}
+
+
+# Segment ranking: in-segment first, then unknown, then known-outside (stable on confidence).
+_SEGMENT_RANK = {"yes": 0, "unknown": 1, "no": 2}
+
+
+def _one_per_conversation(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """At most one match per conversation, unless the quotes say different things.
+
+    Highest confidence wins. A further match from the same call is kept only if it takes
+    the opposite stance of those already kept (one supports + one contradicts at most) —
+    that is the interesting case: the same customer pulling both ways.
+    """
+    kept: list[dict[str, Any]] = []
+    stances: dict[int, set[str]] = {}
+    for m in sorted(matches, key=lambda x: -x["confidence"]):
+        seen = stances.setdefault(m["conversation_id"], set())
+        if not seen or m["relation"] not in seen:
+            kept.append(m)
+            seen.add(m["relation"])
+    return kept
+
+
+async def _company_info(db: AsyncSession, h: Highlight) -> dict[str, str | None]:
+    """Company name + notes for a highlight's conversation (for segment judgement)."""
+    from app.models import Company, Conversation
+
+    convo = await db.get(Conversation, h.conversation_id)
+    company = await db.get(Company, convo.company_id) if convo and convo.company_id else None
+    return {
+        "name": company.name if company else "(unknown company)",
+        "notes": (company.notes or "")[:300] if company else None,
+    }
 
 
 async def _is_customer_evidence(db: AsyncSession, h: Highlight) -> bool:

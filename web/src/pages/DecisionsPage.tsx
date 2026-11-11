@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../api';
+import {
+  jsonFetch, useTeamUsers, EditDecisionForm, AddQuote, LinkedHypothesisBox,
+} from '../components/DecisionParts';
 
 interface Decision {
   id: number;
@@ -10,16 +13,23 @@ interface Decision {
   integrity: string;
   decided_at: string | null;
   created_at: string;
+  owner_id?: number | null;
+  area?: string | null;
+  evidence_count?: number;
+  hypothesis_id?: number | null;
+  hypothesis_archived?: boolean;
 }
 
 interface DecisionDetail extends Decision {
   rationale_md: string;
   integrity_reasons: { reason: string; source_type: string; source_id: number }[] | null;
   hypothesis_id: number | null;
+  hypothesis?: { id: number; statement: string; band: string; archived?: boolean } | null;
   decided_by: number | null;
   superseded_by: number | null;
+  superseded_by_title?: string | null;
   evidence: {
-    highlight_id: number;
+    highlight_id: number | null;
     quote: string;
     tag_key: string;
     conversation_id: number;
@@ -30,6 +40,7 @@ interface DecisionDetail extends Decision {
 }
 
 const STATUS_PILL: Record<string, string> = {
+  draft: 'bg-sub text-ink-2',
   proposed: 'bg-[#eff4ff] text-[#1d4ed8]',
   decided: 'bg-good-soft text-good-text',
   superseded: 'bg-sub text-ink-2',
@@ -52,7 +63,12 @@ function IntegrityPill({ integrity }: { integrity: string }) {
   );
 }
 
-const TABS = ['all', 'proposed', 'decided', 'superseded'] as const;
+const TABS = ['all', 'draft', 'proposed', 'decided', 'superseded'] as const;
+const SORTS = [
+  { value: 'date_desc', label: 'Newest first' },
+  { value: 'date_asc', label: 'Oldest first' },
+  { value: 'integrity', label: 'Needs attention first' },
+] as const;
 type Tab = typeof TABS[number];
 
 export function DecisionsPage() {
@@ -61,6 +77,11 @@ export function DecisionsPage() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [tab, setTab] = useState<Tab>('all');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<string>('date_desc');
+  const [editing, setEditing] = useState(false);
+  const { nameOf } = useTeamUsers();
+  useEffect(() => setEditing(false), [selectedId]);
 
   // Prefill from elsewhere in the app: ?highlight_id=1&highlight_id=2 and/or ?hypothesis_id=3.
   const preselectedHighlightIds = searchParams
@@ -75,23 +96,33 @@ export function DecisionsPage() {
     if (prefillKey !== '|') setShowCreate(true);
   }, [prefillKey]);
 
+  const term = search.trim();
   const { data: listData, isLoading } = useQuery({
-    queryKey: ['decisions'],
+    queryKey: ['decisions', 'list', term, sort],
     queryFn: async () => {
-      const r = await fetch('/api/decisions');
+      const params = new URLSearchParams({ sort, limit: '200' });
+      if (term) params.set('q', term);
+      const r = await fetch(`/api/decisions?${params.toString()}`);
       if (!r.ok) throw new Error('Failed');
       return r.json() as Promise<{ items: Decision[]; total: number }>;
     },
+    placeholderData: (prev) => prev,
   });
 
   const { data: detail } = useQuery({
-    queryKey: ['decisions', selectedId],
+    queryKey: ['decisions', 'detail', selectedId],
     queryFn: async () => {
       const r = await fetch(`/api/decisions/${selectedId}`);
       if (!r.ok) throw new Error('Failed');
       return r.json() as Promise<DecisionDetail>;
     },
     enabled: !!selectedId,
+  });
+
+  const removeQuote = useMutation({
+    mutationFn: ({ id, highlightId }: { id: number; highlightId: number }) =>
+      jsonFetch(`/api/decisions/${id}/evidence/${highlightId}`, { method: 'DELETE' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['decisions'] }),
   });
 
   const transitionMutation = useMutation({
@@ -135,10 +166,25 @@ export function DecisionsPage() {
         ))}
       </div>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <input type="search" value={search} onChange={(e) => setSearch(e.target.value)}
+          aria-label="Search decisions" placeholder="Search decisions…"
+          className="h-9 w-64 px-3 border border-hairline rounded-lg bg-surface text-sm" />
+        <label className="flex items-center gap-1.5 text-xs text-muted">
+          Sort
+          <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort decisions"
+            className="h-9 px-2 border border-hairline rounded-lg bg-surface text-sm text-ink">
+            {SORTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        </label>
+      </div>
+
       {isLoading ? (
         <p className="text-muted">Loading decisions…</p>
-      ) : items.length === 0 ? (
+      ) : items.length === 0 && !term ? (
         <p className="text-muted">No decisions yet. Create one citing highlight evidence.</p>
+      ) : items.length === 0 ? (
+        <p className="text-muted">No decisions match “{term}”.</p>
       ) : (
         <div className="bg-surface border border-hairline rounded-[10px] overflow-x-auto">
           <div className="min-w-[640px]">
@@ -152,9 +198,23 @@ export function DecisionsPage() {
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedId(d.id); } }}
                 className="grid gap-4 items-center px-4 py-3 border-b border-hairline cursor-pointer last:border-b-0"
                 style={{ gridTemplateColumns: 'minmax(0,1fr) 120px 110px 130px 90px', ...(selectedId === d.id ? { background: '#f1f5fe', boxShadow: 'inset 3px 0 0 #2f5bea' } : {}) }}>
-                <span className="trunc font-semibold text-ink" title={d.title}>{d.title}</span>
+                <span className="min-w-0 flex flex-col">
+                  <span className="trunc font-semibold text-ink" title={d.title}>{d.title}</span>
+                  {(nameOf(d.owner_id) || d.area || d.hypothesis_archived) && (
+                    <span className="trunc text-xs text-muted">
+                      {[nameOf(d.owner_id), d.area].filter(Boolean).join(' · ')}
+                      {d.hypothesis_archived && (
+                        <span className="ml-1.5 text-[#93370d] font-semibold">
+                          {nameOf(d.owner_id) || d.area ? '· ' : ''}Belief archived
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </span>
                 <span><StatusPill status={d.status} /></span>
-                <span className="text-ink-2">evidence</span>
+                <span className="text-ink-2">
+                  {d.evidence_count == null ? '—' : `${d.evidence_count} ${d.evidence_count === 1 ? 'quote' : 'quotes'}`}
+                </span>
                 <span><IntegrityPill integrity={d.integrity} /></span>
                 <span className="text-muted">{fmtDate(d.decided_at || d.created_at)}</span>
               </div>
@@ -170,9 +230,29 @@ export function DecisionsPage() {
           <div className="flex flex-wrap gap-2 items-center">
             <h2 className="text-lg font-bold text-ink">{detail.title}</h2>
             <StatusPill status={detail.status} />
-            <button onClick={() => setSelectedId(null)} className="ml-auto text-sm text-muted hover:text-ink bg-transparent border-none cursor-pointer">Close</button>
+            <span className="ml-auto flex gap-3">
+              {!editing && (
+                <button onClick={() => setEditing(true)} className="text-sm font-semibold text-accent hover:underline bg-transparent border-none cursor-pointer">Edit</button>
+              )}
+              <button onClick={() => { setSelectedId(null); setEditing(false); }} className="text-sm text-muted hover:text-ink bg-transparent border-none cursor-pointer">Close</button>
+            </span>
           </div>
-          <p className="m-0">{detail.rationale_md}</p>
+          {(nameOf(detail.owner_id) || detail.area) && !editing && (
+            <span className="text-xs text-muted" data-testid="owner-area">
+              {[nameOf(detail.owner_id) && `Owner: ${nameOf(detail.owner_id)}`, detail.area && `Area: ${detail.area}`].filter(Boolean).join(' · ')}
+            </span>
+          )}
+          {editing ? (
+            <EditDecisionForm
+              key={detail.id}
+              decision={{ id: detail.id, title: detail.title, rationale_md: detail.rationale_md, owner_id: detail.owner_id ?? null, area: detail.area ?? null }}
+              onDone={() => setEditing(false)}
+            />
+          ) : (
+            <p className="m-0">{detail.rationale_md}</p>
+          )}
+
+          {detail.hypothesis && <LinkedHypothesisBox hypothesis={detail.hypothesis} />}
 
           {detail.integrity === 'undermined' && (
             <div className="px-3 py-2.5 rounded-lg bg-warn-soft text-[#93370d] text-[13px] flex flex-col gap-1">
@@ -192,10 +272,11 @@ export function DecisionsPage() {
 
           <span className="text-xs font-semibold text-muted">Evidence receipts</span>
           <div className="flex flex-col gap-2">
-            {detail.evidence.map((ev) => {
+            {detail.evidence.map((ev, idx) => {
               const stale = ev.status === 'rejected';
+              const canRemove = ev.highlight_id != null && (detail.status === 'draft' || detail.evidence.length > 1);
               return (
-                <div key={ev.highlight_id}
+                <div key={ev.highlight_id ?? `gone-${idx}`}
                   className="flex flex-col gap-0.5 px-3 py-2.5 rounded-lg border"
                   style={stale ? { border: '1px dashed #f79009', background: '#fffcf5', opacity: 0.85 } : { borderColor: '#e5e7eb' }}>
                   <span className="text-ink">“{ev.quote}”</span>
@@ -204,18 +285,48 @@ export function DecisionsPage() {
                     {stale && ' · tag rejected in review'}
                     {' · '}
                     <Link to={`/conversations/${ev.conversation_id}`}>open</Link>
+                    {canRemove && (
+                      <>
+                        {' · '}
+                        <button type="button" aria-label={`Remove quote: ${ev.quote}`}
+                          disabled={removeQuote.isPending}
+                          onClick={() => removeQuote.mutate({ id: detail.id, highlightId: ev.highlight_id as number })}
+                          className="bg-transparent border-none p-0 text-crit cursor-pointer hover:underline">Remove</button>
+                      </>
+                    )}
                   </span>
                 </div>
               );
             })}
             {detail.evidence.length === 0 && <span className="text-sm text-muted">No evidence cited.</span>}
           </div>
+          {removeQuote.isError && <p role="alert" className="text-crit text-sm">{(removeQuote.error as Error).message}</p>}
+
+          {detail.status !== 'superseded' && (
+            <AddQuote
+              decisionId={detail.id}
+              citedHighlightIds={new Set(detail.evidence.map((e) => e.highlight_id).filter((x): x is number => x != null))}
+            />
+          )}
 
           {detail.superseded_by && (
-            <span className="text-sm text-muted">Superseded by decision #{detail.superseded_by}</span>
+            <span className="text-sm text-muted">
+              Superseded by{' '}
+              <button type="button" onClick={() => setSelectedId(detail.superseded_by)}
+                className="bg-transparent border-none p-0 text-accent cursor-pointer hover:underline">
+                {detail.superseded_by_title || `decision #${detail.superseded_by}`}
+              </button>
+            </span>
           )}
 
           <div className="flex gap-2">
+            {detail.status === 'draft' && (
+              <button
+                onClick={() => transitionMutation.mutate({ id: detail.id, status: 'proposed' })}
+                disabled={detail.evidence.length === 0}
+                title={detail.evidence.length === 0 ? 'Cite at least one quote first' : undefined}
+                className="btn btn-sm btn-primary disabled:opacity-50">Propose</button>
+            )}
             {detail.status === 'proposed' && (
               <button onClick={() => transitionMutation.mutate({ id: detail.id, status: 'decided' })} className="btn btn-sm btn-primary">Mark as decided</button>
             )}
@@ -271,6 +382,9 @@ function CreateDecisionModal({ onClose, preselectedHighlightIds = [], hypothesis
   const [title, setTitle] = useState('');
   const [rationale, setRationale] = useState('');
   const [selectedHighlights, setSelectedHighlights] = useState<number[]>(preselectedHighlightIds);
+  const [ownerId, setOwnerId] = useState('');
+  const [area, setArea] = useState('');
+  const { users } = useTeamUsers();
 
   // When opened from a hypothesis, show which belief this decision is about.
   const { data: linkedHypothesis } = useQuery({
@@ -297,7 +411,7 @@ function CreateDecisionModal({ onClose, preselectedHighlightIds = [], hypothesis
     setSelectedHighlights((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
 
   const createMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (asDraft: boolean = false) => {
       const r = await fetch('/api/decisions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -306,6 +420,9 @@ function CreateDecisionModal({ onClose, preselectedHighlightIds = [], hypothesis
           rationale_md: rationale,
           evidence: selectedHighlights,
           ...(hypothesisId !== undefined ? { hypothesis_id: hypothesisId } : {}),
+          ...(ownerId ? { owner_id: parseInt(ownerId, 10) } : {}),
+          ...(area.trim() ? { area: area.trim() } : {}),
+          ...(asDraft ? { status: 'draft' } : {}),
         }),
       });
       if (!r.ok) { const err = await r.json(); throw new Error(err.detail || 'Failed'); }
@@ -325,6 +442,19 @@ function CreateDecisionModal({ onClose, preselectedHighlightIds = [], hypothesis
         )}
         <input type="text" placeholder="Decision title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full border border-hairline rounded-lg px-3 py-2 mb-3" />
         <textarea placeholder="Rationale (why this decision)" value={rationale} onChange={(e) => setRationale(e.target.value)} className="w-full border border-hairline rounded-lg px-3 py-2 mb-3 h-20" />
+        <div className="flex gap-3 mb-3">
+          <label className="flex-1 flex flex-col gap-1 text-xs font-semibold text-muted">
+            Owner
+            <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="h-9 px-2 border border-hairline rounded-lg bg-surface text-sm font-normal text-ink">
+              <option value="">No owner</option>
+              {users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+            </select>
+          </label>
+          <label className="flex-1 flex flex-col gap-1 text-xs font-semibold text-muted">
+            Area
+            <input value={area} onChange={(e) => setArea(e.target.value)} placeholder="e.g. Pricing" className="h-9 px-3 border border-hairline rounded-lg bg-surface text-sm font-normal text-ink" />
+          </label>
+        </div>
         <div className="mb-3 flex-1 min-h-0 flex flex-col">
           <label className="text-sm font-semibold mb-1">Evidence highlights ({selectedHighlights.length} selected)</label>
           <p className="text-xs text-muted mb-2">Decisions must cite evidence. Select highlights from Explore, or add evidence from conversations.</p>
@@ -344,7 +474,10 @@ function CreateDecisionModal({ onClose, preselectedHighlightIds = [], hypothesis
         </div>
         <div className="flex gap-2 justify-end">
           <button onClick={onClose} className="btn btn-sm btn-ghost">Cancel</button>
-          <button onClick={() => createMutation.mutate()} disabled={!title || !rationale || selectedHighlights.length === 0 || createMutation.isPending} className="btn btn-sm btn-primary disabled:opacity-50">
+          <button onClick={() => createMutation.mutate(true)} disabled={!title || !rationale || createMutation.isPending} className="btn btn-sm btn-ghost disabled:opacity-50" title="Keep working on it; quotes can be added later">
+            Save as draft
+          </button>
+          <button onClick={() => createMutation.mutate(false)} disabled={!title || !rationale || selectedHighlights.length === 0 || createMutation.isPending} className="btn btn-sm btn-primary disabled:opacity-50">
             {createMutation.isPending ? 'Creating…' : 'Create'}
           </button>
         </div>

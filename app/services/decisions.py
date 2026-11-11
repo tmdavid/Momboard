@@ -544,6 +544,7 @@ async def get_hypothesis_summary(db: AsyncSession, hypothesis_id: int) -> dict[s
         "id": hyp.id,
         "statement": hyp.statement,
         "band": compute_band(supports, contradicts, companies_supporting),
+        "archived": hyp.status == "archived",
     }
 
 

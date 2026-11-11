@@ -531,7 +531,10 @@ function HypothesisDetailPanel({
               : h,
           ),
       );
-      if (data.status === 'archived') onClose();
+      if (data.status === 'archived') {
+        queryClient.invalidateQueries({ queryKey: ['hypotheses', 'archived'] });
+        onClose();
+      }
     },
   });
 
@@ -1020,6 +1023,74 @@ function HypothesisComposer() {
 
 // ─── Main Page ───
 
+// ─── Archived hypotheses (restore) ───
+
+function ArchivedSection() {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['hypotheses', 'archived'],
+    queryFn: () => api.listHypotheses({ status: 'archived' }),
+    enabled: open,
+  });
+  const restore = useMutation({
+    mutationFn: (id: number) => api.updateHypothesis(id, { status: 'open' }),
+    // Prefix match refreshes both the board and this list.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['hypotheses'] }),
+  });
+  const items = data ?? [];
+
+  return (
+    <div role="group" aria-label="Archived hypotheses" className="flex flex-col gap-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="self-start text-xs font-semibold text-muted hover:text-ink bg-transparent border-none p-0 cursor-pointer"
+      >
+        {open ? 'Hide archived' : 'Show archived'}
+      </button>
+      {open && isLoading && <p className="text-xs text-muted">Loading archived…</p>}
+      {open && isError && (
+        <p role="alert" className="text-xs text-red-600">Couldn’t load archived hypotheses.</p>
+      )}
+      {open && !isLoading && !isError && items.length === 0 && (
+        <p className="text-xs text-muted">Nothing archived.</p>
+      )}
+      {open && items.length > 0 && (
+        <ul className="flex flex-col gap-2 m-0 p-0 list-none">
+          {items.map((h) => (
+            <li
+              key={h.id}
+              data-testid="archived-hypothesis"
+              className="flex items-center gap-3 bg-surface border border-hairline rounded-[10px] px-3 py-2 opacity-80"
+            >
+              <span className="flex-1 min-w-0 text-sm text-ink-2">
+                {h.statement}
+                {h.segment && (
+                  <span className="ml-2 text-[11px] px-2 py-0.5 rounded-full bg-sub text-ink-2">{h.segment}</span>
+                )}
+              </span>
+              <button
+                type="button"
+                disabled={restore.isPending}
+                onClick={() => restore.mutate(h.id)}
+                aria-label={`Restore: ${h.statement}`}
+                className="text-xs font-semibold px-2.5 py-1 rounded-lg border border-hairline text-accent hover:border-accent"
+              >
+                Restore
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {restore.isError && (
+        <p role="alert" className="text-xs text-red-600">Couldn’t restore that hypothesis. Try again.</p>
+      )}
+    </div>
+  );
+}
+
 function BandRulesHelp() {
   const [open, setOpen] = useState(false);
   const { data } = useQuery({
@@ -1117,6 +1188,7 @@ export function HypothesesPage() {
           <p className="text-xs mt-2">{BAND_EXPLAINER}</p>
           <div className="mt-3 text-left max-w-xl mx-auto"><BandRulesHelp /></div>
         </div>
+        <ArchivedSection />
       </main>
     );
   }
@@ -1217,6 +1289,8 @@ export function HypothesesPage() {
       {expanded && (
         <HypothesisDetailPanel hypothesis={expanded} onClose={() => setExpandedId(null)} />
       )}
+
+      <ArchivedSection />
     </main>
   );
 }

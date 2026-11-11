@@ -16,6 +16,19 @@ status and latest additions; this file is the full history.
   `HYPOTHESIS_CONTESTED_MIN_EACH`, `HYPOTHESIS_REFUTED_MIN_CONTRADICT`,
   `HYPOTHESIS_REFUTED_RATIO`), exposed at `GET /api/hypotheses/band-rules`. Each card
   carries a one-sentence `grounding_reason` that says what is still missing.
+- **Decisions page uses the full Decisions API**: owner and area, a Draft status
+  (Propose once a quote is cited), edit title/rationale/owner/area, add or remove cited
+  quotes, search and sort, a per-row quote count, the linked hypothesis with its band,
+  and "Superseded by <title>". A decision citing an **archived hypothesis** is flagged
+  ("Belief archived", with a re-check prompt) but is not marked undermined; restoring the
+  hypothesis clears the flag. `GET /api/users` returns teammate names (id + name only).
+- **Hypothesis intake matching**: when the belief names a segment, matches from that
+  segment rank first and others say "Outside the <segment> segment" (and are not
+  pre-ticked or counted in "If saved now"); at most one match per conversation unless the
+  second quote takes the opposite stance. There is no structured segment on companies, so
+  the model judges from the company name and notes and answers "unknown" rather than guess.
+- Hypotheses board: archived hypotheses can be viewed and restored ("Show archived"); the
+  board loads every page of results instead of the first 200.
 - Hypotheses: grounding-band board, scored evidence check, detail view with band history,
   validation questions, add-evidence and archive; list API returns `{items, total}`.
   Migration 010. Decisions: evidence snapshots and reactive integrity (migrations 008, 009).

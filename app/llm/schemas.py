@@ -232,6 +232,9 @@ class IntakeMatch(BaseModel):
     relation: Literal["supports", "contradicts", "unrelated"]
     confidence: float = Field(ge=0.0, le=1.0)
     rationale: str = ""
+    # Only judged when the belief names a segment: does the quote's company belong to it?
+    # "unknown" when the company info doesn't say. Never guess.
+    in_segment: Literal["yes", "no", "unknown"] | None = None
 
 
 class IntakeMatchOutput(BaseModel):

@@ -21,6 +21,7 @@ from app.api.schemas import UserResponse
 from app.api.settings import router as settings_router
 from app.api.simulator import router as simulator_router
 from app.api.syntheses import router as syntheses_router
+from app.api.users import router as users_router
 from app.api.vexa import router as vexa_router
 from app.auth import get_current_user
 
@@ -46,6 +47,7 @@ api_router.include_router(simulator_router, prefix="/simulator", tags=["simulato
 api_router.include_router(lenses_router, prefix="/lenses", tags=["lenses"])
 api_router.include_router(vexa_router, prefix="/vexa", tags=["vexa"])
 api_router.include_router(settings_router, tags=["settings"])
+api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(admin_router, tags=["admin"])
 
 

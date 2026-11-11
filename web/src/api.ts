@@ -519,10 +519,24 @@ export const api = {
     return apiFetch<HypothesisListPage>(`/api/hypotheses${suffix}`);
   },
 
-  /** All non-archived hypotheses as a flat array (unwraps the list envelope). */
+  /**
+   * Every hypothesis matching the filters as a flat array. Pages through the list
+   * (the server caps a page at 500) so the board never silently truncates.
+   * Archived hypotheses are hidden unless params.status === 'archived'.
+   */
   async listHypotheses(params: HypothesisListParams = {}) {
-    const page = await api.listHypothesesPage(params);
-    return page.items;
+    const pageSize = params.limit ?? 500;
+    const start = params.offset ?? 0;
+    const items: HypothesisListItem[] = [];
+    let offset = start;
+    // Hard stop (100 pages) so a misbehaving server can never loop forever.
+    for (let page = 0; page < 100; page += 1) {
+      const res = await api.listHypothesesPage({ ...params, limit: pageSize, offset });
+      items.push(...res.items);
+      offset += res.items.length;
+      if (res.items.length === 0 || offset - start >= res.total) break;
+    }
+    return items;
   },
 
   getHypothesis(id: number) {

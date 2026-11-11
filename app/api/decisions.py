@@ -59,6 +59,11 @@ class DecisionListItem(BaseModel):
     area: str | None = None
     decided_at: datetime | None = None
     created_at: datetime | None = None
+    evidence_count: int = 0
+    hypothesis_id: int | None = None
+    # True when the cited hypothesis has been archived: a flag to re-check the belief,
+    # not a broken receipt (it never makes the decision "undermined").
+    hypothesis_archived: bool = False
 
 
 class DecisionListResponse(BaseModel):
@@ -82,6 +87,7 @@ class LinkedHypothesis(BaseModel):
     id: int
     statement: str
     band: str
+    archived: bool = False
 
 
 class DecisionDetailResponse(BaseModel):
@@ -172,6 +178,38 @@ async def list_decisions(
     from app.services.decisions import list_decisions as _list
 
     items, total = await _list(db, status=status, q=q, sort=sort, limit=limit, offset=offset)
+
+    # Evidence counts and archived-hypothesis flags in two grouped queries (not per row).
+    from sqlalchemy import func, select
+
+    from app.models import DecisionEvidence, Hypothesis
+
+    ids = [d.id for d in items]
+    counts: dict[int, int] = {}
+    if ids:
+        counts = {
+            row[0]: row[1]
+            for row in (
+                await db.execute(
+                    select(DecisionEvidence.decision_id, func.count(DecisionEvidence.id))
+                    .where(DecisionEvidence.decision_id.in_(ids))
+                    .group_by(DecisionEvidence.decision_id)
+                )
+            ).all()
+        }
+    hyp_ids = {d.hypothesis_id for d in items if d.hypothesis_id}
+    archived_ids: set[int] = set()
+    if hyp_ids:
+        archived_ids = {
+            row[0]
+            for row in (
+                await db.execute(
+                    select(Hypothesis.id).where(
+                        Hypothesis.id.in_(hyp_ids), Hypothesis.status == "archived"
+                    )
+                )
+            ).all()
+        }
     return {
         "items": [
             {
@@ -184,6 +222,9 @@ async def list_decisions(
                 "area": d.area,
                 "decided_at": d.decided_at.isoformat() if d.decided_at else None,
                 "created_at": d.created_at.isoformat() if d.created_at else None,
+                "evidence_count": counts.get(d.id, 0),
+                "hypothesis_id": d.hypothesis_id,
+                "hypothesis_archived": d.hypothesis_id in archived_ids,
             }
             for d in items
         ],

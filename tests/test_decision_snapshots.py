@@ -350,3 +350,81 @@ async def test_list_sort_integrity_puts_undermined_first(auth_client, seeded_db)
 
     ids = [d["id"] for d in (await auth_client.get("/api/decisions", params={"sort": "integrity"})).json()["items"]]
     assert ids.index(bad.id) < ids.index(ok.id)
+
+
+# --- v0.4 gaps: list fields, archived-hypothesis flag, teammates ---------------
+
+
+async def _decision_with_hypothesis(seeded_db, *, status="open"):
+    from app.models import Hypothesis
+    from app.services.decisions import create_decision
+
+    _convo, h, _company = await _convo_with_highlight(seeded_db, quote="Cites a belief")
+    hyp = Hypothesis(statement="Archive flagging works on decisions ok", status=status, origin="human")
+    seeded_db.add(hyp)
+    await seeded_db.flush()
+    decision = await create_decision(
+        seeded_db, title="Cites hypothesis", rationale_md="R",
+        evidence_highlight_ids=[h.id], hypothesis_id=hyp.id,
+    )
+    await seeded_db.commit()
+    return decision.id, hyp.id
+
+
+@pytest.mark.asyncio
+async def test_list_includes_evidence_count_and_hypothesis_ref(auth_client, seeded_db):
+    decision_id, hyp_id = await _decision_with_hypothesis(seeded_db)
+    items = (await auth_client.get("/api/decisions")).json()["items"]
+    item = next(i for i in items if i["id"] == decision_id)
+    assert item["evidence_count"] == 1
+    assert item["hypothesis_id"] == hyp_id
+    assert item["hypothesis_archived"] is False
+
+
+@pytest.mark.asyncio
+async def test_archiving_the_cited_hypothesis_flags_the_decision_but_does_not_undermine_it(
+    auth_client, seeded_db
+):
+    decision_id, hyp_id = await _decision_with_hypothesis(seeded_db)
+    r = await auth_client.patch(f"/api/hypotheses/{hyp_id}", json={"status": "archived"})
+    assert r.status_code == 200
+
+    items = (await auth_client.get("/api/decisions")).json()["items"]
+    item = next(i for i in items if i["id"] == decision_id)
+    assert item["hypothesis_archived"] is True
+    assert item["integrity"] != "undermined"  # a flag, not a broken receipt
+
+    detail = (await auth_client.get(f"/api/decisions/{decision_id}")).json()
+    assert detail["hypothesis"]["archived"] is True
+    assert detail["integrity"] != "undermined"
+
+    # Restoring the hypothesis clears the flag again.
+    await auth_client.patch(f"/api/hypotheses/{hyp_id}", json={"status": "open"})
+    detail = (await auth_client.get(f"/api/decisions/{decision_id}")).json()
+    assert detail["hypothesis"]["archived"] is False
+
+
+@pytest.mark.asyncio
+async def test_decision_without_hypothesis_is_not_flagged(auth_client, seeded_db):
+    from app.services.decisions import create_decision
+
+    _c, h, _co = await _convo_with_highlight(seeded_db, quote="No belief attached")
+    d = await create_decision(seeded_db, title="Plain", rationale_md="R", evidence_highlight_ids=[h.id])
+    await seeded_db.commit()
+    item = next(i for i in (await auth_client.get("/api/decisions")).json()["items"] if i["id"] == d.id)
+    assert item["hypothesis_id"] is None and item["hypothesis_archived"] is False
+    assert item["evidence_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_team_users_lists_names_for_owner_picker(auth_client, user_david):
+    r = await auth_client.get("/api/users")
+    assert r.status_code == 200
+    users = r.json()["items"]
+    me = next(u for u in users if u["id"] == user_david.id)
+    assert me["name"] and set(me) == {"id", "name"}  # no emails or hashes leak
+
+
+@pytest.mark.asyncio
+async def test_team_users_requires_auth(client):
+    assert (await client.get("/api/users")).status_code == 401

@@ -1223,6 +1223,27 @@ export interface paths {
         patch: operations["update_tag_api_tags__key__patch"];
         trace?: never;
     };
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Team Users
+         * @description Display names for owner pickers. Never returns emails or credentials; a user with no
+         *     name set is shown by the local part of their email.
+         */
+        get: operations["list_team_users_api_users_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/vexa/bots": {
         parameters: {
             query?: never;
@@ -1846,6 +1867,18 @@ export interface components {
             created_at?: string | null;
             /** Decided At */
             decided_at?: string | null;
+            /**
+             * Evidence Count
+             * @default 0
+             */
+            evidence_count: number;
+            /**
+             * Hypothesis Archived
+             * @default false
+             */
+            hypothesis_archived: boolean;
+            /** Hypothesis Id */
+            hypothesis_id?: number | null;
             /** Id */
             id: number;
             /** Integrity */
@@ -2463,6 +2496,8 @@ export interface components {
             conversation_id: number;
             /** Highlight Id */
             highlight_id: number;
+            /** In Segment */
+            in_segment?: string | null;
             /** Quote */
             quote: string;
             /**
@@ -2554,6 +2589,11 @@ export interface components {
         };
         /** LinkedHypothesis */
         LinkedHypothesis: {
+            /**
+             * Archived
+             * @default false
+             */
+            archived: boolean;
             /** Band */
             band: string;
             /** Id */
@@ -2785,6 +2825,18 @@ export interface components {
             signal_strength?: string | null;
             /** Sort Order */
             sort_order?: number | null;
+        };
+        /** TeamUser */
+        TeamUser: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /** TeamUsersResponse */
+        TeamUsersResponse: {
+            /** Items */
+            items: components["schemas"]["TeamUser"][];
         };
         /** TimelineEvent */
         TimelineEvent: {
@@ -5168,6 +5220,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_team_users_api_users_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TeamUsersResponse"];
                 };
             };
         };

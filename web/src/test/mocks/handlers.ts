@@ -531,6 +531,8 @@ export const handlers = [
     });
   }),
 
+  http.get('/api/users', () => HttpResponse.json({ items: [{ id: 1, name: 'David' }, { id: 2, name: 'Maria' }] })),
+
   // Hypotheses side-requests (defaults; individual tests override as needed)
   http.get('/api/hypotheses/segments', () => HttpResponse.json({ items: [] })),
   http.get('/api/hypotheses/band-rules', () =>
