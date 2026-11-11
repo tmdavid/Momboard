@@ -9,9 +9,10 @@
  * - Composer with >=15 trimmed chars validation
  * - Loading/empty/error states and keyboard semantics
  */
-import { useState, useRef, FormEvent, KeyboardEvent } from 'react';
+import { useState, useRef, useEffect, FormEvent, KeyboardEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { positiveInt } from '../utils/queryParams';
 import { computeBand, BAND_LABEL, DEFAULT_BAND_RULES } from '../utils/bands';
 import { InlineEdit, QuestionsList, BandHistory, AddEvidence } from '../components/HypothesisDetailParts';
 import {
@@ -1153,6 +1154,17 @@ export function HypothesesPage() {
   });
 
   // Loading state
+  // A link to one belief (/hypotheses?hypothesis=7, as cited by the MCP tools) opens its detail once.
+  // These hooks sit above the early returns below: hooks must run in the same order on every render.
+  const [searchParams] = useSearchParams();
+  const linkedConsumed = useRef(false);
+  const linkedId = positiveInt(searchParams.get('hypothesis'));
+  useEffect(() => {
+    if (linkedConsumed.current || linkedId == null || !hypotheses?.some((h) => h.id === linkedId)) return;
+    linkedConsumed.current = true;
+    setExpandedId(linkedId);
+  }, [linkedId, hypotheses]);
+
   if (isLoading) {
     return (
       <main className="p-6 flex flex-col gap-5">

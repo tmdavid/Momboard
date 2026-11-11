@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams, Link } from 'react-router-dom';
+import { positiveInt } from '../utils/queryParams';
 import { api } from '../api';
 import {
   jsonFetch, useTeamUsers, EditDecisionForm, AddQuote, LinkedHypothesisBox,
@@ -83,6 +84,15 @@ export function DecisionsPage() {
   const [editing, setEditing] = useState(false);
   const { nameOf } = useTeamUsers();
   useEffect(() => setEditing(false), [selectedId]);
+
+  // A link to one decision (/decisions?decision=3, as cited by the MCP tools) opens it once.
+  const linkedDecisionId = positiveInt(searchParams.get('decision'));
+  const linkedDecisionConsumed = useRef(false);
+  useEffect(() => {
+    if (linkedDecisionConsumed.current || linkedDecisionId == null) return;
+    linkedDecisionConsumed.current = true;
+    setSelectedId(linkedDecisionId);
+  }, [linkedDecisionId]);
 
   // Prefill from elsewhere in the app: ?highlight_id=1&highlight_id=2 and/or ?hypothesis_id=3.
   const preselectedHighlightIds = searchParams

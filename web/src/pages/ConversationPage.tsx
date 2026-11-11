@@ -2,6 +2,7 @@ import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, Highlight } from '../api';
 import { useReviewQueue } from '../hooks/useReviewQueue';
+import { positiveInt } from '../utils/queryParams';
 import { NotesDrawer } from '../components/NotesDrawer';
 import { AnalysisSidebar } from '../components/AnalysisSidebar';
 import { HighlightPopover } from '../components/HighlightPopover';
@@ -216,6 +217,17 @@ export function ConversationPage() {
       hashConsumedRef.current = true;
     }
   }, [convo, location.hash, jumpToUtterance]);
+
+  // A link to one quote (/conversations/12?highlight=345, as cited by the MCP tools): show its line.
+  const highlightConsumedRef = useRef(false);
+  useEffect(() => {
+    if (highlightConsumedRef.current || !convo) return;
+    const wanted = positiveInt(new URLSearchParams(location.search).get('highlight'));
+    if (wanted == null) return;
+    highlightConsumedRef.current = true;
+    const utteranceId = convo.highlights.find((h) => h.id === wanted)?.utterance_id;
+    if (utteranceId != null) requestAnimationFrame(() => jumpToUtterance(utteranceId));
+  }, [convo, location.search, jumpToUtterance]);
 
   // Text selection → inline "add highlight" affordance (replaces window.prompt)
   const affordanceRef = useRef<HTMLDivElement>(null);

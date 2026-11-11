@@ -1,4 +1,6 @@
 import { useMemo, useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { positiveInt } from '../utils/queryParams';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, SynthesisResponse } from '../api';
 import { useTaxonomy } from '../hooks/useTaxonomy';
@@ -37,7 +39,9 @@ function formatDate(iso: string): string {
 export function SummariesPage() {
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<SavedFilter>('all');
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  // A link to one summary (/summaries?summary=2, as cited by the MCP tools) starts with it selected.
+  const [searchParams] = useSearchParams();
+  const [selectedId, setSelectedId] = useState<number | null>(() => positiveInt(searchParams.get('summary')));
   const tax = useTaxonomy();
 
   const { data, isLoading } = useQuery({
@@ -54,11 +58,13 @@ export function SummariesPage() {
 
   // Default-select the first item when the list loads / changes.
   useEffect(() => {
+    // Wait for the list: an empty first render must not discard the id from a link.
+    if (isLoading) return;
     if (items.length === 0) { setSelectedId(null); return; }
     if (selectedId == null || !items.some((s) => s.id === selectedId)) {
       setSelectedId(items[0].id);
     }
-  }, [items, selectedId]);
+  }, [items, selectedId, isLoading]);
 
   const selected = items.find((s) => s.id === selectedId) ?? null;
 
