@@ -3,37 +3,80 @@
 All notable changes to MomBoard, newest first. The README shows only the current
 status and latest additions; this file is the full history.
 
-## v0.4 — Decisions, Hypotheses board, new UI (in progress)
+## v0.4 — Decisions, Hypotheses board, new UI (2026-11-11)
 
-- **Hypothesis grounding bands use the PRD rules** (confirmed links only; suggested matches
-  never move a band): *Grounded* = 3+ supporting quotes from 2+ companies and at most 1
+A redesigned interface, a Hypotheses board you can trust, and a Decisions page that keeps
+its receipts. Migrations **008–010** (run automatically by the container; for a
+from-source install use `python scripts/migrate_v04.py`).
+
+**Hypotheses**
+- **Grounding bands follow clear rules** (confirmed quotes only; suggested matches never
+  move a band): *Grounded* = 3+ supporting quotes from 2+ companies and at most 1
   contradicting; *Contested* = 2+ supporting and 2+ contradicting; *Refuted* = 3+
   contradicting and more than 2x the supporting; *Candidate* = some confirmed evidence but
-  not enough; *Hunch* = none. **Behaviour change:** one confirmed quote used to read as
-  Grounded; it is now a Candidate, and a hypothesis with only suggested links is a Hunch
-  (with a "to review" badge). Thresholds are settings (`HYPOTHESIS_GROUNDED_MIN_SUPPORT`,
+  not enough; *Hunch* = none. Thresholds are settings (`HYPOTHESIS_GROUNDED_MIN_SUPPORT`,
   `HYPOTHESIS_GROUNDED_MIN_COMPANIES`, `HYPOTHESIS_GROUNDED_MAX_CONTRADICT`,
   `HYPOTHESIS_CONTESTED_MIN_EACH`, `HYPOTHESIS_REFUTED_MIN_CONTRADICT`,
-  `HYPOTHESIS_REFUTED_RATIO`), exposed at `GET /api/hypotheses/band-rules`. Each card
-  carries a one-sentence `grounding_reason` that says what is still missing.
-- **Decisions page uses the full Decisions API**: owner and area, a Draft status
-  (Propose once a quote is cited), edit title/rationale/owner/area, add or remove cited
-  quotes, search and sort, a per-row quote count, the linked hypothesis with its band,
-  and "Superseded by <title>". A decision citing an **archived hypothesis** is flagged
-  ("Belief archived", with a re-check prompt) but is not marked undermined; restoring the
-  hypothesis clears the flag. `GET /api/users` returns teammate names (id + name only).
-- **Hypothesis intake matching**: when the belief names a segment, matches from that
-  segment rank first and others say "Outside the <segment> segment" (and are not
-  pre-ticked or counted in "If saved now"); at most one match per conversation unless the
-  second quote takes the opposite stance. There is no structured segment on companies, so
-  the model judges from the company name and notes and answers "unknown" rather than guess.
-- Hypotheses board: archived hypotheses can be viewed and restored ("Show archived"); the
-  board loads every page of results instead of the first 200.
-- Hypotheses: grounding-band board, scored evidence check, detail view with band history,
-  validation questions, add-evidence and archive; list API returns `{items, total}`.
-  Migration 010. Decisions: evidence snapshots and reactive integrity (migrations 008, 009).
+  `HYPOTHESIS_REFUTED_RATIO`) and are served at `GET /api/hypotheses/band-rules`. Every card
+  has a one-sentence `grounding_reason` that says what is still missing.
+- **Board by band** (Grounded / Contested / Candidate / Hunch / Refuted) with segment, band
+  and pending-suggestion filters, a "How bands work" explainer, and archive / restore
+  ("Show archived"). The board loads every page of results.
+- **Evidence check before saving**: matches show a score, source and reason; strong matches
+  are pre-ticked, weaker ones sit under a divider; "If saved now" previews the band.
+  Customer turns only (our reps and compliments are excluded), minimum confidence, a
+  verification pass, and at most one match per call unless the second quote says the
+  opposite. With a segment set, in-segment matches rank first and others are marked
+  "Outside the <segment> segment" (not pre-ticked, not counted in the preview). Companies
+  have no structured segment, so the model judges from the company name and notes and says
+  "unknown" rather than guess.
+- **Detail view**: edit (the belief is locked once quotes are linked), accept / reject
+  evidence, add evidence by searching quotes, validation questions you can tick off as
+  asked, and **band history** with the quote behind each change. "Cite in decision" and
+  Explore's "Link to hypothesis" connect it to the rest of the app.
+- Rejecting a quote's tag **invalidates** the hypothesis links to it, and the band
+  re-derives. The auto-linker now ignores our reps, never re-suggests a pair you already
+  decided, and drops suggestions under 0.6 confidence.
+- API: `GET /api/hypotheses` now returns `{items, total}` with `band`, `segment`, `status`,
+  `has_pending`, `sort` and paging (**breaking**: it was a bare list); `archived` status;
+  `/history`, `/segments`, `/band-rules`, and `PATCH .../questions/{id}`.
 
-## v0.3 — "From advisor to collaborator" (in progress)
+**Decisions**
+- **Receipts survive**: each cited quote is snapshotted (quote, company, call, date), so a
+  decision still reads correctly after a Retag. Integrity is stored and updated when a
+  cited tag is rejected or a call is deleted. *Deleting a highlight that a decision cites is
+  now allowed* (it used to be blocked); the receipt is flagged instead.
+- The page uses the full API: owner and area, a Draft status (Propose once a quote is
+  cited), edit, add / remove cited quotes, search and sort, quote counts, the linked
+  hypothesis with its band, and "Superseded by <title>". A decision that cites an
+  **archived hypothesis** is flagged ("Belief archived") but not marked undermined.
+- `GET /api/users` lists teammate names (id and name only) for the owner picker.
+
+**Interface**
+- New design system and app shell (header, sidebar) with every page restyled: Library,
+  Conversation, Explore, Insights, Hypotheses, Decisions, Practice, Summaries, Settings.
+  Preset filters in Library; a clearer Practice layout. Removed on purpose: the global
+  search box, the Help popover and the "Compare as lens" button in Explore.
+- Tag filters: the 10 most common tags in one row and the Core / Custom dropdowns on their
+  own row below, flipping to open leftwards near the window edge.
+
+**Fixes and housekeeping**
+- Fixed a crash (HTTP 500) on the Hypotheses list and detail when a hypothesis had a
+  confirmed quote from a dated call: freshness compared timezone-aware and naive times.
+- One release number: the app, `/healthz`, the MCP server, `pyproject.toml` and the web
+  package all report **0.4.0** (they had stayed at 0.2.0), with a test that fails if they
+  drift apart.
+- Ops scripts: `scripts/migrate_v04.py` (backup, migrate and verify; also `--verify-only`
+  inside a container) and `scripts/retag_conversations.py` (bulk re-tag a date range
+  through the API; dry run by default).
+
+**Behaviour changes to know about**
+- A hypothesis with one confirmed quote is now a *Candidate* (it used to read as Grounded),
+  and one with only suggested links is a *Hunch*, with a "to review" badge.
+- Strong intake matches start ticked (they used to start unticked).
+- A quote can't be linked twice to the same hypothesis (409).
+
+## v0.3 — "From advisor to collaborator"
 
 The corpus becomes a grounded boundary: it **feeds other tools** (insights over MCP)
 and **gates what enters it** (hand-entered beliefs must cite call evidence or be
@@ -59,7 +102,11 @@ Shipped:
 - **Clari source-call link** — conversations imported from Clari show a "View in Clari"
   link back to the original recording (from `meta.clari_review_url`).
 
-Remaining: T47 (first-class custom taxonomy).
+- **T47 Custom taxonomy, first-class** — teams define their own tags (key, emoji,
+  description, signal strength) in Settings; new tags flow into the tagger prompt and apply
+  on reprocess. Tags have an `origin` (core / custom) and a free-form `category`
+  (migration 007); the filters group them as Core and Custom with categories, and Settings
+  lets you reorder them.
 
 ## v0.2 — "From archive to advisor"
 

@@ -614,13 +614,15 @@ def mount_streamable_http(app: Any) -> None:
 
         # Handle MCP protocol methods
         if method == "initialize":
+            from app.config import get_settings
+
             return JSONResponse({
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {"listChanged": False}},
-                    "serverInfo": {"name": "momboard", "version": "0.2.0"},
+                    "serverInfo": {"name": "momboard", "version": get_settings().version},
                 },
             })
 

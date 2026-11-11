@@ -229,6 +229,9 @@ class TestStreamableHTTPMount:
             assert body["id"] == 1
             assert "result" in body
             assert body["result"]["serverInfo"]["name"] == "momboard"
+            from app.config import get_settings
+
+            assert body["result"]["serverInfo"]["version"] == get_settings().version
             assert "capabilities" in body["result"]
 
     @pytest.mark.asyncio

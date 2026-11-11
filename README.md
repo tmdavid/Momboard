@@ -4,12 +4,20 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 
 ## Status
 
-**v0.3** — "From advisor to collaborator" — *in progress.* The corpus becomes a grounded boundary: it **feeds other tools** (insights exposed over MCP) and **gates what enters it** (hand-entered beliefs must cite call evidence or be flagged as hunches). See [`V0.3.md`](V0.3.md) and the design docs under [`docs/design/`](docs/design/).
+**v0.4** — a redesigned interface, a Hypotheses board you can trust, and a Decisions page that keeps its receipts. v0.3's evidence layer (insights over MCP, evidence-gated intake, custom taxonomy) is complete. The full history is in [`CHANGELOG.md`](CHANGELOG.md); the v0.3 release definition is in [`V0.3.md`](V0.3.md) with design docs under [`docs/design/`](docs/design/).
 
-### Latest additions (v0.3)
+### Latest additions (v0.4)
 
-- **Evidence-gated hypothesis intake (T48)** — add a belief and the corpus either backs it with evidence, shows weak matches, or prompts Mom Test questions; a read-time grounding band (`grounded`/`contested`/`refuted`/`candidate`/`hunch`) keeps hunches honestly labelled.
-- **Read-only insight MCP tools (T46)** — hypotheses (with grounding + cited evidence) and decisions exposed over MCP for external agents to build on.
+- **Hypotheses board by grounding band** — Grounded, Contested, Candidate, Hunch and Refuted, computed from the quotes you have *confirmed* (suggested matches never move a band). Each card says why it sits there and what is still missing; thresholds are settings (`HYPOTHESIS_*`, see below).
+- **Evidence check before you save** — scored matches with their source, customer turns only, a segment-aware ranking, and a live "if saved now" band. Detail view with band history, validation questions, add-evidence and archive / restore.
+- **Decisions that keep their receipts** — every cited quote is snapshotted, integrity updates when a tag is rejected or a call is deleted, and the page supports owner, area, drafts, editing, search, sort and the linked hypothesis (flagging one that was archived).
+- **New interface** — a redesigned shell and pages, and tag filters with the 10 most common tags plus Core / Custom dropdowns.
+
+### Earlier additions (v0.3)
+
+- **Evidence-gated hypothesis intake (T48)** — add a belief and the corpus either backs it with evidence, shows weak matches, or prompts Mom Test questions, so hunches stay honestly labelled.
+- **Read-only insight MCP tools (T46)** — hypotheses (with grounding and cited evidence) and decisions exposed over MCP for external agents to build on.
+- **Custom taxonomy (T47)** — define your own tags, grouped by category, in Settings.
 - **Clari source-call link** — imported conversations link back to the original recording.
 
 ### Core capabilities
@@ -184,6 +192,9 @@ Copy `.env.example` to `.env`. Important variables:
 | `LLM_MODEL_*` | OpenAI model selection for each pipeline stage |
 | `WORKER_POLL_INTERVAL` | Database queue polling interval |
 | `WORKER_MAX_RETRIES` | Attempts before a job becomes terminally failed |
+| `HYPOTHESIS_GROUNDED_MIN_SUPPORT` / `_MIN_COMPANIES` / `_MAX_CONTRADICT` | Grounded needs this many confirmed supporting quotes from this many companies, and at most this many contradicting (defaults 3, 2, 1) |
+| `HYPOTHESIS_CONTESTED_MIN_EACH` | Contested needs this many confirmed quotes on each side (default 2) |
+| `HYPOTHESIS_REFUTED_MIN_CONTRADICT` / `_RATIO` | Refuted needs this many contradicting quotes, and more than ratio × the supporting ones (defaults 3, 2) |
 
 See `.env.example` for the complete list and `DEPLOY.md` for production setup, backups, restore, rollback, and PostgreSQL migration.
 
@@ -219,3 +230,9 @@ Follow [`agent-deployment.md`](agent-deployment.md) for the deployment gates and
 - Creates online SQLite backups and retains 14 days
 
 Do not run multiple application processes against the same SQLite file. Move to PostgreSQL before scaling horizontally.
+
+### Upgrading to v0.4
+
+v0.4 adds migrations 008–010 (additive; they only add columns and tables). The production container applies them on start. When running from source, stop the app and run `python scripts/migrate_v04.py` — it backs the database up first, runs `alembic upgrade head`, and verifies the result (`--dry-run` previews, `--verify-only` checks a running container's database without changing it). Then rebuild the frontend (`npm ci --prefix web && npm run build --prefix web`).
+
+`scripts/retag_conversations.py` re-tags a date range through the API (dry run by default; it prompts for your password).
