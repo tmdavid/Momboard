@@ -80,11 +80,11 @@ describe('Library page', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/titles . transcripts/i)).toBeInTheDocument();
     });
 
     // Just verify the search input exists and is functional
-    const searchInput = screen.getByPlaceholderText(/search/i);
+    const searchInput = screen.getByPlaceholderText(/titles . transcripts/i);
     expect(searchInput).toBeInTheDocument();
   });
 

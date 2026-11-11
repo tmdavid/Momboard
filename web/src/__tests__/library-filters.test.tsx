@@ -48,7 +48,7 @@ describe('T15 — Multi-tag filter', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/titles . transcripts/i)).toBeInTheDocument();
     });
 
     // Click first tag: ⚡ pain
@@ -86,7 +86,7 @@ describe('T15 — Multi-tag filter', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/titles . transcripts/i)).toBeInTheDocument();
     });
 
     // Select pain
@@ -120,7 +120,7 @@ describe('T15 — Date range filter', () => {
     const user = userEvent.setup();
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/titles . transcripts/i)).toBeInTheDocument();
     });
 
     // Look for date inputs (date_from, date_to)
@@ -163,10 +163,10 @@ describe('T15 — Search debounce (300ms)', () => {
 
     // Wait for initial load
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/titles . transcripts/i)).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText(/search/i);
+    const searchInput = screen.getByPlaceholderText(/titles . transcripts/i);
     // Type "abc" rapidly
     await user.type(searchInput, 'a');
     await user.type(searchInput, 'b');
@@ -202,10 +202,10 @@ describe('T15 — Search debounce (300ms)', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByPlaceholderText(/search/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/titles . transcripts/i)).toBeInTheDocument();
     });
 
-    const searchInput = screen.getByPlaceholderText(/search/i);
+    const searchInput = screen.getByPlaceholderText(/titles . transcripts/i);
     await user.type(searchInput, 'test');
 
     await act(async () => {

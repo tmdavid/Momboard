@@ -73,7 +73,7 @@ describe('Auth flow', () => {
       expect(screen.getByText('Conversations')).toBeInTheDocument();
     });
     // mockUser is "David" -> initial "D", not the unauthenticated "?" fallback.
-    const menuButton = screen.getByRole('button', { name: /user menu/i });
+    const menuButton = screen.getByRole('button', { name: /your profile/i });
     expect(menuButton).toHaveTextContent('D');
     expect(menuButton).not.toHaveTextContent('?');
   });
@@ -84,7 +84,7 @@ describe('Auth flow', () => {
       expect(screen.getByText('Conversations')).toBeInTheDocument();
     });
     const user = userEvent.setup();
-    await user.click(screen.getByRole('button', { name: /user menu/i }));
+    await user.click(screen.getByRole('button', { name: /your profile/i }));
 
     // Menu shows the user and a Log out action.
     expect(screen.getByText('david@example.com')).toBeInTheDocument();

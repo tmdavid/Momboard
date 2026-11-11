@@ -106,7 +106,11 @@ describe('UX #3: Notes textarea', () => {
 });
 
 // ─── #4: Help popover ───
-describe('UX #4: Help popover', () => {
+// v0.4 redesign: the header "?" Help popover is removed. Its content moved —
+// review shortcuts (J/K, A, X) to the Conversation review bar, and the taxonomy
+// legend to Settings. Skipped rather than deleted so the removal is explicit and
+// can be re-pointed at the new locations once those pages are redesigned.
+describe.skip('UX #4: Help popover', () => {
   it('opens help popover with shortcuts and taxonomy on ? click', async () => {
     const { Layout } = await import('../components/Layout');
     render(
