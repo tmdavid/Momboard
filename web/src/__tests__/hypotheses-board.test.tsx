@@ -1193,6 +1193,9 @@ describe('T28: Hypotheses board — keyboard accessibility', () => {
     });
     expect(document.activeElement).toBe(input);
 
+    // Belief -> Segment -> Add hypothesis
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByLabelText(/segment \(optional\)/i));
     await user.tab();
     expect(document.activeElement).toBe(btn);
   });
@@ -1263,15 +1266,109 @@ describe('T48: evidence-gated hypothesis intake', () => {
     const panel = await screen.findByTestId('intake-panel');
     expect(within(panel).getByText(/export it to Excel/i)).toBeInTheDocument();
 
-    // Nothing confirmed by default -> button reads "Save as hunch" (heavy judgment).
-    expect(within(panel).getByRole('button', { name: /save as hunch/i })).toBeInTheDocument();
+    // The strong match starts ticked, so the button states what will be saved.
+    expect(within(panel).getByRole('checkbox', { name: /confirm evidence 501/i })).toBeChecked();
+    expect(within(panel).getByRole('button', { name: /save with 1 quote/i })).toBeInTheDocument();
+    expect(within(panel).getByText(/match 0\.90/i)).toBeInTheDocument();
+    expect(within(panel).getByTestId('band-preview')).toHaveTextContent(/grounded/i);
 
-    // Confirm the quote -> button reflects the confirmation.
+    // Unticking it flips the button to a hunch save and the preview to Hunch.
     await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence 501/i }));
-    expect(within(panel).getByRole('button', { name: /save with 1 confirmed/i })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /save as hunch/i })).toBeInTheDocument();
+    expect(within(panel).getByTestId('band-preview')).toHaveTextContent(/hunch/i);
+    await user.click(within(panel).getByRole('checkbox', { name: /confirm evidence 501/i }));
+    expect(within(panel).getByRole('button', { name: /save with 1 quote/i })).toBeInTheDocument();
 
     // Saving closes the panel.
-    await user.click(within(panel).getByRole('button', { name: /save with 1 confirmed/i }));
+    await user.click(within(panel).getByRole('button', { name: /save with 1 quote/i }));
     await waitFor(() => expect(screen.queryByTestId('intake-panel')).not.toBeInTheDocument());
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Hypotheses PRD slice C1: composer segment + scored evidence panel
+// ═══════════════════════════════════════════════════════════════════════════════
+
+describe('Hypotheses PRD C1: composer segment + evidence panel', () => {
+  const typeBelief = async (user: ReturnType<typeof userEvent.setup>) => {
+    const input = await screen.findByPlaceholderText(/state a falsifiable belief/i);
+    await user.type(input, 'Customers rely on manual Excel exports to clean listings');
+  };
+
+  test('segment field is sent with intake preview and commit', async () => {
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    let previewBody: Record<string, unknown> | null = null;
+    let commitBody: Record<string, unknown> | null = null;
+    server.use(
+      http.post('/api/hypotheses/intake', async ({ request }) => {
+        previewBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          statement: previewBody.statement,
+          segment: previewBody.segment ?? null,
+          matches: [],
+          grounding_preview: 'hunch',
+          suggested_questions: [],
+        });
+      }),
+      http.post('/api/hypotheses/intake/commit', async ({ request }) => {
+        commitBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json(
+          { id: 1000, statement: commitBody.statement, segment: commitBody.segment, status: 'open', created_at: new Date().toISOString() },
+          { status: 201 },
+        );
+      }),
+    );
+    await typeBelief(user);
+    await user.type(screen.getByLabelText(/segment \(optional\)/i), 'Mid-market');
+    await user.click(screen.getByRole('button', { name: /check evidence first/i }));
+    const panel = await screen.findByTestId('intake-panel');
+    expect(previewBody).toMatchObject({ segment: 'Mid-market' });
+    await user.click(within(panel).getByRole('button', { name: /save as hunch/i }));
+    await waitFor(() => expect(commitBody).not.toBeNull());
+    expect(commitBody).toMatchObject({ segment: 'Mid-market' });
+  });
+
+  test('weak matches sit under a divider, start unticked, and show source + score', async () => {
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    server.use(
+      http.post('/api/hypotheses/intake', async ({ request }) => {
+        const body = (await request.json()) as { statement: string };
+        return HttpResponse.json({
+          statement: body.statement,
+          segment: null,
+          matches: [
+            { highlight_id: 1, quote: 'Weak one', tag_key: 'pain', conversation_id: 1, relation: 'supports', confidence: 0.62, rationale: 'Loosely related.', strong: false },
+            { highlight_id: 2, quote: 'Strong one', tag_key: 'pain', conversation_id: 1, relation: 'supports', confidence: 0.91, rationale: 'Direct.', strong: true, company_name: 'Acme Watches', contact_name: 'Maria', conversation_date: '2026-03-02' },
+          ],
+          grounding_preview: 'grounded',
+          suggested_questions: ['When did you last do this?'],
+        });
+      }),
+    );
+    await typeBelief(user);
+    await user.click(screen.getByRole('button', { name: /check evidence first/i }));
+    const panel = await screen.findByTestId('intake-panel');
+    expect(within(panel).getByText(/weaker matches/i)).toBeInTheDocument();
+    expect(within(panel).getByRole('checkbox', { name: /confirm evidence 2/i })).toBeChecked();
+    expect(within(panel).getByRole('checkbox', { name: /confirm evidence 1/i })).not.toBeChecked();
+    expect(within(panel).getByText(/Acme Watches · Maria · 2026-03-02/)).toBeInTheDocument();
+    expect(within(panel).getByText(/ask next to test it/i)).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /save with 1 quote/i })).toBeInTheDocument();
+  });
+
+  test('a failed evidence check keeps the belief and offers Save as hunch', async () => {
+    const user = userEvent.setup();
+    renderHypothesesPage();
+    server.use(http.post('/api/hypotheses/intake', () => new HttpResponse(null, { status: 500 })));
+    await typeBelief(user);
+    await user.click(screen.getByRole('button', { name: /check evidence first/i }));
+    expect(await screen.findByText(/couldn.t check the evidence/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/state a falsifiable belief/i)).toHaveValue(
+      'Customers rely on manual Excel exports to clean listings',
+    );
+    expect(screen.getByRole('button', { name: /^save as hunch$/i })).toBeInTheDocument();
   });
 });

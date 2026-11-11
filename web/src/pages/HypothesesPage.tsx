@@ -506,50 +506,118 @@ function HypothesisCard({
 
 // ─── Composer ───
 
+type IntakeMatch = NonNullable<HypothesisIntakeResponse['matches']>[number];
+
+/** Same 2x2 as the backend grounding rule, applied to the quotes ticked in the panel. */
+function previewBand(matches: IntakeMatch[], ticked: Set<number>): string {
+  const chosen = matches.filter((m) => ticked.has(m.highlight_id));
+  const sup = chosen.some((m) => m.relation === 'supports');
+  const con = chosen.some((m) => m.relation === 'contradicts');
+  if (sup && con) return 'Contested';
+  if (sup) return 'Grounded';
+  if (con) return 'Refuted';
+  return 'Hunch';
+}
+
+function matchSource(m: IntakeMatch): string {
+  return [m.company_name, m.contact_name, m.conversation_date].filter(Boolean).join(' · ');
+}
+
+function IntakeMatchRow({
+  match,
+  checked,
+  onToggle,
+}: {
+  match: IntakeMatch;
+  checked: boolean;
+  onToggle: (checked: boolean) => void;
+}) {
+  const source = matchSource(match);
+  return (
+    <li className="flex items-start gap-2 text-sm">
+      <input
+        type="checkbox"
+        className="mt-1"
+        aria-label={`Confirm evidence ${match.highlight_id}`}
+        checked={checked}
+        onChange={(e) => onToggle(e.target.checked)}
+      />
+      <div className="flex-1">
+        <span
+          className={`text-[11px] font-semibold uppercase mr-1.5 ${
+            match.relation === 'contradicts' ? 'text-crit' : 'text-good-text'
+          }`}
+        >
+          {match.relation}
+        </span>
+        <span className="italic">“{match.quote}”</span>
+        {match.rationale && <span className="block text-xs text-muted">{match.rationale}</span>}
+        {source && <span className="block text-xs text-muted">{source}</span>}
+      </div>
+      {typeof match.confidence === 'number' && (
+        <span className="text-xs text-muted tabular-nums whitespace-nowrap" title="Match score">
+          match {match.confidence.toFixed(2)}
+        </span>
+      )}
+    </li>
+  );
+}
+
 function HypothesisComposer() {
   const [statement, setStatement] = useState('');
+  const [segment, setSegment] = useState('');
   const [validationError, setValidationError] = useState('');
   const [submitError, setSubmitError] = useState(false);
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Segment suggestions: segments already used on saved hypotheses.
+  const known = queryClient.getQueryData<HypothesisListItem[]>(['hypotheses']) ?? [];
+  const segmentSuggestions = Array.from(
+    new Set(known.map((h) => h.segment).filter((x): x is string => !!x)),
+  ).sort();
+
   // T48: evidence-gated intake — preview matches, confirm per-quote, then commit.
-  type IntakePreview = HypothesisIntakeResponse;
-  const [preview, setPreview] = useState<IntakePreview | null>(null);
+  const [preview, setPreview] = useState<HypothesisIntakeResponse | null>(null);
   const [confirmedIds, setConfirmedIds] = useState<Set<number>>(new Set());
 
   const previewMutation = useMutation({
-    mutationFn: (s: string) => api.intakePreview({ statement: s }),
+    mutationFn: (body: { statement: string; segment?: string }) => api.intakePreview(body),
     onSuccess: (data) => {
       setPreview(data);
-      setConfirmedIds(new Set()); // heavy judgment: nothing confirmed by default
+      // Strong matches (direct, high-confidence) start ticked; weaker ones start unticked.
+      setConfirmedIds(
+        new Set((data.matches ?? []).filter((m) => m.strong).map((m) => m.highlight_id)),
+      );
     },
   });
+
+  const resetComposer = () => {
+    setStatement('');
+    setSegment('');
+    setPreview(null);
+    setConfirmedIds(new Set());
+    previewMutation.reset();
+  };
 
   const commitMutation = useMutation({
     mutationFn: (body: Parameters<typeof api.intakeCommit>[0]) => api.intakeCommit(body),
     onSuccess: () => {
-      setStatement('');
-      setPreview(null);
-      setConfirmedIds(new Set());
+      resetComposer();
       queryClient.invalidateQueries({ queryKey: ['hypotheses'] });
     },
   });
 
   const createMutation = useMutation({
-    mutationFn: (body: { statement: string }) => api.createHypothesis(body),
+    mutationFn: (body: { statement: string; segment?: string }) => api.createHypothesis(body),
     onMutate: async (body) => {
-      // Cancel outgoing fetches
       await queryClient.cancelQueries({ queryKey: ['hypotheses'] });
-
-      // Snapshot previous value
       const previous = queryClient.getQueryData<HypothesisListItem[]>(['hypotheses']);
 
-      // Optimistically add
       const optimistic: HypothesisListItem = {
         id: -Date.now(),
         statement: body.statement,
-        segment: null,
+        segment: body.segment ?? null,
         status: 'open',
         created_by: null,
         created_at: new Date().toISOString(),
@@ -560,6 +628,9 @@ function HypothesisComposer() {
           companies_supporting: 0,
           companies_contradicting: 0,
           last_evidence_at: null,
+          grounding: 'hunch',
+          pending_count: 0,
+          grounding_reason: 'No evidence yet.',
         },
         verdict_hint: null,
       };
@@ -569,15 +640,13 @@ function HypothesisComposer() {
         (old) => [optimistic, ...(old || [])],
       );
 
-      // Clear input immediately
-      setStatement('');
+      resetComposer();
       setValidationError('');
       setSubmitError(false);
 
       return { previous, optimisticId: optimistic.id };
     },
     onError: (_err, _body, context) => {
-      // Roll back optimistic update
       if (context?.previous) {
         queryClient.setQueryData(['hypotheses'], context.previous);
       }
@@ -598,15 +667,20 @@ function HypothesisComposer() {
     },
   });
 
+  const trimmed = statement.trim();
+  const trimmedSegment = segment.trim();
+
   const handleSubmit = (e?: FormEvent) => {
     e?.preventDefault();
-    const trimmed = statement.trim();
     if (trimmed.length < 15) {
       setValidationError('Statement must be at least 15 characters');
       return;
     }
     setValidationError('');
-    createMutation.mutate({ statement: trimmed });
+    createMutation.mutate({
+      statement: trimmed,
+      ...(trimmedSegment ? { segment: trimmedSegment } : {}),
+    });
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -616,8 +690,28 @@ function HypothesisComposer() {
     }
   };
 
-  const trimmedLength = statement.trim().length;
+  const runCheck = () =>
+    previewMutation.mutate({
+      statement: trimmed,
+      ...(trimmedSegment ? { segment: trimmedSegment } : {}),
+    });
+
+  const trimmedLength = trimmed.length;
   const isDisabled = trimmedLength === 0;
+
+  const matches = [...(preview?.matches ?? [])].sort(
+    (a, b) => (b.confidence ?? 0) - (a.confidence ?? 0),
+  );
+  const strongMatches = matches.filter((m) => m.strong);
+  const weakMatches = matches.filter((m) => !m.strong);
+  const questions = preview?.suggested_questions ?? [];
+  const toggle = (id: number) => (checked: boolean) =>
+    setConfirmedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   return (
     <div className="bg-surface border border-hairline rounded-xl p-4 flex flex-col gap-3">
@@ -640,6 +734,22 @@ function HypothesisComposer() {
             aria-describedby={validationError ? 'composer-error' : 'composer-help'}
           />
         </label>
+        <label className="w-44 flex flex-col gap-1">
+          <span className="text-xs font-semibold text-muted">Segment (optional)</span>
+          <input
+            type="text"
+            value={segment}
+            onChange={(e) => setSegment(e.target.value)}
+            list="hypothesis-segments"
+            placeholder="e.g. Mid-market"
+            className="w-full h-10 px-3 border border-hairline rounded-lg bg-surface text-sm"
+          />
+          <datalist id="hypothesis-segments">
+            {segmentSuggestions.map((sg) => (
+              <option key={sg} value={sg} />
+            ))}
+          </datalist>
+        </label>
         <button
           type="submit"
           aria-disabled={isDisabled || undefined}
@@ -652,7 +762,7 @@ function HypothesisComposer() {
         <button
           type="button"
           disabled={trimmedLength < 15 || previewMutation.isPending}
-          onClick={() => previewMutation.mutate(statement.trim())}
+          onClick={runCheck}
           className="h-10 px-4 rounded-lg text-sm font-semibold border-none bg-accent text-white hover:bg-[#2448c7] disabled:opacity-50"
         >
           {previewMutation.isPending ? 'Checking…' : 'Check evidence first'}
@@ -672,50 +782,55 @@ function HypothesisComposer() {
           Failed to create hypothesis. Please try again.
         </p>
       )}
-      {preview && (() => {
-        const matches = preview.matches ?? [];
-        const questions = preview.suggested_questions ?? [];
-        return (
+      {previewMutation.isError && !preview && (
+        <div className="flex items-center gap-3 text-xs text-red-700" role="alert">
+          <span>Couldn’t check the evidence right now. Your belief is kept.</span>
+          <button
+            type="button"
+            onClick={() => handleSubmit()}
+            className="font-semibold text-accent hover:underline"
+          >
+            Save as hunch
+          </button>
+        </div>
+      )}
+      {preview && (
         <div className="mt-3 border border-hairline rounded-xl bg-surface p-4" data-testid="intake-panel">
           {matches.length > 0 ? (
             <>
               <p className="text-xs text-muted mb-2">
-                Confirm the quotes that are genuinely evidence for this belief. Nothing counts until you confirm it.
+                Untick any quote that isn’t genuinely evidence for this belief. Only ticked quotes are saved.
               </p>
               <ul className="space-y-2">
-                {matches.map((m) => (
-                  <li key={m.highlight_id} className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      aria-label={`Confirm evidence ${m.highlight_id}`}
-                      checked={confirmedIds.has(m.highlight_id)}
-                      onChange={(e) => {
-                        setConfirmedIds((prev) => {
-                          const next = new Set(prev);
-                          if (e.target.checked) next.add(m.highlight_id);
-                          else next.delete(m.highlight_id);
-                          return next;
-                        });
-                      }}
-                    />
-                    <div>
-                      <span
-                        className={`text-[11px] font-semibold uppercase mr-1.5 ${
-                          m.relation === 'contradicts' ? 'text-crit' : 'text-good-text'
-                        }`}
-                      >
-                        {m.relation}
-                      </span>
-                      <span className="italic">“{m.quote}”</span>
-                      {typeof m.confidence === 'number' && (
-                        <span className="ml-1.5 text-xs text-muted tabular-nums">match {m.confidence.toFixed(2)}</span>
-                      )}
-                      {m.rationale && <span className="block text-xs text-muted">{m.rationale}</span>}
-                    </div>
-                  </li>
+                {strongMatches.map((m) => (
+                  <IntakeMatchRow
+                    key={m.highlight_id}
+                    match={m}
+                    checked={confirmedIds.has(m.highlight_id)}
+                    onToggle={toggle(m.highlight_id)}
+                  />
                 ))}
               </ul>
+              {weakMatches.length > 0 && (
+                <>
+                  <p className="mt-3 mb-2 text-xs font-semibold text-muted border-t border-hairline pt-2">
+                    Weaker matches
+                  </p>
+                  <ul className="space-y-2">
+                    {weakMatches.map((m) => (
+                      <IntakeMatchRow
+                        key={m.highlight_id}
+                        match={m}
+                        checked={confirmedIds.has(m.highlight_id)}
+                        onToggle={toggle(m.highlight_id)}
+                      />
+                    ))}
+                  </ul>
+                </>
+              )}
+              <p className="mt-3 text-xs text-muted" data-testid="band-preview">
+                If saved now: <b className="text-ink">{previewBand(matches, confirmedIds)}</b>
+              </p>
             </>
           ) : (
             <p className="text-sm text-muted">
@@ -724,11 +839,24 @@ function HypothesisComposer() {
             </p>
           )}
           {questions.length > 0 && (
-            <ul className="mt-2 list-disc list-inside text-xs text-ink-2">
-              {questions.map((q, i) => (
-                <li key={i}>{q}</li>
-              ))}
-            </ul>
+            <div className="mt-3 rounded-lg bg-sub p-3">
+              <p className="text-xs font-semibold text-muted mb-1">Ask next to test it</p>
+              <ul className="space-y-1">
+                {questions.map((q, i) => (
+                  <li key={i} className="flex items-start gap-2 text-xs text-ink-2">
+                    <span className="flex-1">{q}</span>
+                    <button
+                      type="button"
+                      aria-label={`Copy question ${i + 1}`}
+                      onClick={() => void navigator.clipboard?.writeText(q)}
+                      className="text-accent hover:underline"
+                    >
+                      Copy
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
           <div className="flex items-center gap-3 mt-3">
             <button
@@ -740,9 +868,10 @@ function HypothesisComposer() {
                     highlight_id: m.highlight_id,
                     stance: m.relation as 'supports' | 'contradicts',
                   }));
+                const seg = trimmedSegment || preview.segment || undefined;
                 commitMutation.mutate({
                   statement: preview.statement,
-                  segment: preview.segment ?? undefined,
+                  segment: seg,
                   confirmed,
                   validation_questions: questions,
                 });
@@ -751,7 +880,7 @@ function HypothesisComposer() {
               className="px-4 py-2 rounded-xl text-sm font-semibold bg-accent text-white hover:bg-[#1c5cab] disabled:opacity-50"
             >
               {confirmedIds.size > 0
-                ? `Save with ${confirmedIds.size} confirmed`
+                ? `Save with ${confirmedIds.size} ${confirmedIds.size === 1 ? 'quote' : 'quotes'}`
                 : 'Save as hunch'}
             </button>
             <button
@@ -763,8 +892,7 @@ function HypothesisComposer() {
             </button>
           </div>
         </div>
-        );
-      })()}
+      )}
     </div>
   );
 }
