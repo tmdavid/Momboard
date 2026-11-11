@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, HighlightWithContext } from '../api';
 import { RetagNotice } from '../components/RetagNotice';
@@ -11,7 +11,12 @@ import { formatDate, formatNumber } from '../utils/format';
 const SYNTHESIS_THRESHOLD = 5;
 
 export function ExplorePage() {
-  const [activeTags, setActiveTags] = useState<Set<string>>(new Set(['pain', 'workaround']));
+  // A link can open Explore on specific tags (?tag=pain); otherwise start from the strong-pain pair.
+  const [searchParams] = useSearchParams();
+  const [activeTags, setActiveTags] = useState<Set<string>>(() => {
+    const fromUrl = searchParams.getAll('tag').filter(Boolean);
+    return new Set(fromUrl.length > 0 ? fromUrl : ['pain', 'workaround']);
+  });
   const [companyId, setCompanyId] = useState<number | undefined>();
   const [statusFilter, setStatusFilter] = useState<string>('');
   // v0.5 D4: by default show the strongest quotes above each tag's floor, at most 3 per call per

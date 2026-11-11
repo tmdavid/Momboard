@@ -7,6 +7,7 @@ import { useConversationEvents } from '../hooks/useConversationEvents';
 import { scoreBand, tagColor } from '../constants';
 import { formatDate, formatDayHeading, formatNumber, isoDay } from '../utils/format';
 import { useTaxonomy } from '../hooks/useTaxonomy';
+import { HeadlineCards } from '../components/HeadlineCards';
 import { ConversationPreviewPanel } from '../components/ConversationPreviewPanel';
 import { EmptyResults } from '../components/EmptyResults';
 import { TagFilterBar } from '../components/TagFilterBar';
@@ -328,6 +329,8 @@ export function LibraryPage() {
                 New conversation
               </button>
             </div>
+
+            <HeadlineCards />
 
             {/* Saved views — preset filters (not persisted). */}
             <SavedViews activeTags={activeTags} companyId={companyId} dateFrom={dateFrom} dateTo={dateTo} sort={sort} setSearchParams={setSearchParams} />

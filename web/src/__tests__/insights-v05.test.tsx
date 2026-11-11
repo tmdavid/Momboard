@@ -93,3 +93,13 @@ describe('Insights trends', () => {
     expect(within(quality).getByText('2 Nov')).toBeInTheDocument();
   });
 });
+
+describe('Insights labels say what is counted', () => {
+  test('pains and the volume card admit that suggested highlights above the floor are included', async () => {
+    serve(stats());
+    renderWithProviders(<InsightsPage />);
+    // Once under the Pains captured card, once under the volume card.
+    expect(await screen.findAllByText(/accepted and suggested, above the confidence floor/i)).toHaveLength(2);
+    expect(screen.queryByText('Accepted pain highlights')).not.toBeInTheDocument();
+  });
+});

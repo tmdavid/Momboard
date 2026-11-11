@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { tagColor } from '../constants';
 import { formatDate, formatNumber, formatPercent } from '../utils/format';
+import { totalsByTag } from '../utils/stats';
 
 /** A week bucket (YYYY-MM-DD, the Monday) as a short axis label, e.g. "9 Nov". */
 function weekLabel(date: string): string {
@@ -69,11 +70,7 @@ export function InsightsPage() {
 
   // Signal volume: sum per-tag counts across all month buckets, sorted desc.
   const volume = useMemo(() => {
-    const byTag: Record<string, number> = {};
-    const buckets = stats?.tag_counts_by_month ?? {};
-    for (const month of Object.values(buckets)) {
-      for (const [tag, n] of Object.entries(month)) byTag[tag] = (byTag[tag] ?? 0) + Number(n);
-    }
+    const byTag = totalsByTag(stats?.tag_counts_by_month);
     return Object.entries(byTag).map(([tag, n]) => ({ tag, n })).sort((a, b) => b.n - a.n);
   }, [stats]);
   const volumeMax = Math.max(1, ...volume.map((v) => v.n));
@@ -96,7 +93,7 @@ export function InsightsPage() {
   const hasData = volume.length > 0 || critiqueData.length > 0;
   const kpis = [
     { label: 'Conversations', value: totalConversations ? formatNumber(totalConversations) : '—', hint: 'All imported calls' },
-    { label: 'Pains captured', value: painsCaptured ? formatNumber(painsCaptured) : '—', hint: 'Accepted pain highlights' },
+    { label: 'Pains captured', value: painsCaptured ? formatNumber(painsCaptured) : '—', hint: 'Accepted and suggested, above the confidence floor' },
     { label: 'Avg interview score', value: avgScore != null ? `${formatNumber(avgScore, { decimals: 1 })}/10` : '—', hint: 'Mom Test critique' },
     { label: 'Compliment ratio', value: avgRatio != null ? formatPercent(avgRatio) : '—', hint: 'Lower is better' },
   ];
@@ -121,7 +118,7 @@ export function InsightsPage() {
       {hasData ? (
         <div className="flex flex-wrap gap-4 items-start">
           <section className="flex-[1_1_420px] min-w-0 bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-2.5" aria-label="Signal volume">
-            <div className="flex flex-col"><span className="font-semibold text-ink">Signal volume by tag</span><span className="text-xs text-muted">Accepted highlights · by tag</span></div>
+            <div className="flex flex-col"><span className="font-semibold text-ink">Signal volume by tag</span><span className="text-xs text-muted">Accepted and suggested, above the confidence floor</span></div>
             {volume.map((v) => (
               <div key={v.tag} className="grid items-center gap-2.5" style={{ gridTemplateColumns: '130px minmax(0,1fr) 52px' }}>
                 <span className="trunc text-[13px]">{tax.name(v.tag)}</span>

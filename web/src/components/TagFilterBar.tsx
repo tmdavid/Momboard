@@ -100,6 +100,7 @@ export function TagFilterBar({ isActive, onToggle }: TagFilterBarProps) {
     <button
       key={t.key}
       type="button"
+      aria-pressed={isActive(t.key)}
       onClick={() => onToggle(t.key)}
       className={`px-2.5 py-1 rounded-full border text-[13px] cursor-pointer ${
         isActive(t.key)
