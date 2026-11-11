@@ -1,327 +1,157 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area,
-} from 'recharts';
 import { api } from '../api';
 import { useTaxonomy } from '../hooks/useTaxonomy';
+import { tagColor } from '../constants';
 
-const CHART_COLORS: Record<string, string> = {
-  pain: '#2a78d6',
-  workaround: '#eb6834',
-  money: '#1baf7a',
-  commitment: '#eda100',
-  compliment: '#d03b3b',
-  obstacle: '#898781',
-};
-
-export function InsightsPage() {
-  const { data: stats, isLoading, error } = useQuery({
-    queryKey: ['stats'],
-    queryFn: () => api.getStats(),
-  });
-  const tax = useTaxonomy();
-
-  // Track which series are hidden (toggled off)
-  const [hiddenSeries, setHiddenSeries] = useState<Set<string>>(new Set());
-
-  const toggleSeries = useCallback((tag: string) => {
-    setHiddenSeries((prev) => {
-      const next = new Set(prev);
-      if (next.has(tag)) next.delete(tag);
-      else next.add(tag);
-      return next;
-    });
-  }, []);
-
-  // Transform tag_counts_by_month into chart data
-  const tagVolumeData = useMemo(() => {
-    if (!stats?.tag_counts_by_month) return [];
-    const months = Object.keys(stats.tag_counts_by_month).sort();
-    return months.map((month) => ({
-      month: formatMonth(month),
-      ...stats.tag_counts_by_month[month],
-    }));
-  }, [stats]);
-
-  // Critique trend chart data
-  const critiqueTrendData = useMemo(() => {
-    if (!stats?.critique_trend) return [];
-    return stats.critique_trend.map((item) => ({
-      date: item.date ? formatMonth(item.date.slice(0, 7)) : '—',
-      score: item.score,
-    }));
-  }, [stats]);
-
-  // Compliment ratio trend
-  const complimentRatioData = useMemo(() => {
-    if (!stats?.compliment_ratio_trend) return [];
-    return stats.compliment_ratio_trend.map((item) => ({
-      date: item.date ? formatMonth(item.date.slice(0, 7)) : '—',
-      ratio: Math.round(item.ratio * 100),
-    }));
-  }, [stats]);
-
-  // KPIs
-  const totalConversations = stats?.total_conversations ?? 0;
-  const openFollowups = stats?.open_followups ?? [];
-  const latestScore = stats?.critique_trend?.at(-1)?.score ?? null;
-  const latestRatio = stats?.compliment_ratio_trend?.at(-1)?.ratio ?? null;
-  const overdueFollowups = openFollowups.filter((f) => {
-    if (!f.created_at) return false;
-    const days = (Date.now() - new Date(f.created_at).getTime()) / (1000 * 60 * 60 * 24);
-    return days > 14;
-  });
-
-  if (isLoading) {
-    return (
-      <main className="flex-1 flex items-center justify-center">
-        <div className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin-slow" />
-      </main>
-    );
-  }
-
-  if (error) {
-    return (
-      <main className="flex-1 flex items-center justify-center text-crit">
-        Failed to load insights.
-      </main>
-    );
-  }
-
-  const hasData = tagVolumeData.length > 0 || critiqueTrendData.length > 0;
-
-  return (
-    <main className="flex-1 overflow-auto">
-      <div className="max-w-[1100px] mx-auto p-7">
-        <div className="flex items-baseline gap-3 mb-4">
-          <h1 className="text-xl font-bold tracking-tight">Insights</h1>
-        </div>
-
-        {/* KPI tiles */}
-        <div className="grid grid-cols-4 gap-3.5 mb-3.5">
-          <KpiTile label="Conversations" value={String(totalConversations || '—')} />
-          <KpiTile
-            label="Open follow-ups ☆"
-            value={String(openFollowups.length)}
-            sub={
-              overdueFollowups.length > 0 ? (
-                <span className="text-crit font-semibold text-xs">{overdueFollowups.length} overdue</span>
-              ) : undefined
-            }
-          />
-          <KpiTile
-            label="Avg interview score"
-            value={latestScore != null ? `${latestScore}/10` : '—'}
-          />
-          <KpiTile
-            label="Compliment ratio"
-            value={latestRatio != null ? `${Math.round(latestRatio * 100)}%` : '—'}
-          />
-        </div>
-
-        {/* Main chart: signal volume over time */}
-        {hasData ? (
-          <>
-            <div className="bg-surface border border-hairline rounded-xl p-4 mb-3.5">
-              <h2 className="text-[13.5px] font-semibold mb-0.5">Signal volume over time</h2>
-              <p className="text-xs text-muted mb-3">
-                {tagVolumeData.length >= 2
-                  ? 'Accepted highlights per month, by tag · click legend to toggle'
-                  : 'Accepted highlights this month, by tag'}
-              </p>
-              {tagVolumeData.length >= 2 ? (
-                <>
-                  <ResponsiveContainer width="100%" height={260}>
-                    <LineChart data={tagVolumeData}>
-                      <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} />
-                      <Tooltip />
-                      {Object.keys(CHART_COLORS).map((tag) => (
-                        <Line
-                          key={tag}
-                          type="monotone"
-                          dataKey={tag}
-                          stroke={CHART_COLORS[tag]}
-                          strokeWidth={2}
-                          dot={false}
-                          name={`${tax.emoji(tag)} ${tax.name(tag)}`}
-                          hide={hiddenSeries.has(tag)}
-                        />
-                      ))}
-                    </LineChart>
-                  </ResponsiveContainer>
-                  <ul className="flex flex-wrap gap-3 mt-2 list-none p-0" role="list" aria-label="Chart legend">
-                    {Object.entries(CHART_COLORS).map(([tag, color]) => (
-                      <li key={tag} role="listitem">
-                        <button
-                          className="inline-flex items-center gap-1 text-xs cursor-pointer border-none bg-transparent p-0"
-                          onClick={() => toggleSeries(tag)}
-                          aria-pressed={!hiddenSeries.has(tag)}
-                          aria-label={`Toggle ${tax.emoji(tag)} ${tax.name(tag)} series`}
-                          style={{ opacity: hiddenSeries.has(tag) ? 0.4 : 1 }}
-                        >
-                          <span
-                            className="inline-block w-3 h-0.5 rounded"
-                            style={{ backgroundColor: color }}
-                            aria-hidden="true"
-                          />
-                          {tax.emoji(tag)} {tax.name(tag)}
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <div className="text-center py-6">
-                  <p className="text-sm text-muted mb-5" data-testid="sparse-chart-msg">First month — trends appear next month</p>
-                  {tagVolumeData.length === 1 && (() => {
-                    const entries = Object.entries(tagVolumeData[0])
-                      .filter(([tag]) => tag !== 'month')
-                      .map(([tag, value]) => ({ tag, count: Number(value) }))
-                      .filter(({ count }) => Number.isFinite(count) && count > 0)
-                      .sort((a, b) => b.count - a.count);
-                    const maxCount = Math.max(1, ...entries.map(({ count }) => count));
-
-                    return (
-                      <div
-                        className="grid gap-x-3 gap-y-5 [grid-template-columns:repeat(auto-fit,minmax(64px,1fr))]"
-                        data-testid="single-month-signal-chart"
-                      >
-                        {entries.map(({ tag, count }) => {
-                          const heightPercent = Math.max(8, Math.round((count / maxCount) * 100));
-                          return (
-                            <div key={tag} className="min-w-0">
-                              <div
-                                className="h-24 overflow-hidden flex items-end justify-center border-b border-hairline"
-                                data-testid="single-month-signal-plot"
-                              >
-                                <div
-                                  role="meter"
-                                  aria-label={`${tag.replace(/_/g, ' ')}: ${count}`}
-                                  aria-valuemin={0}
-                                  aria-valuemax={maxCount}
-                                  aria-valuenow={count}
-                                  className="w-7 max-w-full rounded-t"
-                                  style={{
-                                    height: `${heightPercent}%`,
-                                    backgroundColor: CHART_COLORS[tag] || '#888',
-                                  }}
-                                />
-                              </div>
-                              <div className="mt-1 text-center">
-                                <div className="text-xs font-medium tabular-nums">{count}</div>
-                                <div className="text-[10px] leading-tight text-muted break-words">
-                                  {tax.emoji(tag)} {tax.name(tag)}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {/* Row of two smaller charts */}
-            <div className="grid grid-cols-2 gap-3.5 mb-3.5">
-              <div className="bg-surface border border-hairline rounded-xl p-4">
-                <h2 className="text-[13.5px] font-semibold mb-0.5">Compliment ratio trend</h2>
-                <p className="text-xs text-muted mb-3">🎈 share of all highlights — are interviews getting less fluffy?</p>
-                {complimentRatioData.length >= 2 ? (
-                  <ResponsiveContainer width="100%" height={150}>
-                    <AreaChart data={complimentRatioData}>
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} unit="%" />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="ratio" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.1} strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-sm text-muted text-center py-6" data-testid="sparse-chart-ratio">First month — trends appear next month</p>
-                )}
-              </div>
-
-              <div className="bg-surface border border-hairline rounded-xl p-4">
-                <h2 className="text-[13.5px] font-semibold mb-0.5">Interview quality trend</h2>
-                <p className="text-xs text-muted mb-3">Avg Mom Test critique score per month</p>
-                {critiqueTrendData.length >= 2 ? (
-                  <ResponsiveContainer width="100%" height={150}>
-                    <AreaChart data={critiqueTrendData}>
-                      <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                      <YAxis tick={{ fontSize: 11 }} domain={[0, 10]} />
-                      <Tooltip />
-                      <Area type="monotone" dataKey="score" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.1} strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : (
-                  <p className="text-sm text-muted text-center py-6" data-testid="sparse-chart-critique">First month — trends appear next month</p>
-                )}
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="bg-surface border border-hairline rounded-xl p-12 text-center text-muted mb-3.5">
-            Not enough data yet to show charts. Add some conversations to get started.
-          </div>
-        )}
-
-        {/* Open follow-ups */}
-        <div className="bg-surface border border-hairline rounded-xl p-4">
-          <h2 className="text-[13.5px] font-semibold mb-0.5">Open follow-ups</h2>
-          <p className="text-xs text-muted mb-3">Every unresolved ☆ across all conversations — your action list</p>
-
-          {openFollowups.length === 0 ? (
-            <p className="text-sm text-muted py-4 text-center">No open follow-ups. Great job! 🎉</p>
-          ) : (
-            openFollowups.map((fu) => {
-              const age = fu.created_at ? daysSince(fu.created_at) : null;
-              const isOld = age != null && age > 14;
-              return (
-                <div key={fu.id} className="flex gap-2.5 items-baseline py-2 border-b border-hairline last:border-b-0 text-[13px]">
-                  <span>☆ {fu.task || fu.quote}</span>
-                  <Link to={`/conversations/${fu.conversation_id}`} className="text-accent whitespace-nowrap">
-                    {fu.conversation_title} ↗
-                  </Link>
-                  <span className={`ml-auto text-xs whitespace-nowrap ${isOld ? 'text-crit font-semibold' : 'text-muted'}`}>
-                    {age != null ? `${age} days` : '—'}
-                  </span>
-                </div>
-              );
-            })
-          )}
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function KpiTile({ label, value, sub }: { label: string; value: string; sub?: React.ReactNode }) {
-  return (
-    <div className="bg-surface border border-hairline rounded-xl px-4 py-3.5">
-      <div className="text-xs text-ink-2 mb-1.5">{label}</div>
-      <div className="text-[28px] font-semibold tracking-tight leading-none">{value}</div>
-      {sub && <div className="mt-1.5">{sub}</div>}
-    </div>
-  );
-}
-
-function formatMonth(ym: string): string {
-  const parts = ym.split('-');
+function formatBucket(iso: string): string {
+  // Labels come straight from the API's bucket keys (YYYY-MM). Show a short
+  // month+year so the axis never repeats the same label many times.
+  const [y, m] = iso.split('-');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return months[parseInt(parts[1], 10) - 1] || ym;
+  const mi = parseInt(m, 10) - 1;
+  return months[mi] ? `${months[mi]} ${String(y).slice(2)}` : iso;
 }
 
 function daysSince(dateStr: string): number {
   return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function Card({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
+  return (
+    <section className="bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-2.5" aria-label={label}>
+      <div className="flex flex-col">
+        <span className="font-semibold text-ink">{label}</span>
+        {sub && <span className="text-xs text-muted">{sub}</span>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function TrendChart({ label, sub, data, unit, max }: { label: string; sub: string; data: { bucket: string; value: number }[]; unit: string; max: number }) {
+  return (
+    <Card label={label} sub={sub}>
+      {data.length === 0 ? (
+        <p className="text-sm text-muted text-center py-6">Not enough data yet.</p>
+      ) : (
+        <>
+          <div className="grid items-end gap-2 h-[120px] border-b border-hairline" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0,1fr))` }}>
+            {data.map((d, i) => (
+              <span key={i} title={`${d.value}${unit}`} className="block rounded-t bg-accent" style={{ height: `${Math.max(2, Math.round((d.value / max) * 100))}%` }} />
+            ))}
+          </div>
+          <div className="grid gap-2 text-[11px] text-muted text-center" style={{ gridTemplateColumns: `repeat(${data.length}, minmax(0,1fr))` }}>
+            {data.map((d, i) => <span key={i} className="trunc">{d.bucket}</span>)}
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+export function InsightsPage() {
+  const { data: stats, isLoading, error } = useQuery({ queryKey: ['stats'], queryFn: () => api.getStats() });
+  const tax = useTaxonomy();
+
+  // Signal volume: sum per-tag counts across all month buckets, sorted desc.
+  const volume = useMemo(() => {
+    const byTag: Record<string, number> = {};
+    const buckets = stats?.tag_counts_by_month ?? {};
+    for (const month of Object.values(buckets)) {
+      for (const [tag, n] of Object.entries(month)) byTag[tag] = (byTag[tag] ?? 0) + Number(n);
+    }
+    return Object.entries(byTag).map(([tag, n]) => ({ tag, n })).sort((a, b) => b.n - a.n);
+  }, [stats]);
+  const volumeMax = Math.max(1, ...volume.map((v) => v.n));
+  const painsCaptured = volume.find((v) => v.tag === 'pain')?.n ?? 0;
+
+  const critiqueData = useMemo(() =>
+    (stats?.critique_trend ?? []).map((i) => ({ bucket: i.date ? formatBucket(i.date.slice(0, 7)) : '—', value: i.score })), [stats]);
+  const ratioData = useMemo(() =>
+    (stats?.compliment_ratio_trend ?? []).map((i) => ({ bucket: i.date ? formatBucket(i.date.slice(0, 7)) : '—', value: Math.round(i.ratio * 100) })), [stats]);
+
+  const totalConversations = stats?.total_conversations ?? 0;
+  const openFollowups = stats?.open_followups ?? [];
+  const latestScore = stats?.critique_trend?.at(-1)?.score ?? null;
+  const latestRatio = stats?.compliment_ratio_trend?.at(-1)?.ratio ?? null;
+
+  if (isLoading) return <main className="p-6 flex justify-center"><div className="w-4 h-4 border-2 border-hairline border-t-accent rounded-full animate-spin-slow mt-8" /></main>;
+  if (error) return <main className="p-6 text-crit">Failed to load insights.</main>;
+
+  const hasData = volume.length > 0 || critiqueData.length > 0;
+  const kpis = [
+    { label: 'Conversations', value: totalConversations ? totalConversations.toLocaleString() : '—', hint: 'All imported calls' },
+    { label: 'Pains captured', value: painsCaptured ? painsCaptured.toLocaleString() : '—', hint: 'Accepted pain highlights' },
+    { label: 'Avg interview score', value: latestScore != null ? `${latestScore}/10` : '—', hint: 'Mom Test critique' },
+    { label: 'Compliment ratio', value: latestRatio != null ? `${Math.round(latestRatio * 100)}%` : '—', hint: 'Lower is better' },
+  ];
+
+  return (
+    <main className="p-6 flex flex-col gap-4">
+      <div className="flex flex-col gap-0.5">
+        <h1 className="text-2xl font-bold text-ink">Insights</h1>
+        <span className="text-muted">How the corpus and your interviewing are trending</span>
+      </div>
+
+      <div className="grid gap-3" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
+        {kpis.map((k) => (
+          <div key={k.label} className="flex flex-col gap-1 p-4 rounded-[10px] bg-surface border border-hairline">
+            <span className="text-xs font-semibold text-muted">{k.label}</span>
+            <span className="text-[28px] leading-[34px] font-bold text-ink">{k.value}</span>
+            <span className="text-xs text-muted">{k.hint}</span>
+          </div>
+        ))}
+      </div>
+
+      {hasData ? (
+        <div className="flex flex-wrap gap-4 items-start">
+          <section className="flex-[1_1_420px] min-w-0 bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-2.5" aria-label="Signal volume">
+            <div className="flex flex-col"><span className="font-semibold text-ink">Signal volume over time</span><span className="text-xs text-muted">Accepted highlights · by tag</span></div>
+            {volume.map((v) => (
+              <div key={v.tag} className="grid items-center gap-2.5" style={{ gridTemplateColumns: '130px minmax(0,1fr) 52px' }}>
+                <span className="trunc text-[13px]">{tax.name(v.tag)}</span>
+                <div className="h-3 rounded bg-sub overflow-hidden"><span className="block h-full" style={{ width: `${(v.n / volumeMax * 100).toFixed(1)}%`, background: tagColor(v.tag) }} /></div>
+                <span className="text-[13px] text-right text-ink tabular-nums">{v.n.toLocaleString()}</span>
+              </div>
+            ))}
+          </section>
+
+          <div className="flex-[1_1_420px] min-w-0 flex flex-col gap-4">
+            <TrendChart label="Interview quality trend" sub="Average critique score per bucket, out of 10" data={critiqueData} unit="/10" max={10} />
+            <TrendChart label="Compliment ratio trend" sub="Share of highlights that are compliments (lower is better)" data={ratioData} unit="%" max={Math.max(15, ...ratioData.map((d) => d.value))} />
+          </div>
+        </div>
+      ) : (
+        <div className="bg-surface border border-hairline rounded-[10px] p-12 text-center text-muted">Not enough data yet to show charts. Add some conversations to get started.</div>
+      )}
+
+      <section className="bg-surface border border-hairline rounded-[10px] p-4 flex flex-col gap-1" aria-label="Open follow-ups">
+        <div className="flex items-baseline gap-2 mb-1.5">
+          <span className="font-semibold text-ink">Open follow-ups</span>
+          <span className="text-xs text-muted">Oldest first</span>
+          <Link to="/" className="ml-auto text-[13px]">See all</Link>
+        </div>
+        {openFollowups.length === 0 ? (
+          <p className="text-sm text-muted py-4 text-center">No open follow-ups.</p>
+        ) : (
+          [...openFollowups]
+            .sort((a, b) => (a.created_at && b.created_at ? new Date(a.created_at).getTime() - new Date(b.created_at).getTime() : 0))
+            .map((fu) => {
+              const age = fu.created_at ? daysSince(fu.created_at) : null;
+              const isOld = age != null && age > 14;
+              return (
+                <div key={fu.id} className="grid items-center gap-2.5 py-2 border-t border-sub" style={{ gridTemplateColumns: '20px minmax(0,1fr) 200px 70px' }}>
+                  <input type="checkbox" aria-label="Mark done" className="m-0" />
+                  <span className="trunc" title={fu.task || fu.quote}>{fu.task || fu.quote}</span>
+                  <Link to={`/conversations/${fu.conversation_id}`} className="trunc text-[13px]">{fu.conversation_title}</Link>
+                  <span className={`text-xs text-right ${isOld ? 'text-crit-text font-semibold' : 'text-muted'}`}>{age != null ? `${age} days` : '—'}</span>
+                </div>
+              );
+            })
+        )}
+      </section>
+    </main>
+  );
 }

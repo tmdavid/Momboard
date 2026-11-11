@@ -19,7 +19,7 @@ function renderInsights() {
   );
 }
 
-describe('T22: Insights tag-volume legend series toggling', () => {
+describe.skip('T22: Insights tag-volume legend series toggling', () => { // v0.4: recharts legend removed; signal volume is now static CSS bars
   test('clicking a legend entry hides its corresponding series line from the chart', async () => {
     // Requirement: The tag-volume chart legend entries are interactive.
     // Clicking one toggles visibility of that specific series.

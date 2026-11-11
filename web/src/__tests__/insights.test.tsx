@@ -58,7 +58,7 @@ describe('Insights page', () => {
     });
   });
 
-  test('single-month signal columns stay contained at high volume and wrap across tags', async () => {
+  test.skip('single-month signal columns stay contained at high volume and wrap across tags', async () => { // v0.4: recharts single-month fallback removed; volume is static CSS bars
     server.use(
       http.get('/api/stats', () => {
         return HttpResponse.json({
@@ -107,11 +107,14 @@ describe('Insights page', () => {
   test('KPI tiles show computed values', async () => {
     renderInsights();
 
+    // v0.4 KPIs: Conversations, Pains captured, Avg interview score, Compliment ratio.
     await waitFor(() => {
-      expect(screen.getByText('Open follow-ups ☆')).toBeInTheDocument();
+      expect(screen.getByText('Pains captured')).toBeInTheDocument();
     });
-
-    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getByText('Conversations')).toBeInTheDocument();
+    expect(screen.getByText('Avg interview score')).toBeInTheDocument();
+    expect(screen.getByText('Compliment ratio')).toBeInTheDocument();
+    expect(screen.getByText('Lower is better')).toBeInTheDocument();
     expect(screen.getByText('8/10')).toBeInTheDocument();
     expect(screen.getByText('22%')).toBeInTheDocument();
   });
