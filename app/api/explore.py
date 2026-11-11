@@ -69,8 +69,11 @@ async def list_highlights(
     The `tag` parameter supports repeated query params:
     ?tag=pain&tag=workaround returns highlights matching ANY of the given tags (OR).
     """
+    # Filter and rank on highlight ids only. Selecting whole Conversation rows here would drag every
+    # call's full transcript (~20 KB each) through SQLite's sorter: on a real corpus that spilled past the
+    # container's small /tmp and failed with "database or disk is full".
     query = (
-        select(Highlight, Conversation, Company)
+        select(Highlight.id)
         .join(Conversation, Highlight.conversation_id == Conversation.id)
         .outerjoin(Company, Conversation.company_id == Company.id)
         .where(Conversation.source != "simulator")  # T39: exclude simulated
@@ -134,45 +137,58 @@ async def list_highlights(
             )
             .label("rank_in_call")
         )
-        ranked = query.add_columns(rank).subquery()
+        ranked = query.add_columns(rank).subquery()  # two columns: the highlight id and its rank
         keep = select(ranked.c.id).where(ranked.c.rank_in_call <= per_call_cap)
-        # `query` selects Highlight first, so its first column is the highlight id.
         query = query.where(Highlight.id.in_(keep))
 
     # Count
     count_q = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_q)).scalar_one()
 
-    query = query.order_by(*order).offset(offset).limit(limit)
-    result = await db.execute(query)
-    rows = result.all()
+    page_ids = [row[0] for row in (await db.execute(query.order_by(*order).offset(offset).limit(limit))).all()]
 
     items = []
-    for highlight, convo, company_row in rows:
-        # Get contact names for this conversation
-        contacts_result = await db.execute(
-            select(Contact.name)
-            .join(ConversationContact, Contact.id == ConversationContact.contact_id)
-            .where(ConversationContact.conversation_id == convo.id)
-        )
-        contact_names = [r[0] for r in contacts_result.all()]
-
-        items.append(
-            HighlightWithContext(
-                id=highlight.id,
-                conversation_id=highlight.conversation_id,
-                utterance_id=highlight.utterance_id,
-                tag_key=highlight.tag_key,
-                quote=highlight.quote,
-                confidence=highlight.confidence,
-                status=highlight.status,
-                origin=highlight.origin,
-                conversation_title=convo.title,
-                conversation_happened_at=convo.happened_at,
-                company_name=company_row.name if company_row else None,
-                contact_names=contact_names,
+    if page_ids:
+        # Only now load the rows to show, with just the call columns the list displays.
+        rows = (
+            await db.execute(
+                select(Highlight, Conversation.title, Conversation.happened_at, Company.name)
+                .join(Conversation, Highlight.conversation_id == Conversation.id)
+                .outerjoin(Company, Conversation.company_id == Company.id)
+                .where(Highlight.id.in_(page_ids))
             )
-        )
+        ).all()
+        by_id = {row[0].id: row for row in rows}
+        # One query for everyone's contact names rather than one per row.
+        conversation_ids = {row[0].conversation_id for row in rows}
+        contacts: dict[int, list[str]] = {}
+        for conversation_id, name in (
+            await db.execute(
+                select(ConversationContact.conversation_id, Contact.name)
+                .join(Contact, Contact.id == ConversationContact.contact_id)
+                .where(ConversationContact.conversation_id.in_(conversation_ids))
+            )
+        ).all():
+            contacts.setdefault(conversation_id, []).append(name)
+
+        for highlight_id in page_ids:  # keep the order the database gave
+            highlight, title, happened_at, company_name = by_id[highlight_id]
+            items.append(
+                HighlightWithContext(
+                    id=highlight.id,
+                    conversation_id=highlight.conversation_id,
+                    utterance_id=highlight.utterance_id,
+                    tag_key=highlight.tag_key,
+                    quote=highlight.quote,
+                    confidence=highlight.confidence,
+                    status=highlight.status,
+                    origin=highlight.origin,
+                    conversation_title=title,
+                    conversation_happened_at=happened_at,
+                    company_name=company_name,
+                    contact_names=contacts.get(highlight.conversation_id, []),
+                )
+            )
 
     return {"items": items, "total": total, "limit": limit, "offset": offset}
 
