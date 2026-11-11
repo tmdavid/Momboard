@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useTaxonomy } from '../hooks/useTaxonomy';
 import { Tag } from '../api';
 
@@ -14,13 +14,16 @@ interface TagFilterBarProps {
 /**
  * Curated tag filter bar (T47).
  *
- * Reads the LIVE taxonomy so custom tags are filterable. Layout:
- *  - a quick row of the 10 most-common tags (curated via sort_order),
- *  - a "Core" dropdown: flat checkable list of the core taxonomy,
- *  - a "Custom" dropdown: an accordion of custom categories — categories stay
- *    visible, clicking one expands its tags inline (so you can always see where
- *    you can navigate). Categories are data-driven, so a new one appears here
- *    with no code change.
+ * Reads the LIVE taxonomy so custom tags are filterable. Layout (two rows, full width):
+ *  - row 1: the 10 most-common tags (curated via sort_order),
+ *  - row 2, underneath: a "Core" dropdown (flat checkable list of the core taxonomy) and
+ *    a "Custom" dropdown (an accordion of custom categories — categories stay visible,
+ *    clicking one expands its tags inline). Categories are data-driven, so a new one
+ *    appears with no code change.
+ *
+ * The dropdowns live on their own left-aligned row so their menus open over the page
+ * instead of from the far right of a crowded filter line, and a menu that would still
+ * run off the right edge of the window flips to open leftwards.
  *
  * All selections are additive multi-select; dropdowns close on click-outside.
  */
@@ -60,33 +63,42 @@ export function TagFilterBar({ isActive, onToggle }: TagFilterBarProps) {
 
   const activeCount = (tags: Tag[]) => tags.filter((t) => isActive(t.key)).length;
 
+  const hasDropdowns = core.length > 0 || customGroups.length > 0;
+
   return (
-    <>
-      {quick.map(chip)}
-      {core.length > 0 && (
-        <FilterDropdown label="Core" activeCount={activeCount(core)}>
-          <div className="flex flex-col gap-0.5 min-w-[200px]">
-            {core.map((t) => (
-              <DropdownItem key={t.key} tag={t} isActive={isActive(t.key)} onToggle={onToggle} />
-            ))}
-          </div>
-        </FilterDropdown>
+    <div className="basis-full w-full flex flex-col gap-2" data-testid="tag-filter-bar">
+      <div className="flex flex-wrap gap-1.5" data-testid="tag-quick-row">
+        {quick.map(chip)}
+      </div>
+      {hasDropdowns && (
+        <div className="flex flex-wrap items-center gap-1.5" data-testid="tag-dropdown-row">
+          <span className="text-xs text-muted mr-0.5">More tags</span>
+        {core.length > 0 && (
+          <FilterDropdown label="Core" activeCount={activeCount(core)}>
+            <div className="flex flex-col gap-0.5 min-w-[200px]">
+              {core.map((t) => (
+                <DropdownItem key={t.key} tag={t} isActive={isActive(t.key)} onToggle={onToggle} />
+              ))}
+            </div>
+          </FilterDropdown>
+        )}
+        {customGroups.length > 0 && (
+          <FilterDropdown label="Custom" activeCount={activeCount(custom)}>
+            <div className="flex flex-col gap-0.5 min-w-[220px]" data-testid="custom-categories">
+              {customGroups.map((group) => (
+                <CategoryAccordion
+                  key={group.label}
+                  group={group}
+                  isActive={isActive}
+                  onToggle={onToggle}
+                />
+              ))}
+            </div>
+          </FilterDropdown>
+        )}
+        </div>
       )}
-      {customGroups.length > 0 && (
-        <FilterDropdown label="Custom" activeCount={activeCount(custom)}>
-          <div className="flex flex-col gap-0.5 min-w-[220px]" data-testid="custom-categories">
-            {customGroups.map((group) => (
-              <CategoryAccordion
-                key={group.label}
-                group={group}
-                isActive={isActive}
-                onToggle={onToggle}
-              />
-            ))}
-          </div>
-        </FilterDropdown>
-      )}
-    </>
+    </div>
   );
 }
 
@@ -100,7 +112,34 @@ function FilterDropdown({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const [alignRight, setAlignRight] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  // Open left-aligned with the trigger; if that would run past the right edge of the
+  // window, open right-aligned instead. Re-checked when the menu resizes (the Custom
+  // accordion grows as categories expand). Width does not depend on alignment, so this
+  // cannot flip-flop.
+  useLayoutEffect(() => {
+    if (!open) {
+      setAlignRight(false);
+      return;
+    }
+    const place = () => {
+      const trigger = ref.current;
+      const menu = menuRef.current;
+      if (!trigger || !menu) return;
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const overflowsRight =
+        trigger.getBoundingClientRect().left + menu.getBoundingClientRect().width > viewportWidth - 8;
+      setAlignRight(overflowsRight);
+    };
+    place();
+    if (typeof ResizeObserver === 'undefined' || !menuRef.current) return;
+    const observer = new ResizeObserver(place);
+    observer.observe(menuRef.current);
+    return () => observer.disconnect();
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -127,7 +166,11 @@ function FilterDropdown({
       {open && (
         <div
           role="menu"
-          className="absolute z-20 mt-1 p-2 bg-surface border border-hairline rounded-xl shadow-lg max-h-[320px] overflow-auto"
+          ref={menuRef}
+          data-align={alignRight ? 'right' : 'left'}
+          className={`absolute z-20 mt-1 p-2 bg-surface border border-hairline rounded-xl shadow-lg max-h-[320px] max-w-[calc(100vw-1rem)] overflow-auto ${
+            alignRight ? 'right-0' : 'left-0'
+          }`}
         >
           {children}
         </div>

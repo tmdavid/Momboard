@@ -83,4 +83,67 @@ describe('TagFilterBar', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Core 0/ }));
     expect(onToggle).toHaveBeenCalledWith('core_0');
   });
+
+  test('the 10 quick tags and the two dropdowns sit in separate rows', async () => {
+    mockManyTags();
+    render(<TagFilterBar isActive={() => false} onToggle={() => {}} />, { wrapper });
+    // The live taxonomy loads asynchronously; wait for the dropdown row it produces.
+    const dropdowns = await screen.findByTestId('tag-dropdown-row');
+    const quick = screen.getByTestId('tag-quick-row');
+
+    // Quick row: the ten chips, and no dropdown triggers.
+    expect(within(quick).getByText(/Core 0/)).toBeInTheDocument();
+    expect(within(quick).getByText(/Core 9/)).toBeInTheDocument();
+    expect(within(quick).queryByRole('button', { name: /^Core ▾/ })).not.toBeInTheDocument();
+    expect(within(quick).queryByRole('button', { name: /^Custom ▾/ })).not.toBeInTheDocument();
+
+    // Dropdown row: both triggers, no quick chips.
+    expect(within(dropdowns).getByRole('button', { name: /^Core ▾/ })).toBeInTheDocument();
+    expect(within(dropdowns).getByRole('button', { name: /^Custom ▾/ })).toBeInTheDocument();
+    expect(within(dropdowns).queryByText(/Core 0/)).not.toBeInTheDocument();
+
+    // The bar takes the full line so the dropdowns are never pushed to the far right.
+    expect(screen.getByTestId('tag-filter-bar').className).toMatch(/basis-full/);
+  });
+
+  test('a menu that would run off the right edge opens right-aligned instead', async () => {
+    mockManyTags();
+    Object.defineProperty(document.documentElement, 'clientWidth', { value: 1000, configurable: true });
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const box = (left: number, width: number) => ({
+        left, right: left + width, width, top: 0, bottom: 0, height: 0, x: left, y: 0, toJSON: () => ({}),
+      }) as DOMRect;
+      if (this.getAttribute('role') === 'menu') return box(0, 260);   // menu is 260px wide
+      if (this.classList.contains('relative')) return box(900, 80);   // trigger sits near the right edge
+      return box(0, 0);
+    });
+    try {
+      render(<TagFilterBar isActive={() => false} onToggle={() => {}} />, { wrapper });
+      await userEvent.click(await screen.findByRole('button', { name: /^Custom ▾/ }));
+      // 900 + 260 > 1000 - 8  -> flips
+      expect(screen.getByRole('menu')).toHaveAttribute('data-align', 'right');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('a menu with room stays left-aligned', async () => {
+    mockManyTags();
+    Object.defineProperty(document.documentElement, 'clientWidth', { value: 1000, configurable: true });
+    const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      const box = (left: number, width: number) => ({
+        left, right: left + width, width, top: 0, bottom: 0, height: 0, x: left, y: 0, toJSON: () => ({}),
+      }) as DOMRect;
+      if (this.getAttribute('role') === 'menu') return box(0, 260);
+      if (this.classList.contains('relative')) return box(120, 80);   // near the left, plenty of room
+      return box(0, 0);
+    });
+    try {
+      render(<TagFilterBar isActive={() => false} onToggle={() => {}} />, { wrapper });
+      await userEvent.click(await screen.findByRole('button', { name: /^Core ▾/ }));
+      expect(screen.getByRole('menu')).toHaveAttribute('data-align', 'left');
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

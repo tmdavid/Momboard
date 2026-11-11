@@ -318,9 +318,6 @@ export function LibraryPage() {
               onChange={(e) => handleSearch(e.target.value)}
             />
           </div>
-          <div className="flex gap-1.5 flex-wrap">
-            <TagFilterBar isActive={(key) => activeTags.includes(key)} onToggle={toggleTag} />
-          </div>
           <select
             className="px-2 py-1.5 border border-hairline rounded-lg bg-page text-ink-2 text-sm"
             value={companyId || ''}
@@ -389,6 +386,8 @@ export function LibraryPage() {
               Clear all
             </button>
           )}
+          {/* Tags get their own full-width line: top-10 chips, then the Core / Custom dropdowns. */}
+          <TagFilterBar isActive={(key) => activeTags.includes(key)} onToggle={toggleTag} />
         </div>
 
         {/* Loading */}
