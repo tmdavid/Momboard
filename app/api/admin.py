@@ -15,6 +15,7 @@ from app.api.schemas import (
 )
 from app.auth import get_current_user, require_admin
 from app.models import Company, Contact, Conversation, Tag, User
+from app.services.taxonomy_version import bump_taxonomy_version
 
 router = APIRouter()
 
@@ -53,9 +54,16 @@ async def create_tag(
         is_active=body.is_active,
         origin=body.origin,
         category=body.category,
+        min_confidence=body.min_confidence,
+        negative_hint=body.negative_hint,
+        example=body.example,
     )
     db.add(tag)
     await db.flush()
+    if tag.is_active:
+        # v0.5 D7: a new active tag starts a new taxonomy version; earlier calls never saw it.
+        tag.added_in_version = await bump_taxonomy_version(db)
+        await db.flush()
     return TagResponse.model_validate(tag)
 
 
@@ -71,8 +79,11 @@ async def update_tag(
     tag = await db.get(Tag, key)
     if tag is None:
         raise HTTPException(status_code=404, detail="Tag not found")
+    was_active = tag.is_active
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(tag, field, value)
+    if tag.is_active and not was_active:
+        tag.added_in_version = await bump_taxonomy_version(db)
     await db.flush()
     return TagResponse.model_validate(tag)
 

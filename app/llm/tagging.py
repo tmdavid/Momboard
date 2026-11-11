@@ -297,6 +297,13 @@ async def run_tag(
         db.add(highlight)
         created.append(highlight)
 
+    # D7: remember which taxonomy tagged this call and when.
+    from app.models import utcnow
+    from app.services.taxonomy_version import get_taxonomy_version
+
+    convo.taxonomy_version = await get_taxonomy_version(db)
+    convo.tagged_at = utcnow()
+
     await db.flush()
     return created
 

@@ -2541,3 +2541,33 @@ class TestFreshnessWithRealDates:
         assert compute_freshness_band(aware_recent.replace(tzinfo=None)) == "fresh"
         old = (datetime.now(UTC) - timedelta(days=500)).replace(tzinfo=None)
         assert compute_freshness_band(old) == "stale"
+
+
+class TestLinkerRespectsConfidenceFloor:
+    @pytest.mark.asyncio
+    async def test_below_floor_suggestions_are_not_offered_to_the_linker(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.llm.linker import run_hypothesis_link
+
+        conv = hyp_seeded["highlight1"].conversation_id
+        async with session_factory() as db:
+            weak = Highlight(
+                conversation_id=conv, tag_key="pain", quote="A shaky guess about weekly exports here",
+                confidence=0.2, status="suggested", origin="ai",
+            )
+            db.add(weak)
+            await db.flush()
+            hyp_id = await TestLinkerHardening()._hyp(db)
+            seen: dict = {}
+            llm = TestLinkerHardening._llm(hyp_id)
+            original = llm.structured
+
+            async def spy(*args, **kwargs):
+                seen.update(kwargs["input_data"])
+                return await original(*args, **kwargs)
+
+            llm.structured = spy  # type: ignore[method-assign]
+            await run_hypothesis_link(db, conv, llm=llm)
+            offered = {h["id"] for h in seen["highlights"]}
+        assert weak.id not in offered and hyp_seeded["highlight1"].id in offered

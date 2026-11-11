@@ -37,6 +37,7 @@ from app.models import (
     Job,
     User,
 )
+from app.services.confidence_floor import passes_floor
 
 router = APIRouter()
 
@@ -258,6 +259,7 @@ async def list_conversations(
                     select(Highlight.conversation_id).where(
                         Highlight.tag_key == tag_key,
                         Highlight.status.in_(["suggested", "accepted"]),
+                        passes_floor(),
                     )
                 )
             )
@@ -310,6 +312,7 @@ async def list_conversations(
             .where(
                 Highlight.conversation_id == convo.id,
                 Highlight.status.in_(["suggested", "accepted"]),
+                passes_floor(),  # v0.5 D4: signal bars ignore below-floor suggestions
             )
             .group_by(Highlight.tag_key)
         )

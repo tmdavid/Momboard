@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.llm.client import LLMClient
 from app.llm.schemas import LinkerOutput
 from app.models import Highlight, Hypothesis, HypothesisLink
+from app.services.confidence_floor import passes_floor
 from app.services.hypothesis_intake import _is_customer_evidence
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,7 @@ async def run_hypothesis_link(
         select(Highlight).where(
             Highlight.conversation_id == conversation_id,
             Highlight.status != "rejected",
+            passes_floor(),  # v0.5 D4: low-confidence guesses never become hypothesis evidence
         )
     )
     # Only customer turns can evidence a belief about customers: drop our reps' speech

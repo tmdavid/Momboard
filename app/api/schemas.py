@@ -76,6 +76,13 @@ class TagResponse(BaseModel):
     origin: str = "custom"
     # Free-text grouping label for custom tags (e.g. "channel"); None = ungrouped.
     category: str | None = None
+    # v0.5: suggestions below this stay out of Library/Explore/Insights/matching (still in review).
+    min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    # v0.5 prompt sharpening: when NOT to use the tag, and one good example.
+    negative_hint: str | None = Field(default=None, max_length=1000)
+    example: str | None = Field(default=None, max_length=1000)
+    # v0.5: taxonomy version in force when the tag was added (read-only; set by the server).
+    added_in_version: int = 0
 
     model_config = {"from_attributes": True}
 
@@ -88,6 +95,9 @@ class TagUpdate(BaseModel):
     sort_order: int | None = None
     is_active: bool | None = None
     category: str | None = None
+    min_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+    negative_hint: str | None = Field(default=None, max_length=1000)
+    example: str | None = Field(default=None, max_length=1000)
 
 
 # --- Conversations ---

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "description": "SYNTHETIC example of the hand-tagged test-set format. Replace with ~20 real calls kept OUTSIDE the repo (see docs/tagger-evaluation.md).",
+  "calls": [
+    {
+      "id": "example-01",
+      "interviewer": "Rep",
+      "company": "Sample Co",
+      "utterances": [
+        {"speaker": "Rep", "side": "us", "text": "How do you handle the weekly report today?"},
+        {"speaker": "Dana", "side": "them", "text": "Every Monday I export the report to Excel and clean it by hand"},
+        {"speaker": "Dana", "side": "them", "text": "It honestly takes me about two hours and nobody trusts the numbers"},
+        {"speaker": "Rep", "side": "us", "text": "We can automate all of that for you with one click"},
+        {"speaker": "Dana", "side": "them", "text": "Yes."}
+      ],
+      "expected": [
+        {"utterance_idx": 1, "tag_key": "workaround"},
+        {"utterance_idx": 2, "tag_key": "pain"}
+      ]
+    },
+    {
+      "id": "example-02",
+      "interviewer": "Rep",
+      "company": "Other Co",
+      "utterances": [
+        {"speaker": "Rep", "side": "us", "text": "Would a pilot make sense next month?"},
+        {"speaker": "Lee", "side": "them", "text": "Yes, 2 p.m. Thursday works for the pilot kickoff"},
+        {"speaker": "Lee", "side": "them", "text": "Our budget for this is about 5,000 euros per quarter"}
+      ],
+      "expected": [
+        {"utterance_idx": 1, "tag_key": "commitment"},
+        {"utterance_idx": 2, "tag_key": "money"}
+      ]
+    }
+  ]
+}

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import func, select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
@@ -19,6 +19,7 @@ from app.models import (
     Highlight,
     User,
 )
+from app.services.confidence_floor import passes_floor
 
 router = APIRouter()
 
@@ -32,6 +33,21 @@ async def list_highlights(
     company_id: int | None = None,
     status: str | None = None,
     q: str | None = Query(default=None, description="Case-insensitive text search in the quote"),
+    floor: bool = Query(
+        default=False,
+        description="Hide suggestions below their tag's confidence floor (accepted ones always show)",
+    ),
+    sort: str = Query(
+        default="recent",
+        pattern="^(recent|confidence)$",
+        description="recent (default) or confidence (strongest first)",
+    ),
+    per_call_cap: int = Query(
+        default=0,
+        ge=0,
+        le=50,
+        description="Show at most this many highlights per call per tag (0 = no cap)",
+    ),
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     limit: int = Query(default=100, le=500),
@@ -72,11 +88,45 @@ async def list_highlights(
     if date_to:
         query = query.where(Conversation.happened_at <= date_to)
 
+    if floor:
+        query = query.where(passes_floor())
+
+    order: list[ColumnElement[Any]]
+    if sort == "confidence":
+        # Strongest first; nulls last, then newest, so the order is stable for paging.
+        order = [
+            Highlight.confidence.desc().nullslast(),
+            Highlight.created_at.desc(),
+            Highlight.id.desc(),
+        ]
+    else:
+        order = [Highlight.created_at.desc(), Highlight.id.desc()]
+
+    if per_call_cap:
+        # Rank each highlight within its (call, tag) group and keep the top N, so one long call
+        # cannot fill the first screen. Done before counting/paging so both reflect the cap.
+        rank = (
+            func.row_number()
+            .over(
+                partition_by=(Highlight.conversation_id, Highlight.tag_key),
+                order_by=(
+                    Highlight.confidence.desc().nullslast(),
+                    Highlight.created_at.desc(),
+                    Highlight.id.desc(),
+                ),
+            )
+            .label("rank_in_call")
+        )
+        ranked = query.add_columns(rank).subquery()
+        keep = select(ranked.c.id).where(ranked.c.rank_in_call <= per_call_cap)
+        # `query` selects Highlight first, so its first column is the highlight id.
+        query = query.where(Highlight.id.in_(keep))
+
     # Count
     count_q = select(func.count()).select_from(query.subquery())
     total = (await db.execute(count_q)).scalar_one()
 
-    query = query.order_by(Highlight.created_at.desc()).offset(offset).limit(limit)
+    query = query.order_by(*order).offset(offset).limit(limit)
     result = await db.execute(query)
     rows = result.all()
 
@@ -125,6 +175,7 @@ async def get_stats(
         .where(
             Highlight.status.in_(["suggested", "accepted"]),
             Conversation.source != "simulator",
+            passes_floor(),  # v0.5 D4
         )
     )
     highlights_rows = highlights_result.all()
