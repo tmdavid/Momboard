@@ -37,13 +37,16 @@ async def create_decision(
     evidence_highlight_ids: list[int],
     hypothesis_id: int | None = None,
     created_by: int | None = None,
+    owner_id: int | None = None,
+    area: str | None = None,
+    status: str = "proposed",
 ) -> Decision:
-    """Create a decision with at least one evidence link.
+    """Create a decision with evidence links.
 
-    Raises ValueError if zero evidence IDs provided.
-    Validates that all highlight IDs exist.
+    Draft decisions may be created with zero evidence (assembled incrementally);
+    any other status requires at least one evidence highlight. Validates IDs exist.
     """
-    if not evidence_highlight_ids:
+    if status != "draft" and not evidence_highlight_ids:
         raise ValueError("A decision requires at least one evidence highlight")
 
     # Validate ALL highlight IDs exist — reject if ANY are invalid (no silent dropping)
@@ -62,37 +65,44 @@ async def create_decision(
     decision = Decision(
         title=title,
         rationale_md=rationale_md,
-        status="proposed",
+        status=status,
         integrity="ok",
         integrity_reasons=None,
         hypothesis_id=hypothesis_id,
         created_by=created_by,
+        owner_id=owner_id,
+        area=area,
     )
     db.add(decision)
     await db.flush()
 
-    # Create evidence links with a snapshot captured now (survives a later Retag).
-    from app.models import Conversation
-
     for hid in evidence_highlight_ids:
-        h = await db.get(Highlight, hid)
-        convo = await db.get(Conversation, h.conversation_id) if h else None
-        company = None
-        if convo and convo.company_id:
-            from app.models import Company
-            company = await db.get(Company, convo.company_id)
-        evidence = DecisionEvidence(
-            decision_id=decision.id,
-            highlight_id=hid,
-            quote_snapshot=h.quote if h else None,
-            company_name=company.name if company else None,
-            conversation_id=convo.id if convo else None,
-            conversation_date=convo.happened_at if convo else None,
-        )
-        db.add(evidence)
+        await _build_evidence(db, decision.id, hid)
 
     await db.flush()
     return decision
+
+
+async def _build_evidence(db: AsyncSession, decision_id: int, highlight_id: int) -> "DecisionEvidence":
+    """Create a DecisionEvidence receipt with a citation-time snapshot."""
+    from app.models import Company, Conversation
+
+    h = await db.get(Highlight, highlight_id)
+    convo = await db.get(Conversation, h.conversation_id) if h else None
+    company = None
+    if convo and convo.company_id:
+        company = await db.get(Company, convo.company_id)
+    ev = DecisionEvidence(
+        decision_id=decision_id,
+        highlight_id=highlight_id,
+        quote_snapshot=h.quote if h else None,
+        company_name=company.name if company else None,
+        conversation_id=convo.id if convo else None,
+        conversation_date=convo.happened_at if convo else None,
+    )
+    db.add(ev)
+    await db.flush()
+    return ev
 
 
 async def get_decision(db: AsyncSession, decision_id: int) -> Decision | None:
@@ -145,6 +155,7 @@ async def transition_decision(
         raise ValueError(f"Decision {decision_id} not found")
 
     valid_transitions = {
+        "draft": ["proposed"],
         "proposed": ["decided"],
         "decided": ["superseded"],
         "superseded": [],
@@ -415,3 +426,113 @@ async def invalidate_decision_evidence_for_conversation(
     await db.flush()
     await _recompute_decisions(db, affected)
     return affected
+
+
+# --- P1: edit, evidence add/remove, detail enrichment ----------------------
+
+
+async def update_decision(
+    db: AsyncSession,
+    decision_id: int,
+    *,
+    title: str | None = None,
+    rationale_md: str | None = None,
+    owner_id: int | None = None,
+    area: str | None = None,
+) -> Decision:
+    """Edit a decision's title, rationale, owner or area. Only provided fields change."""
+    decision = await db.get(Decision, decision_id)
+    if decision is None:
+        raise ValueError(f"Decision {decision_id} not found")
+    if title is not None:
+        if not title.strip():
+            raise ValueError("Title cannot be empty")
+        decision.title = title
+    if rationale_md is not None:
+        decision.rationale_md = rationale_md
+    if owner_id is not None:
+        decision.owner_id = owner_id
+    if area is not None:
+        decision.area = area
+    await db.flush()
+    return decision
+
+
+async def add_evidence(db: AsyncSession, decision_id: int, highlight_id: int) -> DecisionEvidence:
+    """Cite an existing highlight on a decision, snapshotting it. Idempotent."""
+    decision = await db.get(Decision, decision_id)
+    if decision is None:
+        raise ValueError(f"Decision {decision_id} not found")
+    h = await db.get(Highlight, highlight_id)
+    if h is None:
+        raise ValueError(f"Highlight {highlight_id} not found")
+    existing = await db.execute(
+        select(DecisionEvidence).where(
+            DecisionEvidence.decision_id == decision_id,
+            DecisionEvidence.highlight_id == highlight_id,
+        )
+    )
+    row = existing.scalar_one_or_none()
+    if row is not None:
+        return row
+    ev = await _build_evidence(db, decision_id, highlight_id)
+    # New supporting evidence can clear an undermined flag; recompute.
+    await check_decision_integrity(db, decision_id)
+    return ev
+
+
+async def remove_evidence(db: AsyncSession, decision_id: int, highlight_id: int) -> None:
+    """Un-cite a highlight from a decision.
+
+    A non-draft decision must keep at least one receipt (a decision rests on
+    evidence); removing the last one from a non-draft decision is rejected.
+    """
+    decision = await db.get(Decision, decision_id)
+    if decision is None:
+        raise ValueError(f"Decision {decision_id} not found")
+    result = await db.execute(
+        select(DecisionEvidence).where(DecisionEvidence.decision_id == decision_id)
+    )
+    rows = list(result.scalars().all())
+    target = next((r for r in rows if r.highlight_id == highlight_id), None)
+    if target is None:
+        raise ValueError(f"Highlight {highlight_id} is not cited by decision {decision_id}")
+    if decision.status != "draft" and len(rows) <= 1:
+        raise ValueError("A decision must cite at least one piece of evidence")
+    await db.delete(target)
+    await db.flush()
+    await check_decision_integrity(db, decision_id)
+
+
+async def get_hypothesis_summary(db: AsyncSession, hypothesis_id: int) -> dict[str, Any] | None:
+    """Return the linked hypothesis's statement + computed grounding band for the detail view."""
+    from app.api.hypotheses import _compute_grounding
+    from app.models import Hypothesis
+
+    hyp = await db.get(Hypothesis, hypothesis_id)
+    if hyp is None:
+        return None
+    link_result = await db.execute(
+        select(HypothesisLink).where(HypothesisLink.hypothesis_id == hypothesis_id)
+    )
+    supports = {"confirmed": 0, "suggested": 0}
+    contradicts = {"confirmed": 0, "suggested": 0}
+    for link in link_result.scalars().all():
+        bucket = supports if link.stance == "supports" else contradicts
+        if link.status == "confirmed":
+            bucket["confirmed"] += 1
+        elif link.status == "suggested":
+            bucket["suggested"] += 1
+    return {
+        "id": hyp.id,
+        "statement": hyp.statement,
+        "band": _compute_grounding(supports, contradicts),
+    }
+
+
+async def get_superseded_by_title(db: AsyncSession, superseded_by_id: int | None) -> str | None:
+    """Return the title of the decision that supersedes this one, if any."""
+    if superseded_by_id is None:
+        return None
+    successor = await db.get(Decision, superseded_by_id)
+    return successor.title if successor else None

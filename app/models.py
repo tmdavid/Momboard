@@ -468,7 +468,9 @@ class Decision(Base):
     rationale_md: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(
         String(20), default="proposed", server_default="proposed"
-    )  # proposed|decided|superseded
+    )  # draft|proposed|decided|superseded
+    owner_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    area: Mapped[str | None] = mapped_column(String(100), nullable=True)
     integrity: Mapped[str] = mapped_column(
         String(20), default="ok", server_default="ok"
     )  # ok|undermined
@@ -497,7 +499,7 @@ class Decision(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('proposed', 'decided', 'superseded')",
+            "status IN ('draft', 'proposed', 'decided', 'superseded')",
             name="ck_decisions_status",
         ),
         CheckConstraint(

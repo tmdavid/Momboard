@@ -411,12 +411,40 @@ export interface paths {
         };
         /**
          * Get Decision
-         * @description Get a decision with its evidence receipts.
+         * @description Get a decision with its evidence receipts, linked hypothesis and successor title.
          */
         get: operations["get_decision_api_decisions__decision_id__get"];
         put?: never;
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Decision
+         * @description Edit a decision's title, rationale, owner or area.
+         */
+        patch: operations["update_decision_api_decisions__decision_id__patch"];
+        trace?: never;
+    };
+    "/api/decisions/{decision_id}/evidence/{highlight_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add Decision Evidence
+         * @description Cite an existing highlight on a decision (e.g. from Explore or Hypotheses).
+         */
+        post: operations["add_decision_evidence_api_decisions__decision_id__evidence__highlight_id__post"];
+        /**
+         * Remove Decision Evidence
+         * @description Un-cite a highlight from a decision (non-draft decisions must keep >=1).
+         */
+        delete: operations["remove_decision_evidence_api_decisions__decision_id__evidence__highlight_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -547,7 +575,9 @@ export interface paths {
          * Delete Highlight
          * @description Delete a highlight.
          *
-         *     Returns 409 if the highlight is cited by any decision (evidence cannot be destroyed).
+         *     If the highlight is cited by any decision, the receipts keep their citation-time
+         *     snapshot (so the evidence is not lost) but are flagged `highlight_deleted` and the
+         *     owning decisions' integrity is recomputed.
          */
         delete: operations["delete_highlight_api_highlights__highlight_id__delete"];
         options?: never;
@@ -1641,12 +1671,18 @@ export interface components {
         };
         /** DecisionCreateRequest */
         DecisionCreateRequest: {
+            /** Area */
+            area?: string | null;
             /** Evidence */
-            evidence: number[];
+            evidence?: number[];
             /** Hypothesis Id */
             hypothesis_id?: number | null;
+            /** Owner Id */
+            owner_id?: number | null;
             /** Rationale Md */
             rationale_md: string;
+            /** @default proposed */
+            status: components["schemas"]["DecisionStatus"];
             /** Title */
             title: string;
         };
@@ -1664,6 +1700,8 @@ export interface components {
         };
         /** DecisionDetailResponse */
         DecisionDetailResponse: {
+            /** Area */
+            area?: string | null;
             /** Created At */
             created_at?: string | null;
             /** Decided At */
@@ -1672,6 +1710,7 @@ export interface components {
             decided_by?: number | null;
             /** Evidence */
             evidence: components["schemas"]["DecisionEvidenceReceipt"][];
+            hypothesis?: components["schemas"]["LinkedHypothesis"] | null;
             /** Hypothesis Id */
             hypothesis_id?: number | null;
             /** Id */
@@ -1682,11 +1721,15 @@ export interface components {
             integrity_checked_at?: string | null;
             /** Integrity Reasons */
             integrity_reasons?: components["schemas"]["IntegrityReason"][] | null;
+            /** Owner Id */
+            owner_id?: number | null;
             /** Rationale Md */
             rationale_md: string;
             status: components["schemas"]["DecisionStatus"];
             /** Superseded By */
             superseded_by?: number | null;
+            /** Superseded By Title */
+            superseded_by_title?: string | null;
             /** Title */
             title: string;
         };
@@ -1713,6 +1756,8 @@ export interface components {
         };
         /** DecisionListItem */
         DecisionListItem: {
+            /** Area */
+            area?: string | null;
             /** Created At */
             created_at?: string | null;
             /** Decided At */
@@ -1723,6 +1768,8 @@ export interface components {
             integrity: string;
             /** Integrity Checked At */
             integrity_checked_at?: string | null;
+            /** Owner Id */
+            owner_id?: number | null;
             status: components["schemas"]["DecisionStatus"];
             /** Title */
             title: string;
@@ -1738,7 +1785,7 @@ export interface components {
          * DecisionStatus
          * @enum {string}
          */
-        DecisionStatus: "proposed" | "decided" | "superseded";
+        DecisionStatus: "draft" | "proposed" | "decided" | "superseded";
         /** DecisionTransitionRequest */
         DecisionTransitionRequest: {
             status: components["schemas"]["DecisionStatus"];
@@ -1752,6 +1799,17 @@ export interface components {
             /** Id */
             id: number;
             status: components["schemas"]["DecisionStatus"];
+        };
+        /** DecisionUpdateRequest */
+        DecisionUpdateRequest: {
+            /** Area */
+            area?: string | null;
+            /** Owner Id */
+            owner_id?: number | null;
+            /** Rationale Md */
+            rationale_md?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /** DigestPreviewResponse */
         DigestPreviewResponse: {
@@ -2286,6 +2344,15 @@ export interface components {
              * @default Side B
              */
             label_b: string;
+        };
+        /** LinkedHypothesis */
+        LinkedHypothesis: {
+            /** Band */
+            band: string;
+            /** Id */
+            id: number;
+            /** Statement */
+            statement: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -3411,6 +3478,105 @@ export interface operations {
             header?: never;
             path: {
                 decision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_decision_api_decisions__decision_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                decision_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_decision_evidence_api_decisions__decision_id__evidence__highlight_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                decision_id: number;
+                highlight_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_decision_evidence_api_decisions__decision_id__evidence__highlight_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                decision_id: number;
+                highlight_id: number;
             };
             cookie?: never;
         };

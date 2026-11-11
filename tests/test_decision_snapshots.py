@@ -193,3 +193,101 @@ async def test_invalidation_is_idempotent(seeded_db):
     # One receipt → exactly one invalidation reason, not two.
     tag_reasons = [r for r in result["reasons"] if r["source_type"] == "tag_rejected"]
     assert len(tag_reasons) == 1
+
+
+# --- P1: edit, evidence add/remove, draft, enrichment ----------------------
+
+
+@pytest.mark.asyncio
+async def test_patch_decision_edits_title_rationale_owner_area(auth_client, seeded_db):
+    from app.services.decisions import create_decision
+
+    _convo, h, _company = await _convo_with_highlight(seeded_db)
+    d = await create_decision(seeded_db, title="Old", rationale_md="Old R", evidence_highlight_ids=[h.id])
+    await seeded_db.commit()
+
+    resp = await auth_client.patch(
+        f"/api/decisions/{d.id}",
+        json={"title": "New title", "rationale_md": "New rationale", "owner_id": 7, "area": "Pricing"},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["title"] == "New title"
+    assert body["rationale_md"] == "New rationale"
+    assert body["owner_id"] == 7
+    assert body["area"] == "Pricing"
+
+
+@pytest.mark.asyncio
+async def test_add_and_remove_evidence(auth_client, seeded_db):
+    from app.models import Highlight
+    from app.services.decisions import create_decision
+
+    convo, h1, _c = await _convo_with_highlight(seeded_db, quote="First")
+    h2 = Highlight(conversation_id=convo.id, tag_key="money", quote="Second", status="accepted", origin="ai")
+    seeded_db.add(h2)
+    await seeded_db.flush()
+    d = await create_decision(seeded_db, title="D", rationale_md="R", evidence_highlight_ids=[h1.id])
+    await seeded_db.commit()
+
+    # Add a second receipt (snapshots the quote).
+    resp = await auth_client.post(f"/api/decisions/{d.id}/evidence/{h2.id}")
+    assert resp.status_code == 201
+    body = resp.json()
+    quotes = {e["quote"] for e in body["evidence"]}
+    assert quotes == {"First", "Second"}
+
+    # Remove it again.
+    resp = await auth_client.delete(f"/api/decisions/{d.id}/evidence/{h2.id}")
+    assert resp.status_code == 200
+    assert {e["quote"] for e in resp.json()["evidence"]} == {"First"}
+
+
+@pytest.mark.asyncio
+async def test_cannot_remove_last_evidence_from_nondraft(auth_client, seeded_db):
+    from app.services.decisions import create_decision
+
+    _convo, h, _c = await _convo_with_highlight(seeded_db)
+    d = await create_decision(seeded_db, title="D", rationale_md="R", evidence_highlight_ids=[h.id])
+    await seeded_db.commit()
+
+    resp = await auth_client.delete(f"/api/decisions/{d.id}/evidence/{h.id}")
+    assert resp.status_code == 422
+    assert "at least one" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_draft_decision_allows_zero_evidence_then_transitions(auth_client, seeded_db):
+    from app.services.decisions import create_decision
+
+    d = await create_decision(seeded_db, title="Draft D", rationale_md="R", evidence_highlight_ids=[], status="draft")
+    await seeded_db.commit()
+    assert d.status == "draft"
+
+    # draft -> proposed
+    resp = await auth_client.patch(f"/api/decisions/{d.id}/status", json={"status": "proposed"})
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "proposed"
+
+
+@pytest.mark.asyncio
+async def test_detail_returns_linked_hypothesis_and_superseded_title(auth_client, seeded_db):
+    from app.models import Hypothesis
+    from app.services.decisions import create_decision, transition_decision
+
+    _convo, h, _c = await _convo_with_highlight(seeded_db)
+    hyp = Hypothesis(statement="Mid-market teams want SSO", status="open", origin="human")
+    seeded_db.add(hyp)
+    await seeded_db.flush()
+
+    d1 = await create_decision(seeded_db, title="D1", rationale_md="R", evidence_highlight_ids=[h.id], hypothesis_id=hyp.id)
+    d2 = await create_decision(seeded_db, title="Successor D2", rationale_md="R2", evidence_highlight_ids=[h.id])
+    await seeded_db.flush()
+    await transition_decision(seeded_db, d1.id, new_status="decided")
+    await transition_decision(seeded_db, d1.id, new_status="superseded", superseded_by_id=d2.id)
+    await seeded_db.commit()
+
+    body = (await auth_client.get(f"/api/decisions/{d1.id}")).json()
+    assert body["hypothesis"]["statement"] == "Mid-market teams want SSO"
+    assert body["hypothesis"]["band"] == "hunch"  # hypothesis has no links yet
+    assert body["superseded_by_title"] == "Successor D2"
