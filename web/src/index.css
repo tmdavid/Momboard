@@ -1,23 +1,77 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* v0.4 redesign tokens — mirror of tailwind.config.js, exposed as CSS variables
+   so components can reference them in inline styles / arbitrary values too. */
+:root {
+  --ink: #111827;
+  --text: #374151;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --sub: #f3f4f6;
+  --bg: #f7f7f8;
+  --surface: #ffffff;
+  --accent: #2f5bea;
+  --accent-soft: #e8eefd;
+  --accent-ink: #1e3a8a;
+  --focus-ring: #d6e0fb;
+}
+
 @layer base {
   body {
-    @apply bg-page text-ink font-sans text-sm leading-relaxed;
+    @apply bg-page text-ink-2 font-sans text-sm;
+    line-height: 22px;
+  }
+  h1, h2, h3 {
+    color: var(--ink);
+  }
+  a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  a:hover {
+    color: #2448c7;
+  }
+  /* Consistent focus treatment: 1px accent border + 3px soft ring. */
+  :focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
   }
 }
 
 @layer components {
   .btn {
-    @apply border-none rounded-lg px-3.5 py-2 font-semibold cursor-pointer text-sm;
+    @apply border-none rounded-lg px-4 font-semibold cursor-pointer text-sm;
+    height: 40px;
+  }
+  .btn-sm {
+    height: 36px;
+    @apply px-3.5;
   }
   .btn-primary {
-    @apply bg-accent text-white hover:bg-[#1c5cab];
+    @apply bg-accent text-white hover:bg-[#2448c7];
   }
   .btn-ghost {
-    @apply bg-transparent text-ink-2 border border-hairline hover:bg-page;
+    @apply bg-surface text-ink border border-hairline hover:border-accent;
   }
+  /* Score band pill: pass data-band="low|mid|high". */
+  .score-pill {
+    @apply inline-flex items-baseline gap-px rounded-pill font-semibold;
+    padding: 2px 10px;
+  }
+  .score-low { background: #fef3f2; color: #b42318; }
+  .score-mid { background: #fffaeb; color: #b54708; }
+  .score-high { background: #ecfdf3; color: #067647; }
+}
+
+/* Single-line truncation with ellipsis (pair with a title tooltip). */
+.trunc {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @keyframes spin {
