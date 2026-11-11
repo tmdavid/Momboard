@@ -9,6 +9,7 @@ import httpx
 from pydantic import BaseModel, ValidationError
 
 from app.llm.prompts import PROMPTS
+from app.llm.seller import with_seller
 
 logger = logging.getLogger(__name__)
 
@@ -193,6 +194,7 @@ class OpenAIResponsesClient:
         Same protocol as FakeLLMClient.generate — no interface divergence.
         """
         resolved_model = self.model_map.get(model, "gpt-4o")
+        prompt = with_seller(prompt)
 
         json_schema = schema.model_json_schema()
         _make_schema_strict(json_schema)

@@ -102,6 +102,9 @@ class Conversation(Base):
     meta: Mapped[dict | None] = mapped_column(nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="processing")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # v0.5: which taxonomy tagged this call, and when. NULL = tagged before versioning.
+    taxonomy_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tagged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     company: Mapped[Optional["Company"]] = relationship(back_populates="conversations")
     contacts: Mapped[list["Contact"]] = relationship(
@@ -168,6 +171,15 @@ class Tag(Base):
     # Free-text grouping label for custom tags (e.g. "channel", "product").
     # Nullable: core tags and ungrouped custom tags have no category.
     category: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # v0.5: suggestions below this confidence stay visible in conversation review but are
+    # left out of Library signal bars, Explore's default view, Insights and hypothesis matching.
+    min_confidence: Mapped[float] = mapped_column(Float, default=0.5, server_default="0.5")
+    # v0.5: prompt sharpening — "don't tag when ..." and one good example for the tagger.
+    negative_hint: Mapped[str | None] = mapped_column(Text, nullable=True)
+    example: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # v0.5: the taxonomy version in force when this tag was added. Calls tagged under an
+    # older version never saw this tag (see conversations.taxonomy_version).
+    added_in_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 # --- Highlights ---
@@ -384,6 +396,20 @@ class HypothesisQuestion(Base):
     )
 
     __table_args__ = (Index("ix_hypothesis_questions_hypothesis_id", "hypothesis_id"),)
+
+
+class AppSetting(Base):
+    """Small key/value store for settings edited in the UI (v0.5): the seller's company
+    profile and the taxonomy version counter. Values are JSON."""
+
+    __tablename__ = "app_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    key: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    value: Mapped[dict | list | int | str | None] = mapped_column(JSON, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, server_default=func.now()
+    )
 
 
 # --- Staging Inbox (T34) ---

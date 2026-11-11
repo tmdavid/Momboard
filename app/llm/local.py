@@ -9,6 +9,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.llm.client import LLMEnvelope, LLMSchemaError
 from app.llm.prompts import PROMPTS
+from app.llm.seller import with_seller
 
 logger = logging.getLogger(__name__)
 
@@ -166,6 +167,7 @@ class OllamaClient:
         import json as json_mod
 
         resolved_model = self.model_map.get(model, self.model)
+        prompt = with_seller(prompt)
         json_schema = schema.model_json_schema()
         format_schema = self._flatten_schema(json_schema)
 

@@ -3,6 +3,8 @@
 from dataclasses import dataclass
 from typing import Any
 
+from app.llm.seller import with_seller
+
 
 @dataclass
 class Prompt:
@@ -13,8 +15,9 @@ class Prompt:
     template: str
 
     def render(self, data: dict[str, Any]) -> str:
-        """Render the template with the given data."""
-        return self.template.format(**data)
+        """Render the template with the given data, led by the seller preamble (v0.5 D6)
+        when a company is configured, so no prompt can misname the seller."""
+        return with_seller(self.template.format(**data))
 
 
 # --- Normalizer ---
@@ -37,7 +40,7 @@ Return structured JSON with utterances array and detected_participants.""",
 
 TAGGER_PROMPT = Prompt(
     name="tagger",
-    version="tagger-v1",
+    version="tagger-v2",
     template="""You are a Mom Test signal tagger. Your job is to identify customer conversation signals in interview transcripts.
 
 ## Taxonomy
@@ -49,8 +52,17 @@ TAGGER_PROMPT = Prompt(
 3. `commitment` requires an EXPLICIT cost: time booked, intro promised, money discussed, pilot agreed.
 4. Quotes MUST be **verbatim substrings** of the utterance text. Do not paraphrase or truncate.
 5. Each highlight needs a confidence score (0-1) and brief rationale.
-6. One utterance can have multiple tags if it contains multiple distinct signals.
-7. Do NOT tag generic statements or filler. Only tag when there's clear signal.
+6. Evidence tags apply to CUSTOMER turns only (side = them). Never tag a turn where side = us,
+   except `followup` and `commitment`, which may sit on either side. Everything the seller's own
+   team says is context, not evidence.
+7. Do NOT tag filler or acknowledgements ("Yes.", "Okay", "Sure", "Sounds good", "We will discuss
+   this"), and nothing under 5 words. The one exception is a `commitment` that names a date, time,
+   amount or person ("Yes, 2 p.m. Thursday works").
+8. ONE tag per quote. Add a second tag to the same quote only if it comes from a DIFFERENT
+   category (shown in [brackets]) and you are at least 0.7 confident in both. Never return the
+   same sentence twice. A long utterance may hold several distinct signals: quote each one
+   separately.
+9. Read each tag's "Don't tag when" line and example; they override your own guess about a tag.
 
 ## Examples
 - Utterance: "Every Monday I export it to Excel and clean it by hand, takes about 2 hours"

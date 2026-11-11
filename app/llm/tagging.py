@@ -10,7 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.llm.client import LLMClient, LLMEnvelope
 from app.llm.schemas import TaggerHighlight, TaggerOutput
+from app.llm.tag_rules import (
+    Candidate,
+    TagInfo,
+    allowed_on_side,
+    is_filler,
+    select_highlights,
+)
 from app.models import Highlight, Tag, Utterance
+from app.services.speakers import refresh_speaker_sides
 
 logger = logging.getLogger(__name__)
 
@@ -140,13 +148,21 @@ async def run_tag(
         logger.warning(f"No utterances for conversation {conversation_id}")
         return []
 
+    # Get conversation metadata
+    from app.models import Conversation
+
+    convo = await db.get(Conversation, conversation_id)
+    if convo is None:
+        raise ValueError(f"Conversation {conversation_id} not found")
+
+    # D1: decide who is "us" BEFORE tagging, from everything we know (not just one interviewer
+    # name), so a rep's lines never reach the model as customer speech.
+    await refresh_speaker_sides(db, convo, list(utterances))
+
     # Load active tags for taxonomy
     tags_result = await db.execute(select(Tag).where(Tag.is_active == True))  # noqa: E712
     tags = tags_result.scalars().all()
-    taxonomy_str = "\n".join(
-        f"- `{t.key}` {t.emoji} {t.name}: {t.description} (signal: {t.signal_strength})"
-        for t in tags
-    )
+    taxonomy_str = "\n".join(_taxonomy_line(t) for t in tags)
 
     # Build utterance dicts
     utt_dicts = [
@@ -157,12 +173,6 @@ async def run_tag(
     # Map idx to utterance for validation
     utt_by_idx = {u.idx: u for u in utterances}
 
-    # Get conversation metadata
-    from app.models import Conversation
-
-    convo = await db.get(Conversation, conversation_id)
-    if convo is None:
-        raise ValueError(f"Conversation {conversation_id} not found")
     interviewer = convo.interviewer or "Unknown"
     company_name = ""
     if convo.company_id:
@@ -198,10 +208,27 @@ async def run_tag(
     # Dedupe across chunks
     all_highlights = dedupe_highlights(all_highlights)
 
-    # Validate and persist
+    # Validate, apply the tagging rules (D1-D3), and persist.
     valid_tag_keys = {t.key for t in tags}
-    created: list[Highlight] = []
+    tag_info = {t.key: TagInfo(t.key, origin=t.origin, category=t.category) for t in tags}
 
+    # Highlights already stored for this call (e.g. ones a person accepted or rejected, which a
+    # retag keeps). They are never replaced, and a new candidate may not duplicate them.
+    idx_by_utt_id = {u.id: u.idx for u in utterances}
+    stored_rows = (
+        await db.execute(select(Highlight).where(Highlight.conversation_id == conversation_id))
+    ).scalars().all()
+    existing = [
+        Candidate(
+            utterance_idx=idx_by_utt_id.get(r.utterance_id, -1) if r.utterance_id is not None else -1,
+            tag_key=r.tag_key,
+            quote=r.quote,
+            confidence=r.confidence if r.confidence is not None else 1.0,
+        )
+        for r in stored_rows
+    ]
+
+    proposals: dict[tuple[int, str, str], tuple[TaggerHighlight, Utterance, str]] = {}
     for h in all_highlights:
         # Check tag key exists
         if h.tag_key not in valid_tag_keys:
@@ -226,6 +253,32 @@ async def run_tag(
             )
             continue
 
+        # D1: evidence tags belong to customer turns only (follow-up / commitment excepted).
+        if not allowed_on_side(h.tag_key, utt.speaker_side):
+            logger.info(f"Dropping '{h.tag_key}' on our own turn {h.utterance_idx}")
+            continue
+
+        # D2: no filler ("Yes.", "Okay", "We will discuss this.").
+        if is_filler(cleaned_quote, h.tag_key):
+            logger.info(f"Dropping filler quote on utterance {h.utterance_idx}: {cleaned_quote!r}")
+            continue
+
+        proposals[(h.utterance_idx, h.tag_key, cleaned_quote)] = (h, utt, cleaned_quote)
+
+    # D3: one tag per quote; a second only from another category, both at >= 0.7; never the same
+    # sentence twice in a call (including against highlights already stored).
+    chosen = select_highlights(
+        [
+            Candidate(idx, tag, quote, h.confidence)
+            for (idx, tag, quote), (h, _utt, _q) in proposals.items()
+        ],
+        existing,
+        tag_info,
+    )
+
+    created: list[Highlight] = []
+    for cand in chosen:
+        h, utt, cleaned_quote = proposals[(cand.utterance_idx, cand.tag_key, cand.quote)]
         highlight = Highlight(
             conversation_id=conversation_id,
             utterance_id=utt.id,
@@ -246,3 +299,14 @@ async def run_tag(
 
     await db.flush()
     return created
+
+
+def _taxonomy_line(t: Tag) -> str:
+    """One taxonomy entry for the prompt: what the tag is, when NOT to use it, and an example."""
+    category = f" [{t.category}]" if t.category else ""
+    line = f"- `{t.key}` {t.emoji} {t.name}{category}: {t.description} (signal: {t.signal_strength})"
+    if t.negative_hint:
+        line += f"\n    Don't tag when: {t.negative_hint}"
+    if t.example:
+        line += f"\n    Example: {t.example}"
+    return line

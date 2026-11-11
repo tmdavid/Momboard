@@ -500,3 +500,27 @@ def test_clari_page_raises_after_exhausting_retries(monkeypatch):
             raise AssertionError("expected HTTPStatusError")
         except Exception as exc:  # noqa: BLE001
             assert "503" in str(exc)
+
+
+def test_convert_records_participant_emails_by_speaker_name():
+    result = convert_transcript(CLARI_CALL)
+    # Only speakers who actually spoke AND have an email; Participant 9 has none.
+    assert result.speaker_emails == {
+        "Jordan Doe": "jordan.doe@example.com",
+        "Sam Lee": "sam.lee@acme-vendor.example",
+    }
+
+
+def test_conversation_body_carries_emails_in_meta_for_the_seller_domain_check():
+    conv = convert_transcript(CLARI_CALL)
+    body = build_conversation_body(
+        CLARI_CALL["call"], CLARI_CALL, conv, call_id="call-real", interviewer=None
+    )
+    assert body["meta"]["clari_speaker_emails"]["Sam Lee"] == "sam.lee@acme-vendor.example"
+
+
+def test_no_emails_means_no_key():
+    details = {"call": {"users": [], "externalParticipants": [], "transcript": [{"personId": 7, "text": "Hi"}]}}
+    conv = convert_transcript(details)
+    body = build_conversation_body(details["call"], details, conv, call_id="x", interviewer=None)
+    assert "clari_speaker_emails" not in body["meta"]

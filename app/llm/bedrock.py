@@ -19,6 +19,7 @@ from pydantic import BaseModel, ValidationError
 
 from app.llm.client import LLMEnvelope, LLMSchemaError
 from app.llm.prompts import PROMPTS
+from app.llm.seller import with_seller
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +208,7 @@ class BedrockClient:
         model map, matching the OpenAI/Ollama ``generate()`` contract.
         """
         model_id = self._resolve_model(model)
-        return await self._run(model_id, prompt, schema)
+        return await self._run(model_id, with_seller(prompt), schema)
 
     async def close(self) -> None:
         """No persistent client is held between calls; nothing to release."""

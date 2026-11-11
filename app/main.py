@@ -63,6 +63,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings: Settings = app.state.settings
     engine = app.state.engine
 
+    # Load the saved seller profile so every prompt names the company correctly.
+    from app.services.seller_profile import refresh_seller_profile
+
+    try:
+        async with app.state.session_factory() as db:
+            await refresh_seller_profile(db)
+    except Exception:  # noqa: BLE001 - e.g. migrations not applied yet; prompts just omit the preamble
+        import logging
+
+        logging.getLogger(__name__).warning("Could not load the seller profile", exc_info=True)
+
     # Recover any jobs left in `running` by a previous crash/kill/suspend so a
     # worker doesn't stay wedged behind an orphaned job.
     await reclaim_stale_jobs(app.state.session_factory)

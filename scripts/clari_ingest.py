@@ -214,6 +214,8 @@ class ConvertedTranscript:
     utterance_count: int = 0
     us_speakers: list[str] = field(default_factory=list)
     them_speakers: list[str] = field(default_factory=list)
+    # Display name -> participant email, for matching the seller's email domains (v0.5 D6).
+    speaker_emails: dict[str, str] = field(default_factory=dict)
 
 
 def _first_present(mapping: dict[str, Any], keys: tuple[str, ...]) -> Any:
@@ -363,6 +365,7 @@ def convert_transcript(
     seen_speakers: list[str] = []
     us_speakers: list[str] = []
     them_speakers: list[str] = []
+    speaker_emails: dict[str, str] = {}
     count = 0
 
     current_speaker: str | None = None
@@ -384,6 +387,9 @@ def convert_transcript(
             continue
 
         speaker, side = _resolve_speaker(seg, participants, unknown_label)
+        pid = seg.get("personId")
+        if isinstance(pid, int) and pid in participants and participants[pid].email:
+            speaker_emails.setdefault(speaker, participants[pid].email)
         if speaker not in seen_speakers:
             seen_speakers.append(speaker)
             if side == "us" and speaker not in us_speakers:
@@ -405,6 +411,7 @@ def convert_transcript(
         utterance_count=count,
         us_speakers=us_speakers,
         them_speakers=them_speakers,
+        speaker_emails=speaker_emails,
     )
 
 
@@ -762,6 +769,8 @@ def build_conversation_body(
         "clari_us_speakers": converted.us_speakers,
         "clari_them_speakers": converted.them_speakers,
     }
+    if converted.speaker_emails:
+        meta["clari_speaker_emails"] = converted.speaker_emails
     # Confirmed-present Clari fields worth keeping for filtering/context.
     for src_key, meta_key in (
         ("status", "clari_status"),

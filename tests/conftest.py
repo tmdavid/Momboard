@@ -247,6 +247,16 @@ def read_fixture(name: str) -> str:
 
 
 @pytest_asyncio.fixture(autouse=True)
+def _reset_seller_profile():
+    """The seller profile is process-wide state; never let one test's company leak into another."""
+    from app.llm.seller import SellerProfile, set_seller_profile
+
+    set_seller_profile(SellerProfile())
+    yield
+    set_seller_profile(SellerProfile())
+
+
+@pytest_asyncio.fixture(autouse=True)
 async def _reset_sse_state():
     """Reset sse-starlette AppStatus between tests to avoid event loop binding issues."""
     yield

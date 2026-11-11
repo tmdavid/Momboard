@@ -458,6 +458,14 @@ async def run_worker_once(
                 await db.commit()
                 return True
 
+            # Keep the seller's company name current for every prompt this job sends.
+            try:
+                from app.services.seller_profile import refresh_seller_profile
+
+                await refresh_seller_profile(db)
+            except Exception:  # noqa: BLE001 - never fail a job over the optional preamble
+                logger.warning("Could not refresh the seller profile", exc_info=True)
+
             await handler(db, job, settings)
 
             job.status = "done"

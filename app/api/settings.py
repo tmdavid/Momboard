@@ -5,13 +5,15 @@ connection states, digest schedule, taxonomy/company counts, and whether the
 current user may administer taxonomy.
 """
 
+import re
+
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.auth import get_current_user
+from app.auth import get_current_user, require_admin
 from app.models import Company, Conversation, Tag, User
 
 router = APIRouter()
@@ -171,3 +173,64 @@ async def get_settings_status(
         active_company_count=active_company_count,
         can_manage_taxonomy=user.role == "admin",
     )
+
+
+# --- v0.5 D6: "Your company" ---
+
+_DOMAIN_RE = re.compile(r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$")
+
+
+class CompanyProfileBody(BaseModel):
+    name: str = Field(default="", max_length=200)
+    aliases: list[str] = Field(default_factory=list, max_length=20)
+    email_domains: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("aliases")
+    @classmethod
+    def _alias_length(cls, values: list[str]) -> list[str]:
+        if any(len(v) > 200 for v in values):
+            raise ValueError("Each alias must be 200 characters or fewer")
+        return values
+
+    @field_validator("email_domains")
+    @classmethod
+    def _domains(cls, values: list[str]) -> list[str]:
+        for raw in values:
+            domain = raw.strip().lstrip("@").lower()
+            if domain and (len(domain) > 253 or not _DOMAIN_RE.match(domain)):
+                raise ValueError(f"Not a valid email domain: {raw!r}")
+        return values
+
+
+class CompanyProfileResponse(CompanyProfileBody):
+    configured: bool = False
+
+
+def _profile_response(profile) -> dict:
+    return {**profile.to_dict(), "configured": profile.configured}
+
+
+@router.get("/settings/company", response_model=CompanyProfileResponse)
+async def get_company_profile(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """The seller's company profile (name, aliases, email domains)."""
+    from app.services.seller_profile import load_seller_profile
+
+    return _profile_response(await load_seller_profile(db))
+
+
+@router.put("/settings/company", response_model=CompanyProfileResponse)
+async def put_company_profile(
+    body: CompanyProfileBody,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """Save the profile (admin only). Prompts pick it up immediately."""
+    from app.llm.seller import SellerProfile
+    from app.services.seller_profile import save_seller_profile
+
+    profile = SellerProfile.from_dict(body.model_dump())
+    await save_seller_profile(db, profile)
+    return _profile_response(profile)

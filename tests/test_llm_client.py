@@ -43,7 +43,7 @@ async def test_fake_client_replays_fixture():
     assert isinstance(out, TaggerOutput)
     assert len(out.highlights) > 0
     assert envelope.model == "fake-model"
-    assert envelope.prompt_version == "tagger-v1"
+    assert envelope.prompt_version == PROMPTS["tagger"].version
 
 
 @pytest.mark.asyncio
