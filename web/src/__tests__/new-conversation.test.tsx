@@ -55,13 +55,13 @@ describe('T16 — New Conversation Modal fields', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/new conversation/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new conversation/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
-      expect(screen.getByText('New conversation')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'New conversation' })).toBeInTheDocument();
     });
 
     // Verify all expected fields are present
@@ -80,10 +80,10 @@ describe('T16 — New Conversation Modal fields', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/new conversation/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new conversation/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/company/i)).toBeInTheDocument();
@@ -106,10 +106,10 @@ describe('T16 — New Conversation Modal fields', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/new conversation/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new conversation/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/contact/i)).toBeInTheDocument();
@@ -141,10 +141,10 @@ describe('T16 — Transcript format detection', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/new conversation/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new conversation/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/transcript/i)).toBeInTheDocument();
@@ -161,10 +161,10 @@ describe('T16 — Transcript format detection', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/new conversation/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new conversation/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/transcript/i)).toBeInTheDocument();
@@ -181,10 +181,10 @@ describe('T16 — Transcript format detection', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/new conversation/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new conversation/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/drop a .txt/i)).toBeInTheDocument();
@@ -228,10 +228,10 @@ describe('T16 — Submit and optimistic row insertion', () => {
     renderWithProviders(<App />);
 
     await waitFor(() => {
-      expect(screen.getByText(/new conversation/i)).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /new conversation/i })).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/title/i)).toBeInTheDocument();
@@ -280,7 +280,7 @@ describe('T16 — Submit and optimistic row insertion', () => {
       expect(screen.getByText('Conversations')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/title/i)).toBeInTheDocument();
@@ -332,7 +332,7 @@ describe('T16 — SSE completion flips row status', () => {
       expect(screen.getByText('Conversations')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/title/i)).toBeInTheDocument();
@@ -393,7 +393,7 @@ describe('T16 — SSE completion flips row status', () => {
       expect(screen.getByText('Conversations')).toBeInTheDocument();
     });
 
-    await user.click(screen.getByText(/new conversation/i));
+    await user.click(screen.getByRole("button", { name: /new conversation/i }));
 
     await waitFor(() => {
       expect(screen.getByLabelText(/title/i)).toBeInTheDocument();
@@ -411,7 +411,7 @@ describe('T16 — SSE completion flips row status', () => {
 
     // The modal should close after creation
     await waitFor(() => {
-      expect(screen.queryByText('New conversation')).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'New conversation' })).not.toBeInTheDocument();
     });
 
     // EventSource should still be open (not closed when modal unmounts)

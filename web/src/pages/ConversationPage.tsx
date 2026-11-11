@@ -318,13 +318,13 @@ export function ConversationPage() {
               href={convo.meta.clari_review_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs px-2 py-0.5 rounded-full bg-page border border-hairline text-ink-2 hover:text-accent hover:border-accent transition-colors"
+              className="text-xs px-2.5 py-1 rounded-lg border border-hairline bg-surface text-ink hover:border-accent transition-colors font-semibold"
             >
-              ▶ View in Clari
+              View source
             </a>
           )}
           <button
-            className="text-xs px-2.5 py-1 rounded-lg border border-hairline bg-page hover:bg-accent-soft hover:border-accent text-ink-2 hover:text-accent transition-colors disabled:opacity-50"
+            className="text-xs px-2.5 py-1 rounded-lg border border-hairline bg-surface hover:border-accent text-ink font-semibold transition-colors disabled:opacity-50"
             disabled={reprocessMutation.isPending || convo.status === 'processing'}
             onClick={() => {
               if (window.confirm('Re-run AI tagging and analysis? Accepted/rejected decisions are preserved.')) {
@@ -333,15 +333,10 @@ export function ConversationPage() {
             }}
             title="Re-runs AI tagging and analysis while accepted/rejected decisions are preserved"
           >
-            {reprocessMutation.isPending || convo.status === 'processing' ? '⟳ Processing…' : '🔄 Retag'}
+            {reprocessMutation.isPending || convo.status === 'processing' ? 'Processing…' : 'Retag'}
           </button>
-          <button
-            className="text-xs px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 hover:border-red-300 transition-colors"
-            onClick={openDeleteDialog}
-            title="Permanently delete this conversation"
-          >
-            Delete conversation
-          </button>
+          {/* Destructive action lives in an overflow menu, never a red header button. */}
+          <OverflowMenu onDelete={openDeleteDialog} />
         </div>
       </div>
 
@@ -570,4 +565,39 @@ export function ConversationPage() {
 
 // Note: highlighted text rendering is intentionally done as plain text
 // to ensure text selection works correctly for manual highlight creation.
-// Visual highlights are shown via chip buttons below each utterance.
+
+function OverflowMenu({ onDelete }: { onDelete: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onOutside = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', onOutside);
+    return () => document.removeEventListener('mousedown', onOutside);
+  }, [open]);
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        aria-label="More actions"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="text-sm w-8 h-8 rounded-lg border border-hairline bg-surface text-ink hover:border-accent"
+      >
+        ⋯
+      </button>
+      {open && (
+        <div role="menu" className="absolute right-0 mt-1 w-48 bg-surface border border-hairline rounded-lg shadow-lg p-1 z-30">
+          <button
+            type="button"
+            aria-label="Delete conversation"
+            onClick={() => { setOpen(false); onDelete(); }}
+            className="w-full text-left px-2.5 py-2 rounded-md text-[13px] text-crit-text hover:bg-crit-soft"
+          >
+            Delete conversation
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

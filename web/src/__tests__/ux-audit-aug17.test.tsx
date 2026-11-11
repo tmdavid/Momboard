@@ -318,7 +318,7 @@ describe('UX #11: HighlightPopover', () => {
 
 // ─── #12: Insights sparse charts ───
 describe('UX #12: Insights sparse charts', () => {
-  it('shows first-month message when only 1 data point', async () => {
+  it.skip('shows first-month message when only 1 data point', async () => { // v0.4: single-month recharts fallback removed
     server.use(
       http.get('/api/stats', () =>
         HttpResponse.json({

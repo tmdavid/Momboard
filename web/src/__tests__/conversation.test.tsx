@@ -15,14 +15,14 @@ function renderConversation() {
 }
 
 describe('Conversation page', () => {
-  test('shows a "View in Clari" link when the conversation came from Clari', async () => {
+  test('shows a "View source" link when the conversation came from Clari', async () => {
     renderConversation();
 
     await waitFor(() => {
       expect(screen.getByText('David')).toBeInTheDocument();
     });
 
-    const link = screen.getByRole('link', { name: /view in clari/i });
+    const link = screen.getByRole('link', { name: /view source/i });
     expect(link).toHaveAttribute('href', 'https://copilot.clari.com/call/427ef1b9');
     expect(link).toHaveAttribute('target', '_blank');
   });
@@ -128,6 +128,7 @@ describe('Conversation page', () => {
     renderConversation();
 
     await screen.findByText('Discovery — counterfeit listings workflow');
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
     await user.click(screen.getByRole('button', { name: 'Delete conversation' }));
 
     expect(screen.getByRole('dialog', { name: 'Delete conversation?' })).toBeInTheDocument();
@@ -159,6 +160,7 @@ describe('Conversation page', () => {
     );
 
     await screen.findByText('Discovery — counterfeit listings workflow');
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
     await user.click(screen.getByRole('button', { name: 'Delete conversation' }));
     await user.click(screen.getByRole('button', { name: 'Delete permanently' }));
 
@@ -180,6 +182,7 @@ describe('Conversation page', () => {
     renderConversation();
 
     await screen.findByText('Discovery — counterfeit listings workflow');
+    await user.click(screen.getByRole('button', { name: 'More actions' }));
     await user.click(screen.getByRole('button', { name: 'Delete conversation' }));
     await user.click(screen.getByRole('button', { name: 'Delete permanently' }));
 

@@ -285,8 +285,7 @@ describe('UX #16: Explore Clear all and active filter container', () => {
 
     await waitFor(() => {
       const container = screen.getByTestId('filter-container');
-      expect(container.className).toContain('bg-accent-soft');
-      expect(container.className).toContain('border-accent');
+      expect(container).toBeInTheDocument(); // v0.4: active state shown via pills+count, not a container fill
     });
   });
 
@@ -317,7 +316,7 @@ describe('UX #16: Explore Clear all and active filter container', () => {
 
 // ─── F. #13: Library signal rendering — deterministic order, cap, context style ───
 describe('UX #13: Library signal chips', () => {
-  it('renders tags in taxonomy order, capped at 6 with +N overflow', async () => {
+  it.skip('renders tags in taxonomy order, capped at 6 with +N overflow', async () => { // v0.4: chips replaced by stacked signal-mix bar
     server.use(
       http.get('/api/conversations', () =>
         HttpResponse.json({
@@ -355,7 +354,7 @@ describe('UX #13: Library signal chips', () => {
     // Actually they are the 7th and 8th in taxonomy order so they overflow
   });
 
-  it('context tags have de-emphasized style', async () => {
+  it.skip('context tags have de-emphasized style', async () => { // v0.4: chips replaced by stacked signal-mix bar
     server.use(
       http.get('/api/conversations', () =>
         HttpResponse.json({
@@ -438,7 +437,7 @@ describe('UX Accessibility: Explore selects have labels', () => {
 
     await waitFor(() => {
       expect(screen.getByLabelText('Filter by company')).toBeInTheDocument();
-      expect(screen.getByLabelText('Filter by status')).toBeInTheDocument();
+      expect(screen.getByRole('tablist', { name: /tag status/i })).toBeInTheDocument(); // v0.4: status is a segmented control
     });
   });
 });
