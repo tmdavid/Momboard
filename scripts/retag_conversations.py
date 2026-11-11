@@ -154,8 +154,8 @@ def main(argv: list[str] | None = None) -> int:
         first, last = todo[0], todo[-1]
         print(f"  first: #{first['id']} {str(first.get('happened_at'))[:10]}  {first.get('title', '')[:50]}")
         print(f"  last:  #{last['id']} {str(last.get('happened_at'))[:10]}  {last.get('title', '')[:50]}")
-        print(f"  each one deletes that call's AI-suggested highlights and queues a new LLM tagging run "
-              f"(accepted/rejected highlights are kept).")
+        print("  each one deletes that call's AI-suggested highlights and queues a new LLM tagging run "
+              "(accepted/rejected highlights are kept).")
 
     if not todo:
         print("Nothing to do.")
