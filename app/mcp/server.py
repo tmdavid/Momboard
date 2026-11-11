@@ -37,6 +37,7 @@ from app.services import api_tokens as token_service
 logger = logging.getLogger(__name__)
 
 MAX_BODY_BYTES = 1024 * 1024
+PRUNE_INTERVAL_SECONDS = 24 * 60 * 60
 INSTRUCTIONS = """\
 MomBoard is a repository of customer-call evidence. Each call is transcribed, tagged and scored with \
 the Mom Test (did the interviewer ask about real past behaviour rather than pitch and collect compliments?).
@@ -138,6 +139,7 @@ class McpServer:
         )
         self.fastmcp.streamable_http_app()  # creates the session manager
         self.asgi = _Asgi(self.handler)  # what the /mcp route points at
+        self._last_prune = 0.0  # monotonic time of the last audit-log prune; 0 means "not yet"
 
     # ----------------------------------------------------------------- registering tools
 
@@ -224,6 +226,7 @@ class McpServer:
     async def _audit(self, caller: Caller, tool: str, kwargs: dict[str, Any], status: str, started: float, count: int | None) -> None:
         try:
             async with caller.db() as db:
+                await self._prune_if_due(db)
                 await audit.record(
                     db,
                     token_id=caller.token.id,
@@ -236,6 +239,17 @@ class McpServer:
                 )
         except Exception:  # noqa: BLE001 - auditing must never break a tool call
             logger.warning("Could not write the MCP audit record for %s", tool, exc_info=True)
+
+    async def _prune_if_due(self, db: AsyncSession) -> None:
+        """Apply the 90-day audit retention while serving, at most once a day (it also runs at startup)."""
+        now = time.monotonic()
+        if self._last_prune and now - self._last_prune < PRUNE_INTERVAL_SECONDS:
+            return
+        self._last_prune = now
+        try:
+            await audit.prune(db)
+        except Exception:  # noqa: BLE001 - housekeeping must never break a tool call
+            logger.warning("Could not prune the MCP audit log", exc_info=True)
 
     # ----------------------------------------------------------------- lifecycle
 

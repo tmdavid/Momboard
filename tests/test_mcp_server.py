@@ -467,3 +467,39 @@ class TestToolSignatures:
                 assert json.loads(out) == {"needed": 3, "names": ["a", "b"], "maybe_text": "x", "flag": False}
                 bad = await c.post("/mcp", json=rpc("tools/call", {"name": "annotated", "arguments": {"needed": "not a number"}}))
                 assert bad.json()["result"]["isError"] is True            # validated, and reported as a tool error
+
+
+class TestAuditRetentionWhileServing:
+    @pytest.mark.asyncio
+    async def test_old_rows_are_pruned_by_a_running_server_at_most_once_a_day(self, mcp_app, tok, session_factory):
+        tid, plain = tok
+        async with session_factory() as db:
+            await audit.record(db, token_id=tid, token_prefix=plain[:8], tool="ancient", arguments={}, status="ok", duration_ms=1)
+            row = (await db.execute(select(McpCall))).scalars().one()
+            row.created_at = datetime.now(UTC) - timedelta(days=120)
+            await db.commit()
+        async with client(mcp_app, plain) as c:
+            await call(c, "echo")                       # the first call after startup prunes
+            async with session_factory() as db:
+                assert "ancient" not in {r.tool for r in (await db.execute(select(McpCall))).scalars().all()}
+            # a second old row added now survives: pruning already ran within the last day
+            async with session_factory() as db:
+                await audit.record(db, token_id=tid, token_prefix=plain[:8], tool="ancient2", arguments={}, status="ok", duration_ms=1)
+                (await db.execute(select(McpCall).where(McpCall.tool == "ancient2"))).scalars().one().created_at = datetime.now(UTC) - timedelta(days=120)
+                await db.commit()
+            await call(c, "echo")
+            async with session_factory() as db:
+                assert "ancient2" in {r.tool for r in (await db.execute(select(McpCall))).scalars().all()}
+            # a day later it runs again
+            mcp_app.state.mcp._last_prune -= 86401
+            await call(c, "echo")
+            async with session_factory() as db:
+                assert "ancient2" not in {r.tool for r in (await db.execute(select(McpCall))).scalars().all()}
+
+    @pytest.mark.asyncio
+    async def test_a_failing_prune_never_breaks_the_call(self, mcp_app, tok, monkeypatch):
+        async def boom(*a, **k):
+            raise RuntimeError("disk full")
+        monkeypatch.setattr("app.mcp.audit.prune", boom)
+        async with client(mcp_app, tok[1]) as c:
+            assert not (await call(c, "echo")).get("isError")

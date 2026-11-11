@@ -11,6 +11,7 @@ What changed in each release is in [`../CHANGELOG.md`](../CHANGELOG.md). Start w
 | [`deployment/deploy.md`](deployment/deploy.md) | Running on Fly.io: create, back up, restore, roll back, move to PostgreSQL. |
 | [`deployment/demo.md`](deployment/demo.md) | Standing up an internal demo on SQLite and getting conversations into it. |
 | [`deployment/local-llm.md`](deployment/local-llm.md) | Running the models locally with Ollama instead of OpenAI or Bedrock. |
+| [`deployment/mcp.md`](deployment/mcp.md) | Letting Claude read MomBoard over MCP with API tokens: switching it on, privacy, tokens, networking, audit. |
 
 ## Guides
 

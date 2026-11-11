@@ -7,7 +7,7 @@ status and latest additions; this file is the full history.
 
 Tagging that stops mistaking our own reps for customers, hypothesis matching that can find
 quotes nobody tagged, a staged way to retag the whole library, and a round of interface fixes.
-Migration **011** (run automatically by the container; for a from-source install use
+Migrations **011** and **012** (run automatically by the container; for a from-source install use
 `python scripts/migrate_db.py`, which replaces `scripts/migrate_v04.py` and now reads the expected
 revision from the migration files). **Retagging is a separate, deliberate step** — see
 [`documentation/guides/retag-rollout.md`](documentation/guides/retag-rollout.md); nothing is retagged automatically.
@@ -46,6 +46,32 @@ revision from the migration files). **Retagging is a separate, deliberate step**
   cites or a confirmed hypothesis link uses. Before/after snapshots (`/snapshot`, `/compare`) and
   `scripts/retag_rollout.py` run the staged rollout: test set, then a 100-call pilot, a cost
   check, then resumable batches.
+
+**Claude can read MomBoard (MCP server and API tokens)**
+- **API tokens** (Settings → API tokens): `mb_` plus 32 random bytes, shown once, stored as a SHA-256 hash with an
+  8-character prefix. Read-only by default, expiring in 30/90/365 days or never, 10 active per user; members manage
+  their own, admins see and revoke all. A token acts as its owner and never exceeds their role; a read token can
+  only make safe requests, no token can manage tokens, and every failure is the same 401. `Authorization: Bearer`
+  also works on the REST API. `POST/GET /api/tokens`, `POST /api/tokens/{id}/revoke`.
+- **An MCP server at `/mcp`** (Streamable HTTP, stateless; **off unless `MCP_ENABLED=true`**) with **13 read-only
+  tools**: `list_tags`, `search_conversations`, `get_conversation`, `get_transcript`, `search_highlights`,
+  `list_summaries`, `get_summary`, `list_hypotheses`, `get_hypothesis`, `list_decisions`, `get_decision`,
+  `get_insights` and the no-save preview `check_hypothesis_evidence`. Tools call the same handlers as the app, so
+  the per-tag confidence floor and permissions match; quotes are customer speech only; every item has a `url`
+  that opens the source in MomBoard (the Conversation, Hypotheses, Decisions and Summaries pages now honour
+  `?highlight=`, `?hypothesis=`, `?decision=` and `?summary=`).
+- **Privacy**: contact emails and phone numbers are never returned, including inside quotes and transcripts
+  (replaced with `[email removed]` / `[phone removed]`). Everything a tool returns is sent to the AI service the
+  client uses, so confirm your agreement covers customer transcripts first.
+- **Operations**: 60 tool calls a minute per token (HTTP 429 with `Retry-After`), 30-second tool timeout, 1 MB
+  requests, an audit row per call in `mcp_calls` (token prefix, tool, short argument summary, outcome, duration;
+  kept 90 days). Settings → **Connect to Claude** gives the exact URL, the header, Team-plan steps and a Claude
+  Desktop config (with the `mcp-remote` bridge pinned to one version). Guide:
+  [`documentation/deployment/mcp.md`](documentation/deployment/mcp.md).
+- New optional filters on shared endpoints (company name, score range, minimum confidence, customer-only on
+  `/api/conversations`, `/api/highlights` and `/api/stats`); existing callers are unaffected.
+- **Not built**: write tools (`create_hypothesis`, `create_decision`) and OAuth. A connector shared across a Team
+  plan has one identity, so writes wait for per-person sign-in. `MCP_ALLOW_WRITE` is reserved and does nothing yet.
 
 **Interface**
 - Tag filters: a "Most used" label; the Custom dropdown opens a category flyout on hover or click

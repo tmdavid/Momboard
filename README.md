@@ -11,6 +11,7 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 - **Tagging you can measure** — a "Your company" setting marks our own speakers, evidence tags apply to customer turns only, every tag has a confidence floor, a "don't tag when" hint and an example, and `scripts/eval_tagger.py` scores the tagger against a hand-tagged set. See [`documentation/guides/tagger-evaluation.md`](documentation/guides/tagger-evaluation.md).
 - **Hypothesis matching that reads everything** — candidates come from all customer speech (tagged or not), then a strict judge with a verification pass; confirmed untagged quotes become accepted highlights. See [`documentation/guides/matching-evaluation.md`](documentation/guides/matching-evaluation.md).
 - **A staged retag rollout** — taxonomy versioning, resumable batches with a dry run, protection for highlights that decisions and confirmed beliefs rely on, and before/after snapshots. See [`documentation/guides/retag-rollout.md`](documentation/guides/retag-rollout.md). Nothing is retagged automatically.
+- **Claude can read MomBoard** — an optional MCP server at `/mcp` (off by default, read-only) with 13 tools to search conversations, quotes, hypotheses and decisions and cite them with links back. Access uses API tokens made in Settings. See [`documentation/deployment/mcp.md`](documentation/deployment/mcp.md), including what leaves MomBoard when you connect it.
 - **Interface** — a Library preview panel, rows grouped by day, headline cards, a single review bar with inline Accept / Reject, weekly Insights trends, a Custom-tags flyout that reads properly, and numbers and dates formatted the same way everywhere.
 
 ### Earlier additions (v0.4)
@@ -199,6 +200,8 @@ Copy `.env.example` to `.env`. Important variables:
 | `LLM_MODEL_*` | OpenAI model selection for each pipeline stage |
 | `WORKER_POLL_INTERVAL` | Database queue polling interval |
 | `WORKER_MAX_RETRIES` | Attempts before a job becomes terminally failed |
+| `MCP_ENABLED` / `PUBLIC_BASE_URL` | Serve the read-only MCP endpoint at `/mcp`, and the public address its links use (default off) |
+| `MCP_RATE_LIMIT_PER_MINUTE` / `MCP_TOOL_TIMEOUT_SECONDS` | Tool calls per token per minute (60) and the per-call time limit (30 s) |
 | `HYPOTHESIS_GROUNDED_MIN_SUPPORT` / `_MIN_COMPANIES` / `_MAX_CONTRADICT` | Grounded needs this many confirmed supporting quotes from this many companies, and at most this many contradicting (defaults 3, 2, 1) |
 | `HYPOTHESIS_CONTESTED_MIN_EACH` | Contested needs this many confirmed quotes on each side (default 2) |
 | `HYPOTHESIS_REFUTED_MIN_CONTRADICT` / `_RATIO` | Refuted needs this many contradicting quotes, and more than ratio × the supporting ones (defaults 3, 2) |
@@ -240,7 +243,7 @@ Do not run multiple application processes against the same SQLite file. Move to 
 
 ### Upgrading to v0.5
 
-v0.5 adds migration 011 (additive: a settings table, tag floor/hint/example columns and per-call taxonomy stamps). The production container applies it on start; it does **not** run the taxonomy seed or retag anything. From source, stop the app and run `python scripts/migrate_db.py` (it backs the database up, runs `alembic upgrade head`, verifies the schema, and reads the expected revision from `alembic/versions`; `--dry-run` previews and `--verify-only` checks a running container with `docker exec -i <container> python - --verify-only < scripts/migrate_db.py`). Then rebuild the frontend.
+v0.5 adds migrations 011 and 012 (additive: a settings table, tag floor/hint/example columns, per-call taxonomy stamps, and the API-token and MCP-audit tables). The production container applies it on start; it does **not** run the taxonomy seed or retag anything. From source, stop the app and run `python scripts/migrate_db.py` (it backs the database up, runs `alembic upgrade head`, verifies the schema, and reads the expected revision from `alembic/versions`; `--dry-run` previews and `--verify-only` checks a running container with `docker exec -i <container> python - --verify-only < scripts/migrate_db.py`). Then rebuild the frontend.
 
 After upgrading: open **Settings → Your company** and fill it in, review your tags' floors and hints, and only then follow [`documentation/guides/retag-rollout.md`](documentation/guides/retag-rollout.md). Until calls are retagged, old and new tagging sit side by side and Library/Explore say so.
 
