@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sse_starlette.sse import EventSourceResponse
@@ -445,26 +445,11 @@ async def reprocess_conversation(
     if convo is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    # Delete only AI-suggested (not accepted/rejected by human)
-    await db.execute(
-        delete(Highlight).where(
-            Highlight.conversation_id == conversation_id,
-            Highlight.origin == "ai",
-            Highlight.status == "suggested",
-        )
-    )
+    # Replace only AI suggestions nothing depends on (never accepted/rejected ones, and never a
+    # highlight a decision cites or a confirmed hypothesis link uses), then queue the tag job.
+    from app.services.retag import queue_retag
 
-    # Enqueue tag job (will chain to analyze)
-    job = Job(
-        conversation_id=conversation_id,
-        kind="tag",
-        payload={"conversation_id": conversation_id},
-        status="queued",
-    )
-    db.add(job)
-    await db.flush()
-
-    convo.status = "processing"
+    await queue_retag(db, convo)
     return {"id": convo.id, "status": "processing"}
 
 
