@@ -2384,9 +2384,10 @@ class TestIntakeSegmentAndConversationRules:
         )
 
     @pytest.mark.asyncio
-    async def test_one_match_per_conversation_keeps_the_best(
+    async def test_two_matches_from_one_call_are_both_kept(
         self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
     ):
+        """v0.5 D8: up to 2 per call (this replaces the earlier one-per-call rule)."""
         from app.services.hypothesis_intake import preview_intake
 
         conv = hyp_seeded["highlight1"].conversation_id
@@ -2397,7 +2398,25 @@ class TestIntakeSegmentAndConversationRules:
         ))
         async with session_factory() as db:
             out = await preview_intake(db, "Customers rely on manual exports weekly", llm=stub)
-        assert [m["highlight_id"] for m in out["matches"]] == [extra[0]]
+        assert [m["highlight_id"] for m in out["matches"]] == [extra[0], hyp_seeded["highlight1"].id]
+
+    @pytest.mark.asyncio
+    async def test_a_third_match_from_one_call_is_dropped(
+        self, session_factory: async_sessionmaker[AsyncSession], hyp_seeded: dict
+    ):
+        from app.services.hypothesis_intake import preview_intake
+
+        conv = hyp_seeded["highlight1"].conversation_id
+        extra = await _more_highlights(session_factory, conv, 2, "Same call")
+        stub = _StubIntakeLLM(self._out(
+            {"highlight_id": hyp_seeded["highlight1"].id, "relation": "supports", "confidence": 0.9},
+            {"highlight_id": extra[0], "relation": "supports", "confidence": 0.8},
+            {"highlight_id": extra[1], "relation": "supports", "confidence": 0.7},
+        ))
+        async with session_factory() as db:
+            out = await preview_intake(db, "Customers rely on manual exports weekly", llm=stub)
+        kept = [m["highlight_id"] for m in out["matches"]]
+        assert kept == [hyp_seeded["highlight1"].id, extra[0]]   # strongest two; the 0.7 one is cut
 
     @pytest.mark.asyncio
     async def test_second_match_in_a_conversation_kept_when_it_says_the_opposite(
@@ -2415,6 +2434,7 @@ class TestIntakeSegmentAndConversationRules:
         async with session_factory() as db:
             out = await preview_intake(db, "Customers rely on manual exports weekly", llm=stub)
         kept = {m["highlight_id"]: m["relation"] for m in out["matches"]}
+        # Two slots per call: the strongest, then the opposite stance beats a second agreeing quote.
         assert kept == {hyp_seeded["highlight1"].id: "supports", extra[1]: "contradicts"}
 
     @pytest.mark.asyncio

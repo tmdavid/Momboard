@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "description": "SYNTHETIC example of the known-beliefs format. Keep the real list (it names real calls) OUTSIDE the repo; see docs/matching-evaluation.md.",
+  "beliefs": [
+    {
+      "belief": "Law firms won't buy an annual plan without a pilot first",
+      "segment": "law firm",
+      "expected": [{"conversation_title_contains": "Pierce"}],
+      "unrelated": [{"conversation_title_contains": "Watch"}]
+    }
+  ]
+}

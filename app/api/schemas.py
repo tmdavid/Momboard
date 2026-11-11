@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # --- Auth ---
 
@@ -354,7 +354,11 @@ class HypothesisIntakeRequest(BaseModel):
 
 
 class IntakeMatchResponse(BaseModel):
-    highlight_id: int
+    # Stable identity of the quote: 'h<highlight id>' when it was tagged, 'u<utterance id>' when it
+    # is untagged customer speech found by the broad search (v0.5 D8).
+    key: str = ""
+    tagged: bool = True
+    highlight_id: int | None = None  # None for untagged speech
     quote: str
     tag_key: str
     conversation_id: int
@@ -378,8 +382,19 @@ class HypothesisIntakeResponse(BaseModel):
 
 
 class IntakeConfirmedLink(BaseModel):
-    highlight_id: int
+    """A quote the human confirmed as evidence: an existing highlight, or untagged customer speech
+    (an utterance), which becomes an accepted highlight when saved. Exactly one must be given."""
+
+    highlight_id: int | None = None
+    utterance_id: int | None = None
+    quote: str | None = Field(default=None, max_length=2000)  # the excerpt the preview showed
     stance: Literal["supports", "contradicts"]
+
+    @model_validator(mode="after")
+    def _exactly_one_target(self) -> "IntakeConfirmedLink":
+        if (self.highlight_id is None) == (self.utterance_id is None):
+            raise ValueError("Give exactly one of highlight_id or utterance_id")
+        return self
 
 
 class HypothesisIntakeCommit(BaseModel):

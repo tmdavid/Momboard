@@ -237,6 +237,12 @@ class IntakeMatch(BaseModel):
     in_segment: Literal["yes", "no", "unknown"] | None = None
 
 
+class SearchTerms(BaseModel):
+    """Words and short phrases a customer might use to talk about a belief (D8 stage 1)."""
+
+    terms: list[str] = Field(default_factory=list, max_length=40)
+
+
 class IntakeMatchOutput(BaseModel):
     matches: list[IntakeMatch] = Field(default_factory=list)
     # Past-behavior questions to validate the belief when evidence is thin.

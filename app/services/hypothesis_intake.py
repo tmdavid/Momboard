@@ -1,16 +1,16 @@
-"""T48: evidence-gated hypothesis intake — preview (read-only, saves nothing).
+"""T48 / v0.5 D8: evidence-gated hypothesis intake - preview (read-only, saves nothing).
 
-Given a typed belief, reuse the corpus retrieval (T42) to surface candidate
-highlights, have the LLM score each candidate (supports/contradicts/unrelated)
-over the provided candidates only, and return:
+Matching is two stages (the first version was too strict: it found 1 quote in 1,000 calls):
 
-  - matches: scored, validated highlight candidates (ids checked against the set)
-  - grounding_preview: the band the hypothesis *would* have if the human confirms
-    the strong matches (computed with the shared `compute_band` rules)
-  - suggested_questions: past-behavior Mom Test questions, generated when evidence
-    is thin, so a no-match belief gets a validation plan rather than a blank save.
+  1. FIND broadly (``evidence_search``): the belief is widened into search terms and every
+     customer utterance is scanned, so untagged speech counts. Up to 50 candidates.
+  2. JUDGE strictly (here): the model labels each candidate supports / contradicts / unrelated
+     with a one-line reason; a verification pass re-checks the survivors. We keep the strongest,
+     at most 2 per call and 10 overall.
 
-This NEVER writes a Hypothesis or HypothesisLink. Committing is a separate step.
+Returns the matches, a ``grounding_preview`` (the band the belief would have if the human confirms
+the strong matches, using the shared ``compute_band`` rules) and past-behaviour Mom Test questions
+for thin evidence. This NEVER writes a Hypothesis or a HypothesisLink; committing is separate.
 """
 
 import logging
@@ -21,15 +21,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.llm.schemas import IntakeMatchOutput
 from app.models import Highlight
-from app.services.corpus_chat import _retrieve_candidates
+from app.services.evidence_search import Candidate, find_candidates
 from app.services.hypothesis_grounding import compute_band
 
 logger = logging.getLogger(__name__)
 
 # A match at or above this confidence is "strong" enough to count toward the
 # grounding preview. Deliberately a module constant for now; promote to settings
-# when tuning against real data (see T48 design — threshold calibration is empirical).
+# when tuning against real data (see T48 design - threshold calibration is empirical).
 STRONG_CONFIDENCE = 0.6
+CANDIDATE_LIMIT = 50
+MAX_MATCHES = 10
+MAX_PER_CALL = 2
 
 _HYPOTHETICAL_RE = re.compile(r"\bwould you\b|\bwill you\b", re.IGNORECASE)
 
@@ -43,23 +46,15 @@ async def preview_intake(
     filters: dict[str, Any] | None = None,
     min_confidence: float = 0.6,
 ) -> dict[str, Any]:
-    """Preview evidence for a typed belief. Read-only; saves nothing.
-
-    Matching rules (PRD P0): candidates are restricted to customer turns (our reps'
-    speech and compliment-tagged highlights are excluded), each surviving match is
-    enriched with its source (company/contact/date/utterance_id), and matches scored
-    below `min_confidence` are dropped. A verification pass re-checks that each quote
-    actually speaks to the belief.
-    """
-    # Stage 1: retrieve candidates (code, not LLM) — reuses the T42 retriever.
-    candidates = await _retrieve_candidates(db, statement, filters=filters)
-    # Restrict to customer turns: drop our-side utterances and compliment highlights,
-    # which never constitute evidence for a belief about the customer.
-    candidates = [h for h in candidates if await _is_customer_evidence(db, h)]
-    candidate_by_id: dict[int, Highlight] = {h.id: h for h in candidates}
+    """Preview evidence for a typed belief. Read-only; saves nothing."""
+    # Stage 1: find candidates broadly (code + search terms, over all customer speech).
+    candidates = await find_candidates(
+        db, statement, segment=segment, llm=llm, limit=CANDIDATE_LIMIT, filters=filters
+    )
+    by_prompt_id: dict[int, Candidate] = {c.prompt_id: c for c in candidates}
 
     if not candidates:
-        # No corpus evidence at all → a hunch. Still generate validation questions.
+        # No corpus evidence at all -> a hunch. Still generate validation questions.
         questions = await _suggest_questions(statement, segment, llm)
         return {
             "statement": statement,
@@ -69,18 +64,13 @@ async def preview_intake(
             "suggested_questions": questions,
         }
 
-    # Stage 2: LLM scores the provided candidates only. When the belief names a segment,
-    # each candidate also carries its company (name + notes) so the model can judge
-    # whether it belongs to that segment — there is no structured segment field to filter on.
-    candidate_data: list[dict[str, Any]] = []
-    for h in candidates[:30]:
-        item: dict[str, Any] = {"id": h.id, "tag": h.tag_key, "quote": h.quote}
-        if segment:
-            info = await _company_info(db, h)
-            item["company"] = info["name"]
-            if info["notes"]:
-                item["company_notes"] = info["notes"]
-        candidate_data.append(item)
+    # Stage 2: the model judges the candidates, strictly. Untagged speech has a negative id.
+    lines = []
+    for c in candidates:
+        parts = [f"id={c.prompt_id}", f"company={c.company_name or 'unknown'}"]
+        if segment and c.company_notes:
+            parts.append(f"notes={c.company_notes}")
+        lines.append(" | ".join(parts) + f' | "{c.quote}"')
     segment_rule = (
         f"- The belief targets the segment '{segment}'. For each match set in_segment to 'yes' "
         "if the quote's company clearly belongs to that segment, 'no' if it clearly does not, "
@@ -91,52 +81,56 @@ async def preview_intake(
     prompt = (
         "A user proposes this belief about customers:\n"
         f'  "{statement}"\n\n'
-        "Below are candidate evidence highlights from real calls. For EACH that is "
-        "relevant, judge whether it SUPPORTS or CONTRADICTS the belief; ignore the rest.\n\n"
+        "Below are candidate quotes from real calls (customer speech only). Judge EACH one "
+        "STRICTLY: it SUPPORTS the belief only if it states or clearly implies it, CONTRADICTS "
+        "only if it clearly says the opposite, otherwise it is 'unrelated'. Do not stretch a quote "
+        "to fit. Give a one-line reason for each match in rationale.\n\n"
         "HARD RULES:\n"
-        "- Only reference highlight IDs from the candidates below.\n"
+        "- Only reference ids from the candidates below (copy the number exactly, including a minus sign).\n"
         "- relation must be 'supports', 'contradicts', or 'unrelated'.\n"
         "- Do NOT invent evidence or sentiment beyond the quotes.\n"
         "- Also propose up to 3 PAST-BEHAVIOR questions to validate the belief "
         "(what they did/how they handle it today). Never use 'would you'/'will you'.\n"
         f"{segment_rule}\n"
-        f"CANDIDATES:\n{candidate_data}"
+        "CANDIDATES:\n" + "\n".join(lines)
     )
     result: IntakeMatchOutput = await llm.generate(
         prompt=prompt, schema=IntakeMatchOutput, model="corpus_chat"
     )
 
-    # Validate: keep only relevant matches that reference real candidate IDs and
-    # score at or above min_confidence.
+    # Validate: keep only relevant matches that reference real candidates and score at or
+    # above min_confidence.
     matches: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for m in result.matches:
         if m.relation == "unrelated":
             continue
-        hl = candidate_by_id.get(m.highlight_id)
-        if hl is None:
-            logger.warning("Intake dropped match with invalid highlight_id=%s", m.highlight_id)
+        cand = by_prompt_id.get(m.highlight_id)
+        if cand is None:
+            logger.warning("Intake dropped match with invalid id=%s", m.highlight_id)
             continue
-        if m.confidence < min_confidence:
+        if cand.key in seen or m.confidence < min_confidence:
             continue
         # Verification: re-check the quote actually speaks to the belief.
-        if not await _verify_match(statement, hl.quote, m.relation, llm):
-            logger.info("Intake verification dropped highlight_id=%s", hl.id)
+        if not await _verify_match(statement, cand.quote, m.relation, llm):
+            logger.info("Intake verification dropped %s", cand.key)
             continue
-        source = await _source_for(db, hl)
+        seen.add(cand.key)
         in_segment = (m.in_segment or "unknown") if segment else None
         rationale = m.rationale
         if in_segment == "no":
-            note = f"Outside the {segment} segment."
-            rationale = f"{rationale} {note}".strip()
+            rationale = f"{rationale} Outside the {segment} segment.".strip()
         matches.append({
-            "highlight_id": hl.id,
-            "quote": hl.quote,
-            "tag_key": hl.tag_key,
-            "conversation_id": hl.conversation_id,
-            "utterance_id": hl.utterance_id,
-            "company_name": source["company_name"],
-            "contact_name": source["contact_name"],
-            "conversation_date": source["conversation_date"],
+            "key": cand.key,
+            "tagged": cand.highlight_id is not None,
+            "highlight_id": cand.highlight_id,
+            "quote": cand.quote,
+            "tag_key": cand.tag_key,
+            "conversation_id": cand.conversation_id,
+            "utterance_id": cand.utterance_id,
+            "company_name": cand.company_name,
+            "contact_name": cand.contact_name,
+            "conversation_date": cand.conversation_date,
             "in_segment": in_segment,
             "relation": m.relation,
             "confidence": m.confidence,
@@ -145,8 +139,9 @@ async def preview_intake(
             "strong": m.confidence >= STRONG_CONFIDENCE and in_segment != "no",
         })
 
-    matches = _one_per_conversation(matches)
+    matches = _cap_per_call(matches, MAX_PER_CALL)
     matches.sort(key=lambda x: (_SEGMENT_RANK.get(x["in_segment"] or "", 0), -x["confidence"]))
+    matches = matches[:MAX_MATCHES]
 
     strong_supports = sum(1 for x in matches if x["strong"] and x["relation"] == "supports")
     strong_contradicts = sum(1 for x in matches if x["strong"] and x["relation"] == "contradicts")
@@ -166,7 +161,7 @@ async def preview_intake(
 
     # Questions: always generated by the model; apply the past-behavior post-validator.
     questions = _clean_questions(result.suggested_questions)
-    # If there's no strong evidence, the questions matter most — ensure we have some.
+    # If there's no strong evidence, the questions matter most - ensure we have some.
     if not questions and strong_supports == 0 and strong_contradicts == 0:
         questions = await _suggest_questions(statement, segment, llm)
 
@@ -186,20 +181,26 @@ COMPLIMENT_TAGS = {"compliment"}
 _SEGMENT_RANK = {"yes": 0, "unknown": 1, "no": 2}
 
 
-def _one_per_conversation(matches: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """At most one match per conversation, unless the quotes say different things.
+def _cap_per_call(matches: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    """At most ``limit`` matches per conversation, strongest first.
 
-    Highest confidence wins. A further match from the same call is kept only if it takes
-    the opposite stance of those already kept (one supports + one contradicts at most) —
-    that is the interesting case: the same customer pulling both ways.
+    When a call has more than the cap, prefer variety of stance: after its strongest match, take
+    the strongest one that says the OPPOSITE (the same customer pulling both ways is the
+    interesting case) before taking a second one that agrees.
     """
-    kept: list[dict[str, Any]] = []
-    stances: dict[int, set[str]] = {}
+    by_call: dict[int, list[dict[str, Any]]] = {}
     for m in sorted(matches, key=lambda x: -x["confidence"]):
-        seen = stances.setdefault(m["conversation_id"], set())
-        if not seen or m["relation"] not in seen:
-            kept.append(m)
-            seen.add(m["relation"])
+        by_call.setdefault(m["conversation_id"], []).append(m)
+    kept: list[dict[str, Any]] = []
+    for group in by_call.values():
+        chosen = [group[0]]
+        rest = group[1:]
+        while rest and len(chosen) < limit:
+            opposite = next((m for m in rest if m["relation"] != chosen[0]["relation"]), None)
+            pick = opposite if opposite is not None else rest[0]
+            chosen.append(pick)
+            rest.remove(pick)
+        kept.extend(chosen)
     return kept
 
 

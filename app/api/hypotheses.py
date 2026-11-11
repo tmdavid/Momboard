@@ -40,6 +40,11 @@ from app.models import (
     User,
     utcnow,
 )
+from app.services.evidence_highlight import (
+    EvidenceError,
+    UtteranceNotFoundError,
+    highlight_for_utterance,
+)
 from app.services.hypothesis_grounding import (
     band_rules,
     compute_band,
@@ -393,16 +398,26 @@ async def commit_hypothesis_intake(
         await db.flush()
 
         for item in body.confirmed:
-            highlight = await db.get(Highlight, item.highlight_id)
-            if highlight is None:
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Highlight {item.highlight_id} not found",
-                )
+            if item.utterance_id is not None:
+                # Untagged customer speech found by the broad search: record it as an
+                # accepted highlight (or reuse the one already on that line).
+                try:
+                    highlight = await highlight_for_utterance(db, item.utterance_id, item.quote)
+                except UtteranceNotFoundError as err:
+                    raise HTTPException(status_code=404, detail=str(err)) from err
+                except EvidenceError as err:
+                    raise HTTPException(status_code=422, detail=str(err)) from err
+            else:
+                highlight = await db.get(Highlight, item.highlight_id)  # type: ignore[arg-type]
+                if highlight is None:
+                    raise HTTPException(
+                        status_code=404,
+                        detail=f"Highlight {item.highlight_id} not found",
+                    )
             db.add(
                 HypothesisLink(
                     hypothesis_id=hyp.id,
-                    highlight_id=item.highlight_id,
+                    highlight_id=highlight.id,
                     stance=item.stance,
                     origin="human",
                     status="confirmed",
