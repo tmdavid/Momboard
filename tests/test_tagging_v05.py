@@ -89,10 +89,10 @@ async def test_filler_is_not_stored_but_a_concrete_commitment_is(session_factory
     fake = llm_with(
         hl(1, "commitment", "Yes.", 0.7),
         hl(2, "commitment", "Yes, 2 p.m. Thursday works", 0.9),
-        hl(3, "objection", "We will discuss this.", 0.6),
+        hl(3, "sample_tag", "We will discuss this.", 0.6),
     )
     async with session_factory() as db:
-        db.add(Tag(key="objection", emoji="✋", name="Objection", origin="custom", category="sales", is_active=True, sort_order=60))
+        db.add(Tag(key="sample_tag", emoji="✋", name="Sample tag", origin="custom", category="sales", is_active=True, sort_order=60))
         await db.commit()
     async with session_factory() as db:
         await run_tag(db, cid, fake)

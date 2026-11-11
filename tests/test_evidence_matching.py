@@ -16,7 +16,7 @@ from app.services.evidence_search import best_excerpt, find_candidates, search_t
 from app.services.hypothesis_intake import preview_intake
 
 BELIEF = "Law firms won't buy an annual plan without a pilot first"
-PILOT_LINE = "Honestly we would want to run a pilot with two attorneys before we sign anything annual."
+PILOT_LINE = "Honestly we would want to run a pilot with two staff before we sign anything annual."
 
 
 class RoutedLLM:
@@ -58,13 +58,13 @@ async def add_call(db, company, lines, *, source="upload", title=None):
 async def corpus(session_factory: async_sessionmaker[AsyncSession]):
     async with session_factory() as db:
         await seed_tags(db)
-        law, shop = Company(name="Pierce Law Group", notes="law firm, 40 attorneys"), Company(name="Watch Shop")
+        law, shop = Company(name="Example Law LLP", notes="law firm, 40 attorneys"), Company(name="Watch Shop")
         db.add_all([law, shop])
         await db.flush()
         convo_law, law_utts = await add_call(db, law, [
             ("Rep", "us", "Would an annual plan work for your firm?"),
-            ("Pat", "them", PILOT_LINE),
-            ("Pat", "them", "Okay."),
+            ("Contact A", "them", PILOT_LINE),
+            ("Contact A", "them", "Okay."),
         ])
         convo_shop, shop_utts = await add_call(db, shop, [
             ("Rep", "us", "How do you run takedowns today?"),
@@ -134,7 +134,7 @@ class TestFindCandidates:
         assert corpus["law"] in by_conv
         hit = by_conv[corpus["law"]]
         assert hit.highlight_id is None and hit.utterance_id == corpus["law_utts"][1]   # untagged
-        assert hit.quote == PILOT_LINE and hit.company_name == "Pierce Law Group"
+        assert hit.quote == PILOT_LINE and hit.company_name == "Example Law LLP"
 
     @pytest.mark.asyncio
     async def test_never_returns_our_side_filler_or_simulated_calls(self, session_factory, corpus):
@@ -154,7 +154,7 @@ class TestFindCandidates:
     async def test_prefers_the_existing_highlight_on_an_utterance(self, session_factory, corpus):
         async with session_factory() as db:
             h = Highlight(conversation_id=corpus["law"], utterance_id=corpus["law_utts"][1], tag_key="money",
-                          quote="we would want to run a pilot with two attorneys", status="suggested", origin="ai", confidence=0.9)
+                          quote="we would want to run a pilot with two staff", status="suggested", origin="ai", confidence=0.9)
             db.add(h)
             await db.commit()
             found = await find_candidates(db, BELIEF, segment=None, llm=RoutedLLM(terms=["pilot"]))
@@ -166,7 +166,7 @@ class TestFindCandidates:
     async def test_a_below_floor_highlight_is_not_reused(self, session_factory, corpus):
         async with session_factory() as db:
             db.add(Highlight(conversation_id=corpus["law"], utterance_id=corpus["law_utts"][1], tag_key="pain",
-                             quote="a pilot with two attorneys", status="suggested", origin="ai", confidence=0.1))
+                             quote="a pilot with two staff", status="suggested", origin="ai", confidence=0.1))
             await db.commit()
             found = await find_candidates(db, BELIEF, segment=None, llm=RoutedLLM(terms=["pilot"]))
         hit = next(c for c in found if c.conversation_id == corpus["law"])
@@ -181,7 +181,7 @@ class TestFindCandidates:
             await add_call(db, both, [("Lee", "them", "We discussed a pilot before any annual plan was even on the table.")])
             await db.commit()
             found = await find_candidates(db, BELIEF, segment="law firm", llm=RoutedLLM(terms=["pilot"]))
-        assert found[0].company_name == "Pierce Law Group"     # name/notes match the segment -> first
+        assert found[0].company_name == "Example Law LLP"     # name/notes match the segment -> first
 
     @pytest.mark.asyncio
     async def test_diversifies_across_calls(self, session_factory, corpus):
@@ -235,7 +235,7 @@ class TestPreviewUsesBothStages:
         match = next(m for m in out["matches"] if m["conversation_id"] == corpus["law"])
         assert match["quote"] == PILOT_LINE and match["highlight_id"] is None and match["tagged"] is False
         assert match["utterance_id"] == corpus["law_utts"][1] and match["key"] == f"u{corpus['law_utts'][1]}"
-        assert match["company_name"] == "Pierce Law Group" and match["strong"] is True
+        assert match["company_name"] == "Example Law LLP" and match["strong"] is True
 
     @pytest.mark.asyncio
     async def test_at_most_two_per_call_and_ten_overall_strongest_first(self, session_factory, corpus):
@@ -308,7 +308,7 @@ class TestCommitUntaggedEvidence:
     async def test_reuses_an_existing_highlight_on_that_utterance(self, auth_client: AsyncClient, session_factory, corpus):
         uid = corpus["law_utts"][1]
         async with session_factory() as db:
-            h = Highlight(conversation_id=corpus["law"], utterance_id=uid, tag_key="money", quote="pilot with two attorneys", status="suggested", origin="ai", confidence=0.8)
+            h = Highlight(conversation_id=corpus["law"], utterance_id=uid, tag_key="money", quote="pilot with two staff", status="suggested", origin="ai", confidence=0.8)
             db.add(h)
             await db.commit()
             hid = h.id

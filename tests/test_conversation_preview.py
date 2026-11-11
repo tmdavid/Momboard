@@ -11,14 +11,14 @@ async def make(db, *, analysis=None, status="ready", with_company=True):
     await seed_tags(db)
     co = None
     if with_company:
-        co = Company(name="Pierce Law Group")
+        co = Company(name="Example Law LLP")
         db.add(co)
         await db.flush()
     c = Conversation(title="Pilot discussion", company_id=co.id if co else None, status=status, source="upload",
                      raw_transcript="x", transcript_format="name_colon")
     db.add(c)
     await db.flush()
-    u = Utterance(conversation_id=c.id, idx=0, speaker_label="Pat", speaker_side="them", text="We need a pilot first.")
+    u = Utterance(conversation_id=c.id, idx=0, speaker_label="Contact A", speaker_side="them", text="We need a pilot first.")
     db.add(u)
     await db.flush()
     if analysis is not None:
@@ -49,7 +49,7 @@ async def test_preview_returns_the_summary_pains_score_and_followups(auth_client
     r = await auth_client.get(f"/api/conversations/{cid}/preview")
     assert r.status_code == 200
     body = r.json()
-    assert body["id"] == cid and body["title"] == "Pilot discussion" and body["company_name"] == "Pierce Law Group"
+    assert body["id"] == cid and body["title"] == "Pilot discussion" and body["company_name"] == "Example Law LLP"
     assert body["summary"] == "They want a pilot before an annual contract."
     assert [p["pain"] for p in body["top_pains"]] == [
         "Manual takedown review eats a day a week", "No way to prove coverage to clients", "Three people maintain the spreadsheet"]

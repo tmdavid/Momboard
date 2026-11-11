@@ -1719,8 +1719,8 @@ describe('Hypotheses PRD: band rules in the UI', () => {
 describe('v0.5 D8: untagged evidence in the evidence check', () => {
   const untagged = {
     key: 'u501', tagged: false, highlight_id: null, utterance_id: 501, tag_key: null, conversation_id: 7,
-    quote: 'We would want a pilot with two attorneys before any annual contract.',
-    company_name: 'Pierce Law Group', contact_name: 'Pat', conversation_date: '2026-11-02',
+    quote: 'We would want a pilot with two staff before any annual contract.',
+    company_name: 'Example Law LLP', contact_name: 'Contact A', conversation_date: '2026-11-02',
     relation: 'supports', confidence: 0.91, rationale: 'They ask for a pilot first.', strong: true,
   };
   const tagged = { ...untagged, key: 'h12', tagged: true, highlight_id: 12, utterance_id: 90, tag_key: 'money',
@@ -1750,7 +1750,7 @@ describe('v0.5 D8: untagged evidence in the evidence check', () => {
     const taggedBox = within(panel).getByRole('checkbox', { name: /confirm evidence 12/i });
     expect(untaggedBox).toBeChecked();
     expect(taggedBox).toBeChecked();
-    expect(within(panel).getByText(/Pierce Law Group · Pat · 2 Nov 2026/)).toBeInTheDocument();
+    expect(within(panel).getByText(/Example Law LLP · Contact A · 2 Nov 2026/)).toBeInTheDocument();
 
     // Untick one: only the other is saved.
     await user.click(taggedBox);

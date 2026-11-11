@@ -133,21 +133,21 @@ class TestStaleCounts:
 
     @pytest.mark.asyncio
     async def test_legacy_estimate_old_calls_before_a_tags_first_use_are_stale(self, session_factory):
-        """Objection was added to the live taxonomy AFTER most calls were tagged, but it has no
+        """Sample tag was added to the live taxonomy AFTER most calls were tagged, but it has no
         version stamp. Estimate from the data: calls tagged well before its first use predate it."""
         now = utcnow()
         async with session_factory() as db:
             await seed_tags(db)
-            await db.execute(Tag.__table__.insert().values(key="objection", emoji="x", name="Objection", origin="custom", is_active=True, sort_order=60, min_confidence=0.5, added_in_version=0))
+            await db.execute(Tag.__table__.insert().values(key="sample_tag", emoji="x", name="Sample tag", origin="custom", is_active=True, sort_order=60, min_confidence=0.5, added_in_version=0))
             early = await add_call(db, "early", version=None)
             await add_ai_highlight(db, early, "pain", now - timedelta(days=30))
             late = await add_call(db, "late", version=None)
             await add_ai_highlight(db, late, "pain", now - timedelta(days=1))
-            await add_ai_highlight(db, late, "objection", now - timedelta(days=1))   # first use of the tag
+            await add_ai_highlight(db, late, "sample_tag", now - timedelta(days=1))   # first use of the tag
             await db.commit()
-            counts = await stale_call_counts(db, ["objection"])
-        assert counts["objection"].stale_calls == 1       # only 'early'; 'late' produced the first use itself
-        assert counts["objection"].total_calls == 2
+            counts = await stale_call_counts(db, ["sample_tag"])
+        assert counts["sample_tag"].stale_calls == 1       # only 'early'; 'late' produced the first use itself
+        assert counts["sample_tag"].total_calls == 2
 
     @pytest.mark.asyncio
     async def test_unused_legacy_tag_has_no_basis_for_a_claim(self, session_factory):

@@ -25,7 +25,7 @@ function mockTags() {
     mk('pr_imp', 'Product: Impersonation', { category: 'product', sort_order: 20 }),
     mk('pr_bill', 'Product - Billing', { category: 'product', sort_order: 21 }),
     mk('ch_slack', 'Slack', { category: 'channel', sort_order: 22 }),
-    mk('sa_obj', 'Sales: Objection', { category: 'sales', sort_order: 23 }),
+    mk('sa_obj', 'Sales: Sample tag', { category: 'sales', sort_order: 23 }),
     mk('x_other', 'Product: Pricing', { category: 'sales', sort_order: 24 }),   // different category: keep its prefix
   ];
   server.use(http.get('/api/tags', () => HttpResponse.json([...core, ...custom])));
@@ -149,7 +149,7 @@ describe('U2: Custom flyout', () => {
     expect(within(fly).getByRole('menuitemcheckbox', { name: /🔹 Billing$/ })).toBeInTheDocument();         // not "Product - Billing"
     await user.click(within(panel).getByRole('button', { name: /sales/i }));
     const sales = screen.getByRole('menu', { name: /sales/i });
-    expect(within(sales).getByRole('menuitemcheckbox', { name: /🔹 Objection$/ })).toBeInTheDocument();
+    expect(within(sales).getByRole('menuitemcheckbox', { name: /🔹 Sample tag$/ })).toBeInTheDocument();
     expect(within(sales).getByRole('menuitemcheckbox', { name: /🔹 Product: Pricing$/ })).toBeInTheDocument();   // a different category's prefix stays
   });
 

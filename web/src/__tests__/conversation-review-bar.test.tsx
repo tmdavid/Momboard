@@ -8,7 +8,7 @@ import { server } from '../test/mocks/server';
 import { renderWithProviders } from '../test/render';
 import { ConversationPage } from '../pages/ConversationPage';
 
-const utt = (id: number, text: string, side = 'them') => ({ id, conversation_id: 1, idx: id, speaker_label: side === 'us' ? 'Rep' : 'Pat', speaker_side: side, text, start_ms: null });
+const utt = (id: number, text: string, side = 'them') => ({ id, conversation_id: 1, idx: id, speaker_label: side === 'us' ? 'Rep' : 'Contact A', speaker_side: side, text, start_ms: null });
 const hl = (id: number, utterance_id: number, tag_key: string, status: string, confidence: number | null) => ({
   id, conversation_id: 1, utterance_id, tag_key, quote: `quote ${id}`, char_start: null, char_end: null, note: null,
   confidence, origin: 'ai', status, created_at: '2026-11-02T09:00:00Z',

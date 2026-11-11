@@ -30,7 +30,7 @@ repository**.
     {
       "belief": "Law firms won't buy an annual plan without a pilot first",
       "segment": "law firm",
-      "expected":  [{"conversation_title_contains": "Pierce"}],
+      "expected":  [{"conversation_title_contains": "Example"}],
       "unrelated": [{"conversation_title_contains": "Watch"}]
     }
   ]

@@ -14,7 +14,7 @@ const render = () =>
 const item = (id: number, over: Record<string, unknown> = {}) => ({
   id, conversation_id: id, utterance_id: id, tag_key: 'pain', quote: `Quote number ${id}`, confidence: 0.9,
   status: 'suggested', origin: 'ai', conversation_title: `Call ${id}`, conversation_happened_at: '2026-11-02T09:00:00Z',
-  company_name: `Company ${id}`, contact_names: ['Pat'], ...over,
+  company_name: `Company ${id}`, contact_names: ['Contact A'], ...over,
 });
 
 function capture() {

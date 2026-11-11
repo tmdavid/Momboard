@@ -34,7 +34,7 @@ class TestFiller:
     )
     def test_short_or_acknowledgement_quotes_are_filler(self, quote):
         assert is_filler(quote, "commitment")
-        assert is_filler(quote, "objection")
+        assert is_filler(quote, "sample_tag")
 
     @pytest.mark.parametrize(
         "quote",
@@ -59,7 +59,7 @@ class TestFiller:
 
     def test_the_exception_is_only_for_commitments(self):
         assert is_filler("Thursday works.", "pain")
-        assert is_filler("Yes, 2 p.m. Thursday works", "objection") is False  # 5 words, not an ack
+        assert is_filler("Yes, 2 p.m. Thursday works", "sample_tag") is False  # 5 words, not an ack
         assert is_filler("Yes, Thursday.", "pain")
 
     def test_vague_commitment_is_still_filler(self):
@@ -85,7 +85,7 @@ def tags():
     return {
         "pain": TagInfo("pain", origin="core", category=None),
         "outcome": TagInfo("outcome", origin="custom", category="outcome"),
-        "objection": TagInfo("objection", origin="custom", category="sales"),
+        "sample_tag": TagInfo("sample_tag", origin="custom", category="sales"),
         "competitor": TagInfo("competitor", origin="custom", category="sales"),
         "money": TagInfo("money", origin="core", category=None),
     }
@@ -106,9 +106,9 @@ class TestOneTagPerQuote:
 
     def test_second_tag_in_the_same_category_is_dropped(self):
         kept = select_highlights(
-            [cand(1, "objection", self.Q, 0.9), cand(1, "competitor", self.Q, 0.85)], [], tags()
+            [cand(1, "sample_tag", self.Q, 0.9), cand(1, "competitor", self.Q, 0.85)], [], tags()
         )
-        assert [k.tag_key for k in kept] == ["objection"]  # both 'sales' -> keep the stronger
+        assert [k.tag_key for k in kept] == ["sample_tag"]  # both 'sales' -> keep the stronger
 
     def test_second_tag_from_a_different_category_needs_both_at_07(self):
         kept = select_highlights(
@@ -154,7 +154,7 @@ class TestOneTagPerQuote:
         assert kept == []
 
     def test_existing_highlight_in_same_category_blocks_a_second_tag(self):
-        existing = [cand(1, "objection", self.Q, 1.0)]
+        existing = [cand(1, "sample_tag", self.Q, 1.0)]
         kept = select_highlights([cand(1, "competitor", self.Q, 0.95)], existing, tags())
         assert kept == []
 

@@ -15,7 +15,7 @@ async def make_corpus(session_factory: async_sessionmaker[AsyncSession]) -> dict
     """Two companies, three calls, highlights above and below the floor."""
     async with session_factory() as db:
         await seed_tags(db)
-        db.add(Tag(key="objection", emoji="✋", name="Objection", origin="custom", category="sales",
+        db.add(Tag(key="sample_tag", emoji="✋", name="Sample tag", origin="custom", category="sales",
                    is_active=True, sort_order=60, min_confidence=0.8))
         acme, globex = Company(name="Acme"), Company(name="Globex")
         db.add_all([acme, globex])
@@ -38,8 +38,8 @@ async def make_corpus(session_factory: async_sessionmaker[AsyncSession]) -> dict
         add("a1", "pain", 0.85)
         add("a1", "pain", 0.80)      # 4th pain in one call
         add("a1", "pain", 0.30)      # below the 0.5 floor
-        add("a1", "objection", 0.70)  # below objection's own 0.8 floor
-        add("a1", "objection", 0.85)
+        add("a1", "sample_tag", 0.70)  # below sample_tag's own 0.8 floor
+        add("a1", "sample_tag", 0.85)
         add("a2", "pain", 0.60)
         add("a2", "pain", 0.20, status="accepted")   # a person accepted it: always counts
         add("g1", "workaround", 0.75)
@@ -66,8 +66,8 @@ async def test_floor_hides_low_suggestions_but_keeps_accepted(auth_client: Async
     kept = {(i["conversation_title"], i["tag_key"], i["confidence"], i["status"]) for i in body["items"]}
     assert ("a1", "pain", 0.3, "suggested") not in kept
     assert ("g1", "pain", 0.45, "suggested") not in kept
-    assert ("a1", "objection", 0.7, "suggested") not in kept      # custom tag has its own floor (0.8)
-    assert ("a1", "objection", 0.85, "suggested") in kept
+    assert ("a1", "sample_tag", 0.7, "suggested") not in kept      # custom tag has its own floor (0.8)
+    assert ("a1", "sample_tag", 0.85, "suggested") in kept
     assert ("a2", "pain", 0.2, "accepted") in kept                # human decision beats the floor
     assert body["total"] == 8
 
@@ -119,7 +119,7 @@ async def test_library_signal_counts_respect_the_floor(auth_client: AsyncClient,
     calls = await make_corpus(session_factory)
     items = (await auth_client.get("/api/conversations", params={"limit": 50})).json()["items"]
     by_title = {i["title"]: i for i in items}
-    assert by_title["a1"]["tag_counts"] == {"pain": 4, "objection": 1}   # 0.30 pain and 0.70 objection excluded
+    assert by_title["a1"]["tag_counts"] == {"pain": 4, "sample_tag": 1}   # 0.30 pain and 0.70 sample_tag excluded
     assert by_title["a2"]["tag_counts"] == {"pain": 2}                    # 0.60 plus the accepted 0.20
     assert "pain" not in by_title["g1"]["tag_counts"]                     # its only pain is 0.45
     assert calls["a1"] == by_title["a1"]["id"]
@@ -140,7 +140,7 @@ async def test_insights_stats_respect_the_floor(auth_client: AsyncClient, sessio
     for per_tag in months.values():
         for tag, n in per_tag.items():
             totals[tag] = totals.get(tag, 0) + n
-    assert totals == {"pain": 6, "objection": 1, "workaround": 1}   # 4+2 pains, not 8
+    assert totals == {"pain": 6, "sample_tag": 1, "workaround": 1}   # 4+2 pains, not 8
 
 
 @pytest.mark.asyncio
@@ -152,7 +152,7 @@ async def test_tag_floor_is_editable_and_validated(auth_client: AsyncClient, ses
     assert (await auth_client.patch("/api/tags/pain", json={"min_confidence": -0.1})).status_code == 422
     tags = (await auth_client.get("/api/tags")).json()
     assert next(t for t in tags if t["key"] == "pain")["min_confidence"] == 0.9
-    assert next(t for t in tags if t["key"] == "objection")["min_confidence"] == 0.8
+    assert next(t for t in tags if t["key"] == "sample_tag")["min_confidence"] == 0.8
 
 
 @pytest.mark.asyncio

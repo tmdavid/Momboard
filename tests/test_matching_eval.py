@@ -20,7 +20,7 @@ from app.services.matching_eval import (
 )
 
 EXAMPLE = Path(__file__).parent / "fixtures" / "tagger_eval" / "known_beliefs_example.json"
-TITLES = {1: "Call with Pierce Law", 2: "Watch Shop call", 3: "Other call", 4: "Another", 5: "Fifth", 6: "Sixth"}
+TITLES = {1: "Call with Example Law", 2: "Watch Shop call", 3: "Other call", 4: "Another", 5: "Fifth", 6: "Sixth"}
 
 
 def m(conv):
@@ -33,15 +33,15 @@ class TestSelector:
         assert not matches_selector(m(3), Selector(conversation_id=2), TITLES)
 
     def test_by_title_is_case_insensitive_and_partial(self):
-        assert matches_selector(m(1), Selector(conversation_title_contains="pierce"), TITLES)
-        assert not matches_selector(m(2), Selector(conversation_title_contains="pierce"), TITLES)
+        assert matches_selector(m(1), Selector(conversation_title_contains="example"), TITLES)
+        assert not matches_selector(m(2), Selector(conversation_title_contains="example"), TITLES)
 
     def test_an_empty_selector_matches_nothing(self):
         assert not matches_selector(m(1), Selector(), TITLES)
 
 
 class TestScoreBelief:
-    belief = Belief("b", None, [Selector(conversation_title_contains="Pierce")], [Selector(conversation_title_contains="Watch")])
+    belief = Belief("b", None, [Selector(conversation_title_contains="Example")], [Selector(conversation_title_contains="Watch")])
 
     def test_hit_rank_is_one_based(self):
         r = score_belief(self.belief, [m(3), m(1), m(2)], TITLES)
@@ -86,7 +86,7 @@ class TestGate:
 class TestLoad:
     def test_loads_the_example(self):
         beliefs = load_beliefs(EXAMPLE)
-        assert beliefs[0].segment == "law firm" and beliefs[0].expected[0].conversation_title_contains == "Pierce"
+        assert beliefs[0].segment == "law firm" and beliefs[0].expected[0].conversation_title_contains == "Example"
 
     def test_rejects_a_belief_with_no_expected_call(self, tmp_path):
         p = tmp_path / "b.json"
@@ -127,11 +127,11 @@ class RoutedLLM:
 async def test_end_to_end_finds_the_known_call(session_factory: async_sessionmaker[AsyncSession]):
     async with session_factory() as db:
         await seed_tags(db)
-        law, shop = Company(name="Pierce Law Group", notes="law firm"), Company(name="Watch Shop")
+        law, shop = Company(name="Example Law LLP", notes="law firm"), Company(name="Watch Shop")
         db.add_all([law, shop])
         await db.flush()
         for company, title, text in (
-            (law, "Call with Pierce Law", "We would want a pilot with two attorneys before any annual contract."),
+            (law, "Call with Example Law", "We would want a pilot with two staff before any annual contract."),
             (shop, "Watch Shop call", "We handle takedowns by hand, and a pilot would not change that for us."),
         ):
             c = Conversation(title=title, company_id=company.id, status="ready", source="upload", raw_transcript="x", transcript_format="name_colon")
@@ -191,15 +191,15 @@ def test_end_to_end_on_a_real_file_database_is_read_only(tmp_path, capsys):
         factory = async_sessionmaker(engine, expire_on_commit=False)
         async with factory() as db:
             await seed_tags(db)
-            law = Company(name="Pierce Law Group", notes="law firm")
+            law = Company(name="Example Law LLP", notes="law firm")
             db.add(law)
             await db.flush()
-            c = Conversation(title="Call with Pierce Law", company_id=law.id, status="ready", source="upload",
+            c = Conversation(title="Call with Example Law", company_id=law.id, status="ready", source="upload",
                              raw_transcript="x", transcript_format="name_colon")
             db.add(c)
             await db.flush()
             db.add(Utterance(conversation_id=c.id, idx=0, speaker_label="P", speaker_side="them",
-                             text="We would want a pilot with two attorneys before any annual contract."))
+                             text="We would want a pilot with two staff before any annual contract."))
             await db.commit()
         await engine.dispose()
 
