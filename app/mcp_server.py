@@ -361,7 +361,9 @@ async def handle_tool_call(
         grounding_filter = arguments.get("grounding")
         limit = arguments.get("limit", 50)
         hyps_result = await db.execute(
-            select(Hypothesis).order_by(Hypothesis.created_at.desc())
+            select(Hypothesis)
+            .where(Hypothesis.status != "archived")
+            .order_by(Hypothesis.created_at.desc())
         )
         items = []
         for hyp in hyps_result.scalars().all():

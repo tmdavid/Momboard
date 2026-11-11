@@ -147,6 +147,28 @@ export interface HypothesisRollup {
   companies_supporting: number;
   companies_contradicting: number;
   last_evidence_at: string | null;
+  freshness?: string;
+  newest_evidence_at?: string | null;
+  grounding?: 'grounded' | 'contested' | 'refuted' | 'candidate' | 'hunch';
+  /** Suggested links awaiting review — never move the band. */
+  pending_count?: number;
+  /** One sentence explaining why the card sits in its band. */
+  grounding_reason?: string;
+}
+
+export interface HypothesisListParams {
+  band?: 'grounded' | 'contested' | 'refuted' | 'candidate' | 'hunch';
+  segment?: string;
+  status?: string;
+  has_pending?: boolean;
+  sort?: 'newest' | 'evidence' | 'support' | 'pending';
+  limit?: number;
+  offset?: number;
+}
+
+export interface HypothesisListPage {
+  items: HypothesisListItem[];
+  total: number;
 }
 
 export interface HypothesisListItem {
@@ -468,8 +490,20 @@ export const api = {
 
   // ─── Hypotheses ───
 
-  listHypotheses() {
-    return apiFetch<HypothesisListItem[]>('/api/hypotheses');
+  /** Paged/filtered list. Archived hypotheses are hidden unless status=archived. */
+  listHypothesesPage(params: HypothesisListParams = {}) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== null && v !== '') qs.set(k, String(v));
+    }
+    const suffix = qs.toString() ? `?${qs.toString()}` : '';
+    return apiFetch<HypothesisListPage>(`/api/hypotheses${suffix}`);
+  },
+
+  /** All non-archived hypotheses as a flat array (unwraps the list envelope). */
+  async listHypotheses(params: HypothesisListParams = {}) {
+    const page = await api.listHypothesesPage(params);
+    return page.items;
   },
 
   getHypothesis(id: number) {

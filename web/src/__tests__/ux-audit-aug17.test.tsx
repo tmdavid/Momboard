@@ -177,7 +177,7 @@ describe('UX #6: Hypotheses evidence separation', () => {
   it('shows separate headings for confirmed and suggested links', async () => {
     server.use(
       http.get('/api/hypotheses', () =>
-        HttpResponse.json([
+        HttpResponse.json({ total: 1, items: [
           {
             id: 1,
             statement: 'Mid-market wont pay >10k without SLA',
@@ -189,7 +189,7 @@ describe('UX #6: Hypotheses evidence separation', () => {
             rollup: { supports: { confirmed: 1, suggested: 2 }, contradicts: { confirmed: 0, suggested: 1 }, companies_supporting: 1, companies_contradicting: 0, last_evidence_at: null },
             verdict_hint: null,
           },
-        ])
+        ] })
       ),
       http.get('/api/hypotheses/1', () =>
         HttpResponse.json({
@@ -235,7 +235,7 @@ describe('UX #7: Hypothesis evidence meter', () => {
   it('shows grey track when 0 confirmed / 3 suggested (not full support)', async () => {
     server.use(
       http.get('/api/hypotheses', () =>
-        HttpResponse.json([
+        HttpResponse.json({ total: 1, items: [
           {
             id: 1,
             statement: 'All users want dashboards',
@@ -247,7 +247,7 @@ describe('UX #7: Hypothesis evidence meter', () => {
             rollup: { supports: { confirmed: 0, suggested: 3 }, contradicts: { confirmed: 0, suggested: 0 }, companies_supporting: 0, companies_contradicting: 0, last_evidence_at: null },
             verdict_hint: null,
           },
-        ])
+        ] })
       ),
     );
 

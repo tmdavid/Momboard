@@ -193,7 +193,7 @@ const mockHypothesisDetail = {
 
 const hypothesesHandlers = [
   http.get('/api/hypotheses', () => {
-    return HttpResponse.json(mockHypotheses);
+    return HttpResponse.json({ items: mockHypotheses, total: mockHypotheses.length });
   }),
 
   http.get('/api/hypotheses/:id', ({ params }) => {
@@ -930,7 +930,12 @@ describe('T28: Hypotheses board — new hypothesis composer', () => {
         );
       }),
       http.get('/api/hypotheses', () =>
-        HttpResponse.json(createdListItem ? [createdListItem, ...mockHypotheses] : mockHypotheses),
+        HttpResponse.json(
+          (() => {
+            const items = createdListItem ? [createdListItem, ...mockHypotheses] : mockHypotheses;
+            return { items, total: items.length };
+          })(),
+        ),
       ),
     );
 
@@ -1038,7 +1043,7 @@ describe('T28: Hypotheses board — loading, empty, and error states', () => {
       http.get('/api/hypotheses', async () => {
         // Delay indefinitely to test loading state
         await new Promise(() => {});
-        return HttpResponse.json([]);
+        return HttpResponse.json({ items: [], total: 0 });
       }),
     );
 
@@ -1054,7 +1059,7 @@ describe('T28: Hypotheses board — loading, empty, and error states', () => {
   test('shows an empty state when there are no hypotheses', async () => {
     server.use(
       http.get('/api/me', () => HttpResponse.json({ id: 1, email: 'david@example.com', name: 'David', role: 'admin' })),
-      http.get('/api/hypotheses', () => HttpResponse.json([])),
+      http.get('/api/hypotheses', () => HttpResponse.json({ items: [], total: 0 })),
     );
 
     renderWithProviders(<App />, { route: '/hypotheses' });
@@ -1088,7 +1093,7 @@ describe('T28: Hypotheses board — loading, empty, and error states', () => {
         if (callCount <= 1) {
           return new HttpResponse(null, { status: 500 });
         }
-        return HttpResponse.json(mockHypotheses);
+        return HttpResponse.json({ items: mockHypotheses, total: mockHypotheses.length });
       }),
     );
 

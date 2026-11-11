@@ -397,6 +397,8 @@ class HypothesisRollup(BaseModel):
     freshness: str = "stale"  # fresh|aging|stale (T41)
     newest_evidence_at: str | None = None  # ISO date of newest confirmed supporting evidence
     grounding: str = "hunch"  # grounded|contested|refuted|candidate|hunch (T48)
+    pending_count: int = 0  # suggested links awaiting review (never move the band)
+    grounding_reason: str = ""  # one sentence: why the card sits in its band
 
 
 class HypothesisListItemResponse(BaseModel):
@@ -413,6 +415,13 @@ class HypothesisListItemResponse(BaseModel):
     verdict_hint: str | None = None
 
     model_config = {"from_attributes": True}
+
+
+class HypothesisListResponse(BaseModel):
+    """Paged hypothesis list: the page of items plus the total matching the filters."""
+
+    items: list[HypothesisListItemResponse] = Field(default_factory=list)
+    total: int = 0
 
 
 class HypothesisResponse(BaseModel):

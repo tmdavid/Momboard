@@ -267,7 +267,7 @@ class TestHypothesisCRUD:
 
         r = await auth_client.get("/api/hypotheses")
         assert r.status_code == 200
-        items = r.json()
+        items = r.json()["items"]
         assert len(items) >= 2
 
     @pytest.mark.asyncio
@@ -1269,7 +1269,7 @@ class TestHypothesisListRollup:
 
         r = await auth_client.get("/api/hypotheses")
         assert r.status_code == 200
-        items = r.json()
+        items = r.json()["items"]
         assert len(items) >= 1
 
         # Find our hypothesis in the list
@@ -1450,7 +1450,7 @@ class TestRefutationRegression:
             )
 
         r = await auth_client.get("/api/hypotheses")
-        items = r.json()
+        items = r.json()["items"]
         hyp_item = next(i for i in items if i["id"] == hyp_id)
         assert hyp_item["rollup"]["companies_contradicting"] == 1
         assert hyp_item["verdict_hint"] != "leaning-refuted"
@@ -1673,3 +1673,191 @@ async def test_intake_excludes_our_side_turns(
     async with session_factory() as db:
         out = await preview_intake(db, "Reps pitch automating exports to customers", llm=stub)
     assert our_hl_id not in [m["highlight_id"] for m in out["matches"]]
+
+
+# ===========================================================================
+# P0 slice B: list envelope + filters + paging + pending_count / grounding_reason
+# + archived status
+# ===========================================================================
+
+
+async def _mk_hyp(
+    client: AsyncClient,
+    statement: str,
+    *,
+    segment: str | None = None,
+    links: list[tuple[int, str, str]] | None = None,
+) -> int:
+    """Create a hypothesis; links = [(highlight_id, stance, 'confirmed'|'suggested')]."""
+    body: dict = {"statement": statement}
+    if segment:
+        body["segment"] = segment
+    r = await client.post("/api/hypotheses", json=body)
+    assert r.status_code == 201
+    hyp_id = r.json()["id"]
+    for highlight_id, stance, status in links or []:
+        lr = await client.post(
+            f"/api/hypotheses/{hyp_id}/links",
+            json={"highlight_id": highlight_id, "stance": stance},
+        )
+        assert lr.status_code == 201
+        if status == "confirmed":
+            await client.patch(
+                f"/api/hypothesis-links/{lr.json()['id']}", json={"status": "confirmed"}
+            )
+    return hyp_id
+
+
+class TestHypothesisListEnvelopeAndFilters:
+    @pytest.mark.asyncio
+    async def test_list_returns_items_and_total_envelope(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        await _mk_hyp(auth_client, "Envelope hypothesis number one here")
+        await _mk_hyp(auth_client, "Envelope hypothesis number two here")
+        r = await auth_client.get("/api/hypotheses")
+        assert r.status_code == 200
+        body = r.json()
+        assert set(body) >= {"items", "total"}
+        assert body["total"] == 2
+        assert len(body["items"]) == 2
+
+    @pytest.mark.asyncio
+    async def test_paging_limit_offset_keeps_total(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        for i in range(3):
+            await _mk_hyp(auth_client, f"Paging hypothesis number {i} here ok")
+        r = await auth_client.get("/api/hypotheses", params={"limit": 2, "offset": 0})
+        body = r.json()
+        assert body["total"] == 3 and len(body["items"]) == 2
+        r2 = await auth_client.get("/api/hypotheses", params={"limit": 2, "offset": 2})
+        assert len(r2.json()["items"]) == 1
+        ids = {i["id"] for i in body["items"]} | {i["id"] for i in r2.json()["items"]}
+        assert len(ids) == 3
+
+    @pytest.mark.asyncio
+    async def test_filter_by_band(self, auth_client: AsyncClient, hyp_seeded: dict):
+        h1 = hyp_seeded["highlight1"].id
+        grounded = await _mk_hyp(
+            auth_client, "Grounded band hypothesis for filter",
+            links=[(h1, "supports", "confirmed")],
+        )
+        hunch = await _mk_hyp(auth_client, "Hunch band hypothesis for filter")
+        r = await auth_client.get("/api/hypotheses", params={"band": "grounded"})
+        ids = [i["id"] for i in r.json()["items"]]
+        assert ids == [grounded]
+        assert r.json()["total"] == 1
+        r = await auth_client.get("/api/hypotheses", params={"band": "hunch"})
+        assert [i["id"] for i in r.json()["items"]] == [hunch]
+
+    @pytest.mark.asyncio
+    async def test_filter_by_segment_case_insensitive(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        a = await _mk_hyp(auth_client, "Segment A hypothesis for filter", segment="Enterprise")
+        await _mk_hyp(auth_client, "Segment B hypothesis for filter", segment="SMB")
+        r = await auth_client.get("/api/hypotheses", params={"segment": "enterprise"})
+        assert [i["id"] for i in r.json()["items"]] == [a]
+
+    @pytest.mark.asyncio
+    async def test_filter_has_pending(self, auth_client: AsyncClient, hyp_seeded: dict):
+        h1 = hyp_seeded["highlight1"].id
+        pending = await _mk_hyp(
+            auth_client, "Pending suggestions hypothesis here",
+            links=[(h1, "supports", "suggested")],
+        )
+        await _mk_hyp(
+            auth_client, "No pending suggestions hypothesis",
+            links=[(h1, "supports", "confirmed")],
+        )
+        r = await auth_client.get("/api/hypotheses", params={"has_pending": "true"})
+        assert [i["id"] for i in r.json()["items"]] == [pending]
+        assert r.json()["items"][0]["rollup"]["pending_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_filter_by_status(self, auth_client: AsyncClient, hyp_seeded: dict):
+        a = await _mk_hyp(auth_client, "Parked status hypothesis for filter")
+        await _mk_hyp(auth_client, "Open status hypothesis for filter")
+        await auth_client.patch(f"/api/hypotheses/{a}", json={"status": "parked"})
+        r = await auth_client.get("/api/hypotheses", params={"status": "parked"})
+        assert [i["id"] for i in r.json()["items"]] == [a]
+
+    @pytest.mark.asyncio
+    async def test_sort_by_confirmed_support(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        weak = await _mk_hyp(
+            auth_client, "Weak support hypothesis for sorting",
+            links=[(h1, "supports", "confirmed")],
+        )
+        strong = await _mk_hyp(
+            auth_client, "Strong support hypothesis for sorting",
+            links=[(h1, "supports", "confirmed"), (h2, "supports", "confirmed")],
+        )
+        r = await auth_client.get("/api/hypotheses", params={"sort": "support"})
+        ids = [i["id"] for i in r.json()["items"]]
+        assert ids.index(strong) < ids.index(weak)
+
+    @pytest.mark.asyncio
+    async def test_invalid_band_rejected(self, auth_client: AsyncClient, hyp_seeded: dict):
+        r = await auth_client.get("/api/hypotheses", params={"band": "bogus"})
+        assert r.status_code == 422
+
+
+class TestHypothesisRollupExplain:
+    @pytest.mark.asyncio
+    async def test_pending_count_and_reason_for_grounded(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        h1, h2 = hyp_seeded["highlight1"].id, hyp_seeded["highlight2"].id
+        hid = await _mk_hyp(
+            auth_client, "Reason sentence hypothesis grounded here",
+            links=[(h1, "supports", "confirmed"), (h2, "contradicts", "suggested")],
+        )
+        item = next(
+            i for i in (await auth_client.get("/api/hypotheses")).json()["items"]
+            if i["id"] == hid
+        )
+        assert item["rollup"]["grounding"] == "grounded"
+        assert item["rollup"]["pending_count"] == 1
+        reason = item["rollup"]["grounding_reason"]
+        assert "1 supporting quote" in reason and "1 compan" in reason
+
+    @pytest.mark.asyncio
+    async def test_reason_for_hunch_and_detail_carries_it(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        hid = await _mk_hyp(auth_client, "Reason sentence hypothesis hunch here")
+        detail = (await auth_client.get(f"/api/hypotheses/{hid}")).json()
+        assert detail["rollup"]["pending_count"] == 0
+        assert "no evidence" in detail["rollup"]["grounding_reason"].lower()
+
+
+class TestHypothesisArchive:
+    @pytest.mark.asyncio
+    async def test_archive_hides_from_default_list_but_filterable(
+        self, auth_client: AsyncClient, hyp_seeded: dict
+    ):
+        keep = await _mk_hyp(auth_client, "Keep visible hypothesis for archive")
+        gone = await _mk_hyp(auth_client, "Archive me hypothesis for archive")
+        r = await auth_client.patch(f"/api/hypotheses/{gone}", json={"status": "archived"})
+        assert r.status_code == 200 and r.json()["status"] == "archived"
+
+        default = (await auth_client.get("/api/hypotheses")).json()
+        assert [i["id"] for i in default["items"]] == [keep]
+        assert default["total"] == 1
+
+        archived = (
+            await auth_client.get("/api/hypotheses", params={"status": "archived"})
+        ).json()
+        assert [i["id"] for i in archived["items"]] == [gone]
+
+    @pytest.mark.asyncio
+    async def test_unarchive_restores(self, auth_client: AsyncClient, hyp_seeded: dict):
+        hid = await _mk_hyp(auth_client, "Restore me hypothesis for archive")
+        await auth_client.patch(f"/api/hypotheses/{hid}", json={"status": "archived"})
+        await auth_client.patch(f"/api/hypotheses/{hid}", json={"status": "open"})
+        ids = [i["id"] for i in (await auth_client.get("/api/hypotheses")).json()["items"]]
+        assert hid in ids

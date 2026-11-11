@@ -2,8 +2,9 @@
 
 import logging
 from datetime import datetime
+from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -15,7 +16,7 @@ from app.api.schemas import (
     HypothesisIntakeResponse,
     HypothesisLinkCreate,
     HypothesisLinkResponse,
-    HypothesisListItemResponse,
+    HypothesisListResponse,
     HypothesisResponse,
     HypothesisRollup,
     HypothesisUpdate,
@@ -37,7 +38,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-VALID_HYPOTHESIS_STATUSES = {"open", "supported", "refuted", "parked"}
+VALID_HYPOTHESIS_STATUSES = {"open", "supported", "refuted", "parked", "archived"}
 VALID_LINK_STATUSES = {"confirmed", "rejected"}
 VALID_STANCES: set[str] = {"supports", "contradicts"}
 
@@ -172,36 +173,126 @@ def _compute_grounding(
     return "hunch"
 
 
+def _plural(n: int, noun: str) -> str:
+    return f"{n} {noun}" if n == 1 else f"{n} {noun}s"
+
+
+def _compute_grounding_reason(
+    supports: dict[str, int],
+    contradicts: dict[str, int],
+    companies_supporting: int,
+    companies_contradicting: int,
+) -> str:
+    """One plain sentence explaining the band, from confirmed links (suggested never count)."""
+    sup = supports.get("confirmed", 0)
+    con = contradicts.get("confirmed", 0)
+    sup_part = (
+        f"{_plural(sup, 'supporting quote')} from {_plural(companies_supporting, 'company')}"
+    )
+    con_part = (
+        f"{_plural(con, 'contradicting quote')} from {_plural(companies_contradicting, 'company')}"
+    )
+    if sup and con:
+        return f"{sup_part} vs {con_part}."
+    if sup:
+        return f"{sup_part}, 0 contradicting."
+    if con:
+        return f"{con_part}, none supporting."
+    pending = supports.get("suggested", 0) + contradicts.get("suggested", 0)
+    if pending:
+        return f"No confirmed evidence yet; {_plural(pending, 'suggested quote')} awaiting review."
+    return "No evidence yet."
+
+
+def _build_rollup_model(
+    supports: dict[str, int],
+    contradicts: dict[str, int],
+    co_sup: int,
+    co_con: int,
+    last_ev: datetime | None,
+    freshness_data: dict,
+) -> HypothesisRollup:
+    return HypothesisRollup(
+        supports={
+            "confirmed": supports.get("confirmed", 0),
+            "suggested": supports.get("suggested", 0),
+        },
+        contradicts={
+            "confirmed": contradicts.get("confirmed", 0),
+            "suggested": contradicts.get("suggested", 0),
+        },
+        companies_supporting=co_sup,
+        companies_contradicting=co_con,
+        last_evidence_at=last_ev,
+        freshness=freshness_data["freshness"],
+        newest_evidence_at=freshness_data.get("newest_evidence_at"),
+        grounding=_compute_grounding(supports, contradicts),
+        pending_count=supports.get("suggested", 0) + contradicts.get("suggested", 0),
+        grounding_reason=_compute_grounding_reason(supports, contradicts, co_sup, co_con),
+    )
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
 
-@router.get("", response_model=list[HypothesisListItemResponse])
+BandFilter = Literal["grounded", "contested", "refuted", "candidate", "hunch"]
+SortKey = Literal["newest", "evidence", "support", "pending"]
+
+
+@router.get("", response_model=HypothesisListResponse)
 async def list_hypotheses(
     request: Request,
+    band: BandFilter | None = Query(default=None, description="Filter by grounding band"),
+    segment: str | None = Query(default=None, description="Filter by segment (case-insensitive)"),
+    status: str | None = Query(
+        default=None,
+        description="Filter by status. Archived hypotheses are hidden unless status=archived.",
+    ),
+    has_pending: bool | None = Query(
+        default=None, description="Only hypotheses with suggested links awaiting review"
+    ),
+    sort: SortKey = Query(default="newest", description="newest|evidence|support|pending"),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     user: User = Depends(get_current_user),
-) -> list[dict]:
-    """List all hypotheses with rollup data for the board."""
+) -> dict:
+    """List hypotheses with rollup data for the board.
+
+    The band is computed at read time (never stored), so band/has_pending filters and
+    sorting are applied after the rollup is built, then the page is cut. Archived
+    hypotheses are hidden unless ``status=archived``.
+    """
+    from app.services.staleness import get_hypothesis_freshness
+
+    if status is not None and status not in VALID_HYPOTHESIS_STATUSES:
+        raise HTTPException(status_code=422, detail=f"Invalid status: {status}")
+
     session_factory = request.app.state.session_factory
     async with session_factory() as db:
-        result = await db.execute(
-            select(Hypothesis).order_by(Hypothesis.created_at.desc())
-        )
-        hypotheses = result.scalars().all()
+        stmt = select(Hypothesis).order_by(Hypothesis.created_at.desc(), Hypothesis.id.desc())
+        if status is not None:
+            stmt = stmt.where(Hypothesis.status == status)
+        else:
+            stmt = stmt.where(Hypothesis.status != "archived")
+        if segment:
+            stmt = stmt.where(func.lower(Hypothesis.segment) == segment.strip().lower())
+        hypotheses = (await db.execute(stmt)).scalars().all()
 
-        items = []
+        items: list[dict] = []
         for hyp in hypotheses:
-            supports, contradicts, co_sup, co_con, last_ev = await _build_rollup(
-                db, hyp.id
+            supports, contradicts, co_sup, co_con, last_ev = await _build_rollup(db, hyp.id)
+            rollup = _build_rollup_model(
+                supports, contradicts, co_sup, co_con, last_ev,
+                await get_hypothesis_freshness(db, hyp.id),
             )
-            verdict_hint = _compute_verdict_hint(supports, contradicts, co_sup, co_con)
-
-            # Freshness (T41)
-            from app.services.staleness import get_hypothesis_freshness
-
-            freshness_data = await get_hypothesis_freshness(db, hyp.id)
-
+            if band and rollup.grounding != band:
+                continue
+            if has_pending is True and rollup.pending_count == 0:
+                continue
+            if has_pending is False and rollup.pending_count > 0:
+                continue
             items.append({
                 "id": hyp.id,
                 "statement": hyp.statement,
@@ -210,26 +301,23 @@ async def list_hypotheses(
                 "created_by": hyp.created_by,
                 "decided_at": hyp.decided_at,
                 "created_at": hyp.created_at,
-                "rollup": HypothesisRollup(
-                    supports={
-                        "confirmed": supports.get("confirmed", 0),
-                        "suggested": supports.get("suggested", 0),
-                    },
-                    contradicts={
-                        "confirmed": contradicts.get("confirmed", 0),
-                        "suggested": contradicts.get("suggested", 0),
-                    },
-                    companies_supporting=co_sup,
-                    companies_contradicting=co_con,
-                    last_evidence_at=last_ev,
-                    freshness=freshness_data["freshness"],
-                    newest_evidence_at=freshness_data.get("newest_evidence_at"),
-                    grounding=_compute_grounding(supports, contradicts),
-                ),
-                "verdict_hint": verdict_hint,
+                "rollup": rollup,
+                "verdict_hint": _compute_verdict_hint(supports, contradicts, co_sup, co_con),
             })
 
-        return items
+        if sort == "evidence":
+            items.sort(
+                key=lambda i: (i["rollup"].last_evidence_at is not None,
+                               i["rollup"].last_evidence_at or datetime.min),
+                reverse=True,
+            )
+        elif sort == "support":
+            items.sort(key=lambda i: i["rollup"].supports["confirmed"], reverse=True)
+        elif sort == "pending":
+            items.sort(key=lambda i: i["rollup"].pending_count, reverse=True)
+        # "newest" is already the query order; list.sort is stable for the others.
+
+        return {"items": items[offset : offset + limit], "total": len(items)}
 
 
 @router.post("", response_model=HypothesisResponse, status_code=201)
@@ -412,21 +500,8 @@ async def get_hypothesis_detail(
         from app.services.staleness import get_hypothesis_freshness
 
         freshness_data = await get_hypothesis_freshness(db, hypothesis_id)
-        rollup = HypothesisRollup(
-            supports={
-                "confirmed": supports.get("confirmed", 0),
-                "suggested": supports.get("suggested", 0),
-            },
-            contradicts={
-                "confirmed": contradicts.get("confirmed", 0),
-                "suggested": contradicts.get("suggested", 0),
-            },
-            companies_supporting=co_sup,
-            companies_contradicting=co_con,
-            last_evidence_at=last_ev,
-            freshness=freshness_data["freshness"],
-            newest_evidence_at=freshness_data.get("newest_evidence_at"),
-            grounding=_compute_grounding(supports, contradicts),
+        rollup = _build_rollup_model(
+            supports, contradicts, co_sup, co_con, last_ev, freshness_data
         )
 
         return {

@@ -638,7 +638,11 @@ export interface paths {
         };
         /**
          * List Hypotheses
-         * @description List all hypotheses with rollup data for the board.
+         * @description List hypotheses with rollup data for the board.
+         *
+         *     The band is computed at read time (never stored), so band/has_pending filters and
+         *     sorting are applied after the rollup is built, then the page is cut. Archived
+         *     hypotheses are hidden unless ``status=archived``.
          */
         get: operations["list_hypotheses_api_hypotheses_get"];
         put?: never;
@@ -2135,6 +2139,19 @@ export interface components {
             /** Verdict Hint */
             verdict_hint?: string | null;
         };
+        /**
+         * HypothesisListResponse
+         * @description Paged hypothesis list: the page of items plus the total matching the filters.
+         */
+        HypothesisListResponse: {
+            /** Items */
+            items?: components["schemas"]["HypothesisListItemResponse"][];
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
         /** HypothesisResponse */
         HypothesisResponse: {
             /**
@@ -2181,10 +2198,20 @@ export interface components {
              * @default hunch
              */
             grounding: string;
+            /**
+             * Grounding Reason
+             * @default
+             */
+            grounding_reason: string;
             /** Last Evidence At */
             last_evidence_at?: string | null;
             /** Newest Evidence At */
             newest_evidence_at?: string | null;
+            /**
+             * Pending Count
+             * @default 0
+             */
+            pending_count: number;
             /** Supports */
             supports?: {
                 [key: string]: number;
@@ -3907,7 +3934,20 @@ export interface operations {
     };
     list_hypotheses_api_hypotheses_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Filter by grounding band */
+                band?: ("grounded" | "contested" | "refuted" | "candidate" | "hunch") | null;
+                /** @description Filter by segment (case-insensitive) */
+                segment?: string | null;
+                /** @description Filter by status. Archived hypotheses are hidden unless status=archived. */
+                status?: string | null;
+                /** @description Only hypotheses with suggested links awaiting review */
+                has_pending?: boolean | null;
+                /** @description newest|evidence|support|pending */
+                sort?: "newest" | "evidence" | "support" | "pending";
+                limit?: number;
+                offset?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -3920,7 +3960,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HypothesisListItemResponse"][];
+                    "application/json": components["schemas"]["HypothesisListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
