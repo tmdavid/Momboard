@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     """App settings loaded from environment / .env file."""
 
     app_name: str = "MomBoard"
-    version: str = "0.4.0"
+    version: str = "0.5.0"
     env: str = "development"
 
     # Database

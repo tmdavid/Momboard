@@ -4,9 +4,16 @@ A Mom Test–based customer conversation repository. MomBoard ingests transcript
 
 ## Status
 
-**v0.4** — a redesigned interface, a Hypotheses board you can trust, and a Decisions page that keeps its receipts. v0.3's evidence layer (insights over MCP, evidence-gated intake, custom taxonomy) is complete. The full history is in [`CHANGELOG.md`](CHANGELOG.md); the v0.3 release definition is in [`V0.3.md`](V0.3.md) with design docs under [`docs/design/`](docs/design/).
+**v0.5** — tags that no longer mistake our own reps for customers, hypothesis matching that finds quotes nobody tagged, a staged retag rollout, and interface fixes. v0.4's redesigned interface, Hypotheses board and Decisions page, and v0.3's evidence layer (insights over MCP, evidence-gated intake, custom taxonomy) is complete. The full history is in [`CHANGELOG.md`](CHANGELOG.md); the v0.3 release definition is in [`V0.3.md`](V0.3.md) with design docs under [`docs/design/`](docs/design/).
 
-### Latest additions (v0.4)
+### Latest additions (v0.5)
+
+- **Tagging you can measure** — a "Your company" setting marks our own speakers, evidence tags apply to customer turns only, every tag has a confidence floor, a "don't tag when" hint and an example, and `scripts/eval_tagger.py` scores the tagger against a hand-tagged set. See [`docs/tagger-evaluation.md`](docs/tagger-evaluation.md).
+- **Hypothesis matching that reads everything** — candidates come from all customer speech (tagged or not), then a strict judge with a verification pass; confirmed untagged quotes become accepted highlights. See [`docs/matching-evaluation.md`](docs/matching-evaluation.md).
+- **A staged retag rollout** — taxonomy versioning, resumable batches with a dry run, protection for highlights that decisions and confirmed beliefs rely on, and before/after snapshots. See [`docs/retag-rollout.md`](docs/retag-rollout.md). Nothing is retagged automatically.
+- **Interface** — a Library preview panel, rows grouped by day, headline cards, a single review bar with inline Accept / Reject, weekly Insights trends, a Custom-tags flyout that reads properly, and numbers and dates formatted the same way everywhere.
+
+### Earlier additions (v0.4)
 
 - **Hypotheses board by grounding band** — Grounded, Contested, Candidate, Hunch and Refuted, computed from the quotes you have *confirmed* (suggested matches never move a band). Each card says why it sits there and what is still missing; thresholds are settings (`HYPOTHESIS_*`, see below).
 - **Evidence check before you save** — scored matches with their source, customer turns only, a segment-aware ranking, and a live "if saved now" band. Detail view with band history, validation questions, add-evidence and archive / restore.
@@ -231,8 +238,14 @@ Follow [`agent-deployment.md`](agent-deployment.md) for the deployment gates and
 
 Do not run multiple application processes against the same SQLite file. Move to PostgreSQL before scaling horizontally.
 
+### Upgrading to v0.5
+
+v0.5 adds migration 011 (additive: a settings table, tag floor/hint/example columns and per-call taxonomy stamps). The production container applies it on start; it does **not** run the taxonomy seed or retag anything. From source, stop the app and run `python scripts/migrate_db.py` (it backs the database up, runs `alembic upgrade head`, verifies the schema, and reads the expected revision from `alembic/versions`; `--dry-run` previews and `--verify-only` checks a running container with `docker exec -i <container> python - --verify-only < scripts/migrate_db.py`). Then rebuild the frontend.
+
+After upgrading: open **Settings → Your company** and fill it in, review your tags' floors and hints, and only then follow [`docs/retag-rollout.md`](docs/retag-rollout.md). Until calls are retagged, old and new tagging sit side by side and Library/Explore say so.
+
 ### Upgrading to v0.4
 
-v0.4 adds migrations 008–010 (additive; they only add columns and tables). The production container applies them on start. When running from source, stop the app and run `python scripts/migrate_v04.py` — it backs the database up first, runs `alembic upgrade head`, and verifies the result (`--dry-run` previews, `--verify-only` checks a running container's database without changing it). Then rebuild the frontend (`npm ci --prefix web && npm run build --prefix web`).
+v0.4 adds migrations 008–010 (additive; they only add columns and tables). The production container applies them on start. When running from source, stop the app and run `python scripts/migrate_db.py` (this was `migrate_v04.py` before v0.5) — it backs the database up first, runs `alembic upgrade head`, and verifies the result (`--dry-run` previews, `--verify-only` checks a running container's database without changing it). Then rebuild the frontend (`npm ci --prefix web && npm run build --prefix web`).
 
 `scripts/retag_conversations.py` re-tags a date range through the API (dry run by default; it prompts for your password).

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply and verify the v0.4 database migrations (007 -> 010) on a SQLite MomBoard DB.
+"""Apply and verify the database migrations on a SQLite MomBoard DB (any version up to head).
 
 What it does, in order:
   1. Pre-flight: resolves the DB, checks it is SQLite, refuses if the app looks
@@ -7,23 +7,26 @@ What it does, in order:
   2. Backup: online-backs-up the DB (sqlite3 .backup, safe with WAL) and verifies
      the backup opens and passes integrity_check. Aborts if the backup fails.
   3. Migrate: `alembic upgrade head`, then `alembic check`.
-  4. Verify: schema asserts for every v0.4 change, `PRAGMA integrity_check`,
+  4. Verify: schema asserts for the v0.4 and v0.5 changes, `PRAGMA integrity_check`,
      `PRAGMA foreign_key_check`, and that no rows were lost.
 
 Safe to re-run (Alembic skips applied revisions). Nothing here deletes data; the
 migrations are additive (008 backfills snapshots by reading, then UPDATE-ing).
 
+The revision it expects is read from the alembic/versions files, so it keeps working
+as new migrations are added; the schema checks below list what each release needs.
+
 Usage (from the repo root, on the box that runs MomBoard from source):
 
-    python scripts/migrate_v04.py --dry-run     # pre-flight + show pending only
-    python scripts/migrate_v04.py               # backup, migrate, verify (asks first)
-    python scripts/migrate_v04.py --yes         # same, no prompt
-    python scripts/migrate_v04.py --verify-only # just check the schema (no changes)
+    python scripts/migrate_db.py --dry-run     # pre-flight + show pending only
+    python scripts/migrate_db.py               # backup, migrate, verify (asks first)
+    python scripts/migrate_db.py --yes         # same, no prompt
+    python scripts/migrate_db.py --verify-only # just check the schema (no changes)
 
 Container deploys apply migrations automatically on start (entrypoint.sh). To only
 VERIFY a container's DB without copying files into it:
 
-    docker exec -i <container> python - --verify-only < scripts/migrate_v04.py
+    docker exec -i <container> python - --verify-only < scripts/migrate_db.py
 
 Never prints secrets: only the resolved database *path* is shown.
 """
@@ -39,7 +42,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-HEAD_REVISION = "010_hypothesis_history_questions"
+# Used only if the alembic/versions files cannot be found (for example when this file is piped into a
+# container whose working directory is not the repo). Normally the head is read from those files.
+FALLBACK_HEAD_REVISION = "011_v05_tagging"
 
 # table -> columns that must exist after the v0.4 migrations
 REQUIRED_COLUMNS: dict[str, set[str]] = {
@@ -58,6 +63,14 @@ REQUIRED_COLUMNS: dict[str, set[str]] = {
         "id", "hypothesis_id", "from_band", "to_band", "cause_link_id", "created_at",
     },
     "hypothesis_questions": {"id", "hypothesis_id", "text", "asked_at", "created_at"},
+    # 011 tagging quality + settings (v0.5)
+    "app_settings": {"id", "key", "value"},
+    "conversations": {"taxonomy_version", "tagged_at"},
+}
+
+# columns that 011 adds to a table which an earlier entry above already lists
+EXTRA_REQUIRED_COLUMNS: dict[str, set[str]] = {
+    "tags": {"min_confidence", "negative_hint", "example", "added_in_version"},
 }
 
 # tables whose row counts must not shrink across the migration
@@ -125,6 +138,29 @@ def count_rows(conn: sqlite3.Connection) -> dict[str, int | None]:
     }
 
 
+def expected_head(root: Path) -> str:
+    """The newest revision, read from alembic/versions (the one no other revision descends from)."""
+    import re
+
+    versions = root / "alembic" / "versions"
+    revisions: set[str] = set()
+    parents: set[str] = set()
+    if versions.is_dir():
+        for path in versions.glob("*.py"):
+            text = path.read_text()
+            rev = re.search(r'^revision(?:: str)?\s*=\s*"([^"]+)"', text, re.M)
+            down = re.search(r'^down_revision(?:: [^=]+)?\s*=\s*"([^"]+)"', text, re.M)
+            if rev:
+                revisions.add(rev.group(1))
+            if down:
+                parents.add(down.group(1))
+    heads = revisions - parents
+    if len(heads) == 1:
+        return heads.pop()
+    print(f"{WARN} could not determine the alembic head from {versions}; using {FALLBACK_HEAD_REVISION}")
+    return FALLBACK_HEAD_REVISION
+
+
 def current_revision(conn: sqlite3.Connection) -> str | None:
     if not table_exists(conn, "alembic_version"):
         return None
@@ -153,7 +189,7 @@ def fk_violation_count(db_path: Path) -> int:
         conn.close()
 
 
-def verify_schema(db_path: Path, fk_baseline: int = 0) -> list[str]:
+def verify_schema(db_path: Path, fk_baseline: int = 0, head: str = FALLBACK_HEAD_REVISION) -> list[str]:
     """Return a list of problems (empty = healthy). Prints a line per check.
 
     ``fk_baseline`` is the number of foreign-key violations that already existed before
@@ -163,13 +199,16 @@ def verify_schema(db_path: Path, fk_baseline: int = 0) -> list[str]:
     conn = connect(db_path)
     try:
         rev = current_revision(conn)
-        if rev == HEAD_REVISION:
+        if rev == head:
             print(f"{OK} alembic revision is {rev}")
         else:
-            problems.append(f"alembic revision is {rev!r}, expected {HEAD_REVISION!r}")
-            print(f"{FAIL} alembic revision is {rev!r}, expected {HEAD_REVISION!r}")
+            problems.append(f"alembic revision is {rev!r}, expected {head!r}")
+            print(f"{FAIL} alembic revision is {rev!r}, expected {head!r}")
 
-        for table, needed in REQUIRED_COLUMNS.items():
+        required = {t: set(cols) for t, cols in REQUIRED_COLUMNS.items()}
+        for table, cols in EXTRA_REQUIRED_COLUMNS.items():
+            required.setdefault(table, set()).update(cols)
+        for table, needed in required.items():
             if not table_exists(conn, table):
                 problems.append(f"table {table} is missing")
                 print(f"{FAIL} table {table} is missing")
@@ -266,7 +305,7 @@ def preflight(db_path: Path, force: bool) -> None:
 def backup(db_path: Path, backup_dir: Path) -> Path:
     print("\n== 2. Backup ==")
     backup_dir.mkdir(parents=True, exist_ok=True)
-    dest = backup_dir / f"pre-v0.4-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
+    dest = backup_dir / f"pre-migrate-{datetime.now().strftime('%Y%m%d-%H%M%S')}.db"
     src = connect(db_path)
     dst = sqlite3.connect(str(dest))
     try:
@@ -344,7 +383,7 @@ def main() -> int:
     if args.verify_only:
         print("== Verify (read-only) ==")
         # No pre-migration baseline in read-only mode: report FK issues as warnings.
-        problems = verify_schema(db_path, fk_violation_count(db_path))
+        problems = verify_schema(db_path, fk_violation_count(db_path), expected_head(root))
         print("\nRESULT:", "all checks passed" if not problems else f"{len(problems)} problem(s)")
         return 0 if not problems else 1
 
@@ -380,7 +419,7 @@ def main() -> int:
     migrate(root, args.python, db_url)
 
     print("\n== 4. Verify ==")
-    problems = verify_schema(db_path, fk_baseline)
+    problems = verify_schema(db_path, fk_baseline, expected_head(root))
 
     after_conn = connect(db_path)
     rows_after = count_rows(after_conn)
@@ -403,7 +442,7 @@ def main() -> int:
         print(f"\nRestore with the backup: {backup_file}")
         print("(stop the app, copy it over the DB file, restart — see the runbook)")
         return 1
-    print(f"{OK} v0.4 migrations applied and verified. Backup kept at: {backup_file}")
+    print(f"{OK} migrations applied and verified. Backup kept at: {backup_file}")
     print("Next: start the app, then run the smoke checks from the runbook.")
     return 0
 

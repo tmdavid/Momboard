@@ -3,6 +3,90 @@
 All notable changes to MomBoard, newest first. The README shows only the current
 status and latest additions; this file is the full history.
 
+## v0.5 — Better tags, better matches, a calmer interface (2026-11-11)
+
+Tagging that stops mistaking our own reps for customers, hypothesis matching that can find
+quotes nobody tagged, a staged way to retag the whole library, and a round of interface fixes.
+Migration **011** (run automatically by the container; for a from-source install use
+`python scripts/migrate_db.py`, which replaces `scripts/migrate_v04.py` and now reads the expected
+revision from the migration files). **Retagging is a separate, deliberate step** — see
+[`docs/retag-rollout.md`](docs/retag-rollout.md); nothing is retagged automatically.
+
+**Tagging quality**
+- **Your company** (Settings): name, aliases and email domains. Speakers matching them are marked
+  as ours, and the company is described to every prompt so the models know whose side is whose.
+  `GET`/`PUT /api/settings/company` (`PUT` is admin only).
+- **Customer turns only.** Evidence tags are applied to customer speech only; Follow-up and
+  Commitment may come from either side. Filler (greetings, "mm-hm") is skipped, and a quote gets
+  one tag, not several. Tagger prompt is now `tagger-v2`.
+- **Per-tag confidence floor** (`min_confidence`, default 0.5) plus a "don't tag when" hint and an
+  example for every tag, editable in Settings. Library tag counts and filters, Explore, Insights
+  and hypothesis matching hide suggestions under their tag's floor. Accepted and manual
+  highlights always show. Explore sorts strongest first, shows at most 3 quotes per call, and has
+  a "Show low-confidence" switch.
+- **Measuring the tagger**: `scripts/eval_tagger.py` scores the tagger against a hand-tagged test
+  set and exits non-zero below the gate ([`docs/tagger-evaluation.md`](docs/tagger-evaluation.md)).
+- **Taxonomy versioning**: each call records the taxonomy version and when it was tagged; adding
+  or reactivating a tag bumps the version, and Library / Explore say when results are partial
+  because calls have not been retagged yet. `GET /api/taxonomy/status` and `/stale`.
+
+**Hypothesis matching**
+- **Two stages.** Stage 1 gathers candidates from *all* customer speech (not only tagged quotes)
+  using the belief's own words plus LLM-suggested search terms; stage 2 judges them strictly with
+  a verification pass. Up to 10 matches, at most 2 per call (the second only if it says the
+  opposite). Untagged quotes you confirm are saved as accepted `context` highlights so they can
+  back the belief. *This uses keyword retrieval, not embeddings: the app has no embedding model.*
+- `scripts/eval_matching.py` checks matching against a list of beliefs you know are in the data
+  ([`docs/matching-evaluation.md`](docs/matching-evaluation.md)).
+
+**Retagging the library**
+- `POST /api/taxonomy/retag` (admin only, dry run supported) queues calls in batches; the Settings
+  page shows progress, an estimated duration, and a dry-run preview before anything is queued.
+  A retag **keeps** highlights a person accepted or rejected and any suggestion that a decision
+  cites or a confirmed hypothesis link uses. Before/after snapshots (`/snapshot`, `/compare`) and
+  `scripts/retag_rollout.py` run the staged rollout: test set, then a 100-call pilot, a cost
+  check, then resumable batches.
+
+**Interface**
+- Tag filters: a "Most used" label; the Custom dropdown opens a category flyout on hover or click
+  that is wide enough to read, closes with Escape (flyout first, then menu) and returns focus.
+- Library: a message that distinguishes an empty library from filters that match nothing, a
+  "Strong pains" preset (pain + workaround), compliments never in a row's top three signals,
+  **a preview panel** when you click a row (summary, top pains, score, follow-ups, how many tag
+  suggestions are waiting; the company name still opens the company page), **rows grouped by day**
+  ("Today · Tue 10 Nov · 7 calls"; a day cut by a page edge says how many are *shown*), and four
+  **headline cards** (total conversations, average score, pains captured, compliment ratio) that
+  link to the page behind each number.
+- Conversation: one "Review AI tags · N left" bar with a progress bar and "Accept all ≥ 0.9 (n)",
+  Accept / Reject next to every suggested tag, and a transcript that fills the available width.
+- Insights: trends are **weekly lines** with a point per week, "Trends appear after two weeks of
+  calls" until then, and "Signal volume by tag" (it is a total). Trends follow the date the call
+  happened, so a retag cannot flatten them. The headline score and ratio are now averages over
+  every call (they used to show the newest bucket). Labels say counts include suggested highlights
+  above the confidence floor.
+- Practice: "Last score" shows the latest finished session instead of staying empty after a reload.
+- Everywhere: one formatter, so numbers read `1,234` and dates `14 Sep 2026` (never a raw ISO
+  string). A test fails if a page formats them by hand again.
+
+**Behaviour changes to know about**
+- The new tagger is stricter, so **tag counts will drop** once calls are retagged. Until then,
+  old and new results sit side by side.
+- Suggestions under a tag's floor are hidden in Library, Explore and Insights, but still appear in
+  the conversation's review bar (judging them is what review is for).
+- The match limit is now at most 2 per call (it was 1 unless the second was opposite), 10 overall.
+- `GET /api/stats` now buckets `critique_trend` / `compliment_ratio_trend` **by week** (`date` is
+  the Monday, `YYYY-MM-DD`) instead of by month, and adds `avg_critique_score` and
+  `avg_compliment_ratio`. `tag_counts_by_month` is unchanged.
+- `GET /api/highlights` gains `floor`, `sort=recent|confidence` and `per_call_cap`.
+- Clicking a Library row opens the preview panel; "Open conversation" goes to the full page.
+
+**Not done here**
+- The hand-tagged test set and known-beliefs list contain customer text, so only the harnesses and
+  synthetic examples are in the repo; you build the real ones. The pilot, cost and quality gates
+  run against your data and LLM, so they are yours to run.
+- Companies still have no structured segment field; the model judges segment from the company
+  name and notes.
+
 ## v0.4 — Decisions, Hypotheses board, new UI (2026-11-11)
 
 A redesigned interface, a Hypotheses board you can trust, and a Decisions page that keeps
