@@ -12,45 +12,75 @@ function wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
 }
 
-// 12 tags: 10 core (quick row fills), + 2 custom with a category so expansion shows groups.
+// 12 core (fills the quick row) + 3 custom across 2 categories.
 function mockManyTags() {
-  const core = Array.from({ length: 10 }, (_, i) => ({
+  const core = Array.from({ length: 12 }, (_, i) => ({
     key: `core_${i}`, emoji: '🔵', name: `Core ${i}`, description: null,
     signal_strength: null, sort_order: i + 1, is_active: true, origin: 'core', category: null,
   }));
   const custom = [
     { key: 'ch_slack', emoji: '💬', name: 'Slack', description: null, signal_strength: null, sort_order: 20, is_active: true, origin: 'custom', category: 'channel' },
-    { key: 'loose', emoji: '🔖', name: 'Loose', description: null, signal_strength: null, sort_order: 21, is_active: true, origin: 'custom', category: null },
+    { key: 'ch_email', emoji: '📧', name: 'Email', description: null, signal_strength: null, sort_order: 21, is_active: true, origin: 'custom', category: 'channel' },
+    { key: 'sa_objection', emoji: '✋', name: 'Objection', description: null, signal_strength: null, sort_order: 22, is_active: true, origin: 'custom', category: 'sales' },
   ];
   server.use(http.get('/api/tags', () => HttpResponse.json([...core, ...custom])));
 }
 
 describe('TagFilterBar', () => {
-  test('shows a quick row of the top 10 and hides the rest behind More', async () => {
+  test('quick row shows the top 10; custom tags are behind the Custom dropdown', async () => {
     mockManyTags();
     render(<TagFilterBar isActive={() => false} onToggle={() => {}} />, { wrapper });
 
-    // Quick row: the 10 core chips are visible; the custom tags are not yet.
+    // Quick row = first 10 by sort_order (core_0..core_9). core_10/11 and custom are not inline.
     await waitFor(() => expect(screen.getByText(/Core 0/)).toBeInTheDocument());
+    expect(screen.getByText(/Core 9/)).toBeInTheDocument();
+    // Custom tags are NOT visible until the Custom dropdown + its category are opened.
     expect(screen.queryByText(/Slack/)).not.toBeInTheDocument();
-
-    // Expand
-    await userEvent.click(screen.getByRole('button', { name: /More/ }));
-
-    const groups = screen.getByTestId('tag-filter-groups');
-    expect(within(groups).getByText('Core')).toBeInTheDocument();
-    expect(within(groups).getByText('channel')).toBeInTheDocument();
-    expect(within(groups).getByText('Other')).toBeInTheDocument();
-    expect(within(groups).getByRole('button', { name: /Slack/ })).toBeInTheDocument();
+    // Core and Custom dropdown triggers exist.
+    expect(screen.getByRole('button', { name: /^Core ▾/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^Custom ▾/ })).toBeInTheDocument();
   });
 
-  test('clicking a chip calls onToggle with the tag key', async () => {
+  test('Custom dropdown shows categories; expanding a category reveals its tags (accordion)', async () => {
+    mockManyTags();
+    render(<TagFilterBar isActive={() => false} onToggle={() => {}} />, { wrapper });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Custom ▾/ }));
+    const panel = screen.getByTestId('custom-categories');
+
+    // Categories are listed; their tags are NOT shown yet.
+    expect(within(panel).getByRole('button', { name: /channel/i })).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: /sales/i })).toBeInTheDocument();
+    expect(within(panel).queryByText(/Slack/)).not.toBeInTheDocument();
+
+    // Expand "channel" — its tags appear; categories stay visible (accordion).
+    await userEvent.click(within(panel).getByRole('button', { name: /channel/i }));
+    expect(within(panel).getByRole('menuitemcheckbox', { name: /Slack/ })).toBeInTheDocument();
+    expect(within(panel).getByRole('menuitemcheckbox', { name: /Email/ })).toBeInTheDocument();
+    // sales category header still visible after expanding channel.
+    expect(within(panel).getByRole('button', { name: /sales/i })).toBeInTheDocument();
+    // sales tags still hidden (only channel was expanded).
+    expect(within(panel).queryByText(/Objection/)).not.toBeInTheDocument();
+  });
+
+  test('toggling a tag inside a category calls onToggle with its key', async () => {
     mockManyTags();
     const onToggle = vi.fn();
     render(<TagFilterBar isActive={() => false} onToggle={onToggle} />, { wrapper });
 
-    const chip = await screen.findByRole('button', { name: /Core 0/ });
-    await userEvent.click(chip);
+    await userEvent.click(await screen.findByRole('button', { name: /^Custom ▾/ }));
+    const panel = screen.getByTestId('custom-categories');
+    await userEvent.click(within(panel).getByRole('button', { name: /channel/i }));
+    await userEvent.click(within(panel).getByRole('menuitemcheckbox', { name: /Slack/ }));
+    expect(onToggle).toHaveBeenCalledWith('ch_slack');
+  });
+
+  test('clicking a quick-row chip calls onToggle', async () => {
+    mockManyTags();
+    const onToggle = vi.fn();
+    render(<TagFilterBar isActive={() => false} onToggle={onToggle} />, { wrapper });
+
+    await userEvent.click(await screen.findByRole('button', { name: /Core 0/ }));
     expect(onToggle).toHaveBeenCalledWith('core_0');
   });
 });
